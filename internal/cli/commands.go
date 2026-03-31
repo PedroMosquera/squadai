@@ -1,14 +1,20 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/alexmosquera/agent-manager-pro/internal/config"
 	"github.com/alexmosquera/agent-manager-pro/internal/domain"
+	"github.com/alexmosquera/agent-manager-pro/internal/pipeline"
+	"github.com/alexmosquera/agent-manager-pro/internal/planner"
+	"github.com/alexmosquera/agent-manager-pro/internal/verify"
 )
 
 // RunInit creates .agent-manager/project.json and optionally .agent-manager/policy.json
@@ -127,17 +133,20 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 // RunPlan computes and displays the action plan.
 func RunPlan(args []string, stdout io.Writer) error {
 	dryRun := false
+	jsonOut := false
 	for _, arg := range args {
 		switch arg {
 		case "--dry-run":
 			dryRun = true
+		case "--json":
+			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager plan [--dry-run]")
+			fmt.Fprintln(stdout, "Usage: agent-manager plan [--dry-run] [--json]")
 			return nil
 		}
 	}
 
-	_ = dryRun
+	_ = dryRun // plan is inherently dry-run; flag accepted for consistency
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -154,6 +163,19 @@ func RunPlan(args []string, stdout io.Writer) error {
 		return err
 	}
 
+	adapters := detectAdapters(homeDir)
+	p := planner.New()
+	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
+	if err != nil {
+		return fmt.Errorf("plan: %w", err)
+	}
+
+	if jsonOut {
+		data, _ := json.MarshalIndent(actions, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
 	// Report violations first.
 	if len(merged.Violations) > 0 {
 		fmt.Fprintln(stdout, "Policy overrides:")
@@ -165,68 +187,218 @@ func RunPlan(args []string, stdout io.Writer) error {
 
 	fmt.Fprintf(stdout, "Mode: %s\n\n", merged.Mode)
 
-	fmt.Fprintln(stdout, "Enabled adapters:")
-	for name, cfg := range merged.Adapters {
-		status := "disabled"
-		if cfg.Enabled {
-			status = "enabled"
-		}
-		fmt.Fprintf(stdout, "  %-15s %s\n", name, status)
-	}
-	fmt.Fprintln(stdout)
-
-	fmt.Fprintln(stdout, "Enabled components:")
-	for name, cfg := range merged.Components {
-		status := "disabled"
-		if cfg.Enabled {
-			status = "enabled"
-		}
-		fmt.Fprintf(stdout, "  %-15s %s\n", name, status)
-	}
-	fmt.Fprintln(stdout)
-
-	if merged.Copilot.InstructionsTemplate != "" {
-		fmt.Fprintf(stdout, "Copilot instructions: %s\n", merged.Copilot.InstructionsTemplate)
+	if len(actions) == 0 {
+		fmt.Fprintln(stdout, "No actions needed. Everything is up to date.")
+		return nil
 	}
 
-	fmt.Fprintln(stdout, "\nPlan complete. Use 'agent-manager apply' to execute.")
+	fmt.Fprintf(stdout, "Planned actions (%d):\n", len(actions))
+	for _, a := range actions {
+		fmt.Fprintf(stdout, "  %-8s %-40s %s\n", a.Action, a.Description, a.TargetPath)
+	}
+
+	fmt.Fprintln(stdout, "\nUse 'agent-manager apply' to execute.")
 	return nil
 }
 
-// RunApply executes the plan with backup/rollback safety.
+// RunApply executes the plan with step-level reporting.
 func RunApply(args []string, stdout io.Writer) error {
-	fmt.Fprintln(stdout, "Apply is not yet implemented. Coming in Milestone B.")
+	dryRun := false
+	jsonOut := false
+	for _, arg := range args {
+		switch arg {
+		case "--dry-run":
+			dryRun = true
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager apply [--dry-run] [--json]")
+			return nil
+		}
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	merged, err := loadAndMerge(homeDir, projectDir)
+	if err != nil {
+		return err
+	}
+
+	adapters := detectAdapters(homeDir)
+	p := planner.New()
+	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
+	if err != nil {
+		return fmt.Errorf("plan: %w", err)
+	}
+
+	if dryRun {
+		if jsonOut {
+			data, _ := json.MarshalIndent(actions, "", "  ")
+			fmt.Fprintln(stdout, string(data))
+			return nil
+		}
+		fmt.Fprintf(stdout, "Dry run: %d action(s) would be executed.\n", len(actions))
+		for _, a := range actions {
+			fmt.Fprintf(stdout, "  %-8s %s\n", a.Action, a.Description)
+		}
+		return nil
+	}
+
+	exec := pipeline.New(
+		p.ComponentInstallers(),
+		p.CopilotManager(),
+		projectDir,
+		merged.Copilot.InstructionsTemplate,
+	)
+
+	report := exec.Execute(actions)
+
+	if jsonOut {
+		data, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		if !report.Success {
+			return fmt.Errorf("apply completed with failures")
+		}
+		return nil
+	}
+
+	for _, s := range report.Steps {
+		icon := "ok"
+		if s.Status == domain.StepFailed {
+			icon = "FAIL"
+		}
+		fmt.Fprintf(stdout, "  [%s] %s\n", icon, s.Action.Description)
+		if s.Error != "" {
+			fmt.Fprintf(stdout, "        error: %s\n", s.Error)
+		}
+	}
+
+	if !report.Success {
+		return fmt.Errorf("apply completed with failures")
+	}
+
+	fmt.Fprintln(stdout, "\nApply complete. Use 'agent-manager verify' to check.")
 	return nil
 }
 
-// RunSync performs idempotent reconciliation.
+// RunSync performs idempotent reconciliation (same as apply — plan then execute).
 func RunSync(args []string, stdout io.Writer) error {
-	fmt.Fprintln(stdout, "Sync is not yet implemented. Coming in Milestone B.")
-	return nil
+	// Sync is semantically identical to apply — it plans and executes.
+	// The idempotency comes from the planner returning Skip for up-to-date items.
+	return RunApply(args, stdout)
 }
 
-// RunVerify runs compliance checks.
+// RunVerify runs compliance checks and prints the report.
 func RunVerify(args []string, stdout io.Writer) error {
-	fmt.Fprintln(stdout, "Verify is not yet implemented. Coming in Milestone B.")
+	jsonOut := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager verify [--json]")
+			return nil
+		}
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	merged, err := loadAndMerge(homeDir, projectDir)
+	if err != nil {
+		return err
+	}
+
+	adapters := detectAdapters(homeDir)
+	v := verify.New()
+	report, err := v.Verify(merged, adapters, homeDir, projectDir)
+	if err != nil {
+		return fmt.Errorf("verify: %w", err)
+	}
+
+	if jsonOut {
+		data, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		if !report.AllPass {
+			return fmt.Errorf("verification failed")
+		}
+		return nil
+	}
+
+	if len(report.Results) == 0 {
+		fmt.Fprintln(stdout, "No checks to run (no components or adapters enabled).")
+		return nil
+	}
+
+	for _, r := range report.Results {
+		icon := "PASS"
+		if !r.Passed {
+			icon = "FAIL"
+		}
+		line := fmt.Sprintf("  [%s] %s", icon, r.Check)
+		if r.Message != "" {
+			line += " — " + r.Message
+		}
+		fmt.Fprintln(stdout, line)
+	}
+
+	if !report.AllPass {
+		return fmt.Errorf("verification failed")
+	}
+
+	fmt.Fprintln(stdout, "\nAll checks passed.")
 	return nil
 }
 
 // RunBackupCreate creates a backup snapshot.
 func RunBackupCreate(args []string, stdout io.Writer) error {
-	fmt.Fprintln(stdout, "Backup create is not yet implemented. Coming in Milestone C.")
+	fmt.Fprintln(stdout, "Backup create is not yet implemented.")
 	return nil
 }
 
 // RunBackupList lists available backups.
 func RunBackupList(args []string, stdout io.Writer) error {
-	fmt.Fprintln(stdout, "Backup list is not yet implemented. Coming in Milestone C.")
+	fmt.Fprintln(stdout, "Backup list is not yet implemented.")
 	return nil
 }
 
 // RunRestore restores from a backup.
 func RunRestore(args []string, stdout io.Writer) error {
-	fmt.Fprintln(stdout, "Restore is not yet implemented. Coming in Milestone C.")
+	fmt.Fprintln(stdout, "Restore is not yet implemented.")
 	return nil
+}
+
+// detectAdapters returns all registered adapters that are installed or have config.
+// For now this is just OpenCode. Claude/Codex will be added later.
+func detectAdapters(homeDir string) []domain.Adapter {
+	var adapters []domain.Adapter
+
+	oc := opencode.New()
+	installed, configFound, err := oc.Detect(context.Background(), homeDir)
+	if err == nil && (installed || configFound) {
+		adapters = append(adapters, oc)
+	}
+	// Even if not detected, include OpenCode so the planner can plan file creation.
+	if len(adapters) == 0 {
+		adapters = append(adapters, oc)
+	}
+
+	return adapters
 }
 
 // loadAndMerge is the shared config loading logic for commands that need merged config.
