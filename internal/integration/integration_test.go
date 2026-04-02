@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/alexmosquera/agent-manager-pro/internal/backup"
 	"github.com/alexmosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/alexmosquera/agent-manager-pro/internal/components/memory"
 	"github.com/alexmosquera/agent-manager-pro/internal/config"
@@ -69,14 +70,18 @@ func TestFullRoundTrip_PlanApplyVerify(t *testing.T) {
 		}
 	}
 
-	// Apply.
+	// Apply (no backup for this basic test).
 	exec := pipeline.New(
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
 		merged.Copilot.InstructionsTemplate,
+		nil,
 	)
-	report := exec.Execute(actions)
+	report, execErr := exec.Execute(actions)
+	if execErr != nil {
+		t.Fatalf("execute: %v", execErr)
+	}
 
 	if !report.Success {
 		for _, s := range report.Steps {
@@ -133,7 +138,7 @@ func TestIdempotent_SecondApplyProducesAllSkips(t *testing.T) {
 
 	// First apply.
 	actions1, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
 	exec.Execute(actions1)
 
 	// Second plan — everything should be skip.
@@ -225,7 +230,7 @@ func TestUserContent_Preserved(t *testing.T) {
 	p := planner.New()
 	actions, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
 
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
 	exec.Execute(actions)
 
 	// Verify user content is preserved in system prompt.
@@ -291,8 +296,11 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 		t.Error("expected update action for outdated memory")
 	}
 
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate)
-	report := exec.Execute(actions)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	report, execErr := exec.Execute(actions)
+	if execErr != nil {
+		t.Fatalf("execute: %v", execErr)
+	}
 	if !report.Success {
 		t.Fatal("apply should succeed")
 	}
@@ -313,6 +321,150 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 	extracted := marker.ExtractSection(string(data), "memory")
 	if extracted != memory.ProtocolTemplate() {
 		t.Error("memory content should match current protocol template")
+	}
+}
+
+// TestBackup_RollbackOnFailure verifies that when a step fails during apply
+// with backup enabled, all managed files are restored to their pre-apply state.
+func TestBackup_RollbackOnFailure(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	backupDir := t.TempDir()
+	adapter := opencode.New()
+
+	// Pre-create the memory prompt file with known content.
+	promptPath := adapter.SystemPromptFile(home)
+	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	originalContent := "# My original rules\n\nDo not change.\n"
+	os.WriteFile(promptPath, []byte(originalContent), 0644)
+
+	// Set up config.
+	userCfg := domain.DefaultUserConfig()
+	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	projCfg := domain.DefaultProjectConfig()
+	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+
+	user, _ := config.LoadUser(home)
+	proj, _ := config.LoadProject(project)
+	merged := config.Merge(user, proj, nil)
+
+	p := planner.New()
+	actions, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
+
+	// Append a broken action that will cause failure after real actions run.
+	broken := domain.PlannedAction{
+		ID:          "broken-step",
+		Component:   domain.ComponentID("nonexistent"),
+		Action:      domain.ActionCreate,
+		TargetPath:  filepath.Join(project, "ghost.txt"),
+		Description: "this will fail",
+	}
+	allActions := append(actions, broken)
+
+	store := backup.NewStore(backupDir)
+	exec := pipeline.New(
+		p.ComponentInstallers(),
+		p.CopilotManager(),
+		project,
+		merged.Copilot.InstructionsTemplate,
+		store,
+	)
+
+	report, execErr := exec.Execute(allActions)
+	if execErr != nil {
+		t.Fatalf("execute returned unexpected error: %v", execErr)
+	}
+
+	if report.Success {
+		t.Fatal("report should indicate failure")
+	}
+
+	if report.BackupID == "" {
+		t.Fatal("backup ID should be set")
+	}
+
+	// Verify the original file content was restored.
+	data, err := os.ReadFile(promptPath)
+	if err != nil {
+		t.Fatalf("read prompt: %v", err)
+	}
+	if string(data) != originalContent {
+		t.Errorf("prompt content not restored:\n  got:  %q\n  want: %q", string(data), originalContent)
+	}
+
+	// Verify the copilot file (which was created by a successful step)
+	// was removed during rollback (it didn't exist before).
+	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
+	if _, err := os.Stat(copilotPath); err == nil {
+		t.Error("copilot instructions should have been removed during rollback (didn't exist before)")
+	}
+
+	// Verify manifest status.
+	manifest, _ := store.Get(report.BackupID)
+	if manifest.Status != "rolled_back" {
+		t.Errorf("manifest status = %q, want rolled_back", manifest.Status)
+	}
+}
+
+// TestBackup_SuccessfulApplyKeepsBackup verifies that a successful apply
+// with backup creates a "complete" manifest that can be used for later restore.
+func TestBackup_SuccessfulApplyKeepsBackup(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	backupDir := t.TempDir()
+	adapter := opencode.New()
+
+	userCfg := domain.DefaultUserConfig()
+	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	projCfg := domain.DefaultProjectConfig()
+	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+
+	user, _ := config.LoadUser(home)
+	proj, _ := config.LoadProject(project)
+	merged := config.Merge(user, proj, nil)
+
+	p := planner.New()
+	actions, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
+
+	store := backup.NewStore(backupDir)
+	exec := pipeline.New(
+		p.ComponentInstallers(),
+		p.CopilotManager(),
+		project,
+		merged.Copilot.InstructionsTemplate,
+		store,
+	)
+
+	report, execErr := exec.Execute(actions)
+	if execErr != nil {
+		t.Fatalf("execute: %v", execErr)
+	}
+	if !report.Success {
+		t.Fatal("apply should succeed")
+	}
+	if report.BackupID == "" {
+		t.Fatal("backup ID should be set")
+	}
+
+	// Manifest should be "complete".
+	manifest, _ := store.Get(report.BackupID)
+	if manifest.Status != "complete" {
+		t.Errorf("manifest status = %q, want complete", manifest.Status)
+	}
+	if len(manifest.AffectedFiles) == 0 {
+		t.Error("expected affected files in manifest")
+	}
+
+	// Now restore from the backup — files should revert to pre-apply state.
+	err := store.Restore(report.BackupID)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	// The files that were created should now be gone (they didn't exist before).
+	promptPath := adapter.SystemPromptFile(home)
+	if _, err := os.Stat(promptPath); err == nil {
+		t.Error("prompt file should have been removed (didn't exist before apply)")
 	}
 }
 

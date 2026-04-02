@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/alexmosquera/agent-manager-pro/internal/backup"
 	"github.com/alexmosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/alexmosquera/agent-manager-pro/internal/components/memory"
 	"github.com/alexmosquera/agent-manager-pro/internal/domain"
@@ -30,9 +31,13 @@ func TestExecute_AllActionsSucceed(t *testing.T) {
 		p.CopilotManager(),
 		project,
 		cfg.Copilot.InstructionsTemplate,
+		nil, // no backup store
 	)
 
-	report := exec.Execute(actions)
+	report, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
 
 	if !report.Success {
 		for _, s := range report.Steps {
@@ -79,9 +84,13 @@ func TestExecute_SkipActionsSucceed(t *testing.T) {
 		p.CopilotManager(),
 		project,
 		cfg.Copilot.InstructionsTemplate,
+		nil,
 	)
 
-	report := exec.Execute(actions)
+	report, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
 
 	if !report.Success {
 		t.Fatal("skip actions should succeed")
@@ -109,9 +118,13 @@ func TestExecute_UnknownComponent_RecordsFailure(t *testing.T) {
 		copilot.New(),
 		project,
 		"standard",
+		nil,
 	)
 
-	report := exec.Execute(actions)
+	report, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
 
 	if report.Success {
 		t.Fatal("should fail for unknown component")
@@ -124,7 +137,7 @@ func TestExecute_UnknownComponent_RecordsFailure(t *testing.T) {
 	}
 }
 
-func TestExecute_ContinuesAfterFailure(t *testing.T) {
+func TestExecute_ContinuesAfterFailure_NoBackup(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := opencode.New()
@@ -133,7 +146,7 @@ func TestExecute_ContinuesAfterFailure(t *testing.T) {
 	p := planner.New()
 	actions, _ := p.Plan(cfg, []domain.Adapter{adapter}, home, project)
 
-	// Prepend a broken action — executor should continue with the rest.
+	// Prepend a broken action — executor should continue with the rest (no backup).
 	broken := domain.PlannedAction{
 		ID:        "broken",
 		Component: domain.ComponentID("ghost"),
@@ -146,9 +159,13 @@ func TestExecute_ContinuesAfterFailure(t *testing.T) {
 		p.CopilotManager(),
 		project,
 		cfg.Copilot.InstructionsTemplate,
+		nil, // no backup — legacy continue-on-failure behavior
 	)
 
-	report := exec.Execute(allActions)
+	report, err := exec.Execute(allActions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
 
 	if report.Success {
 		t.Fatal("report should not be successful when a step fails")
@@ -171,14 +188,214 @@ func TestExecute_ContinuesAfterFailure(t *testing.T) {
 }
 
 func TestExecute_EmptyPlan(t *testing.T) {
-	exec := New(nil, copilot.New(), t.TempDir(), "standard")
-	report := exec.Execute(nil)
+	exec := New(nil, copilot.New(), t.TempDir(), "standard", nil)
+	report, err := exec.Execute(nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
 
 	if !report.Success {
 		t.Error("empty plan should succeed")
 	}
 	if len(report.Steps) != 0 {
 		t.Errorf("expected 0 steps, got %d", len(report.Steps))
+	}
+}
+
+func TestExecute_WithBackup_StopsOnFailureAndRollsBack(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	backupDir := t.TempDir()
+	adapter := opencode.New()
+
+	// Pre-create the memory prompt file with known content.
+	promptPath := adapter.SystemPromptFile(home)
+	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	originalContent := "# Original user content\n"
+	os.WriteFile(promptPath, []byte(originalContent), 0644)
+
+	store := backup.NewStore(backupDir)
+
+	// Build a plan: first a real create action, then a broken action.
+	cfg := fullConfig()
+	p := planner.New()
+	actions, _ := p.Plan(cfg, []domain.Adapter{adapter}, home, project)
+
+	// Append a broken action after the real ones.
+	broken := domain.PlannedAction{
+		ID:          "broken",
+		Component:   domain.ComponentID("ghost"),
+		Action:      domain.ActionCreate,
+		TargetPath:  filepath.Join(project, "ghost.txt"),
+		Description: "broken action",
+	}
+	allActions := append(actions, broken)
+
+	exec := New(
+		p.ComponentInstallers(),
+		p.CopilotManager(),
+		project,
+		cfg.Copilot.InstructionsTemplate,
+		store,
+	)
+
+	report, err := exec.Execute(allActions)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	if report.Success {
+		t.Fatal("report should not be successful")
+	}
+
+	if report.BackupID == "" {
+		t.Fatal("backup ID should be set")
+	}
+
+	// The broken action should be the last executed one (failed).
+	// Previous successful actions should have been executed, then rollback
+	// restores the original files.
+	hasRolledBack := false
+	for _, s := range report.Steps {
+		if s.Status == domain.StepRolledBack {
+			hasRolledBack = true
+		}
+	}
+	// The broken action is last in the list, so there are no remaining
+	// actions to mark as rolled_back. But the files should be restored.
+	_ = hasRolledBack
+
+	// Verify the original file was restored.
+	data, err := os.ReadFile(promptPath)
+	if err != nil {
+		t.Fatalf("read prompt file: %v", err)
+	}
+	if string(data) != originalContent {
+		t.Errorf("prompt file content = %q, want %q", string(data), originalContent)
+	}
+
+	// Verify manifest was updated.
+	manifest, err := store.Get(report.BackupID)
+	if err != nil {
+		t.Fatalf("get manifest: %v", err)
+	}
+	if manifest.Status != "rolled_back" {
+		t.Errorf("manifest status = %q, want rolled_back", manifest.Status)
+	}
+}
+
+func TestExecute_WithBackup_FailureInMiddle_RemainingRolledBack(t *testing.T) {
+	project := t.TempDir()
+	backupDir := t.TempDir()
+
+	store := backup.NewStore(backupDir)
+
+	// Three actions: success, broken, pending.
+	actions := []domain.PlannedAction{
+		{
+			ID:          "copilot-instructions",
+			Action:      domain.ActionCreate,
+			TargetPath:  filepath.Join(project, ".github", "copilot-instructions.md"),
+			Description: "create copilot instructions",
+		},
+		{
+			ID:          "broken",
+			Component:   domain.ComponentID("ghost"),
+			Action:      domain.ActionCreate,
+			TargetPath:  filepath.Join(project, "ghost.txt"),
+			Description: "broken action",
+		},
+		{
+			ID:          "would-run",
+			Component:   domain.ComponentID("another"),
+			Action:      domain.ActionCreate,
+			TargetPath:  filepath.Join(project, "another.txt"),
+			Description: "this should not run",
+		},
+	}
+
+	exec := New(
+		map[domain.ComponentID]domain.ComponentInstaller{},
+		copilot.New(),
+		project,
+		"standard",
+		store,
+	)
+
+	report, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if report.Success {
+		t.Fatal("should not succeed")
+	}
+
+	if len(report.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(report.Steps))
+	}
+
+	// First action: success (copilot instructions).
+	if report.Steps[0].Status != domain.StepSuccess {
+		t.Errorf("step 0 status = %q, want success", report.Steps[0].Status)
+	}
+
+	// Second action: failed (broken).
+	if report.Steps[1].Status != domain.StepFailed {
+		t.Errorf("step 1 status = %q, want failed", report.Steps[1].Status)
+	}
+
+	// Third action: rolled_back (never executed).
+	if report.Steps[2].Status != domain.StepRolledBack {
+		t.Errorf("step 2 status = %q, want rolled_back", report.Steps[2].Status)
+	}
+}
+
+func TestExecute_WithBackup_AllSucceed(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	backupDir := t.TempDir()
+	adapter := opencode.New()
+
+	store := backup.NewStore(backupDir)
+
+	cfg := fullConfig()
+	p := planner.New()
+	actions, err := p.Plan(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+
+	exec := New(
+		p.ComponentInstallers(),
+		p.CopilotManager(),
+		project,
+		cfg.Copilot.InstructionsTemplate,
+		store,
+	)
+
+	report, execErr := exec.Execute(actions)
+	if execErr != nil {
+		t.Fatalf("execute: %v", execErr)
+	}
+
+	if !report.Success {
+		for _, s := range report.Steps {
+			if s.Status == domain.StepFailed {
+				t.Errorf("step %q failed: %s", s.Action.ID, s.Error)
+			}
+		}
+		t.Fatal("all steps should succeed")
+	}
+
+	if report.BackupID == "" {
+		t.Error("backup ID should be set even when all succeed")
+	}
+
+	// Verify backup manifest is "complete" (no rollback).
+	manifest, _ := store.Get(report.BackupID)
+	if manifest.Status != "complete" {
+		t.Errorf("manifest status = %q, want complete", manifest.Status)
 	}
 }
 
