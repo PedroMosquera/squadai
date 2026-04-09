@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/alexmosquera/agent-manager-pro/internal/adapters/claude"
+	"github.com/alexmosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/alexmosquera/agent-manager-pro/internal/backup"
 	"github.com/alexmosquera/agent-manager-pro/internal/components/copilot"
@@ -475,4 +477,252 @@ func strContains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// ─── Milestone D: Personal Lane Gate Tests ──────────────────────────────────
+
+// TestPersonalLane_TeamModeUnaffected verifies that enabling personal adapters
+// (Claude Code, Codex) in user config does not change team-baseline behavior.
+// This is the Milestone D acceptance gate.
+func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	// Create user config with personal adapters enabled.
+	userCfg := domain.DefaultUserConfig()
+	userCfg.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
+	userCfg.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatalf("write user config: %v", err)
+	}
+
+	// Create project config (standard team setup).
+	projCfg := domain.DefaultProjectConfig()
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	// Create team policy that locks opencode and memory.
+	policyCfg := domain.DefaultPolicyConfig()
+	if err := config.WriteJSON(config.PolicyConfigPath(project), policyCfg); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	// Load and merge.
+	user, _ := config.LoadUser(home)
+	proj, _ := config.LoadProject(project)
+	policy, _ := config.LoadPolicy(project)
+	merged := config.Merge(user, proj, policy)
+
+	// Verify team baseline is enforced despite personal adapters being enabled.
+	if !merged.Adapters["opencode"].Enabled {
+		t.Error("opencode must remain enabled under policy")
+	}
+	if !merged.Components[string(domain.ComponentMemory)].Enabled {
+		t.Error("memory component must remain enabled under policy")
+	}
+	if merged.Copilot.InstructionsTemplate != "standard" {
+		t.Errorf("copilot template = %q, want standard", merged.Copilot.InstructionsTemplate)
+	}
+
+	// Plan with only the OpenCode adapter (team-only scenario).
+	ocAdapter := opencode.New()
+	teamAdapters := []domain.Adapter{ocAdapter}
+
+	p := planner.New()
+	teamActions, err := p.Plan(merged, teamAdapters, home, project)
+	if err != nil {
+		t.Fatalf("plan team-only: %v", err)
+	}
+
+	// Plan with OpenCode + personal adapters (hybrid scenario).
+	claudeAdapter := claude.New()
+	codexAdapter := codex.New()
+	allAdapters := []domain.Adapter{ocAdapter, claudeAdapter, codexAdapter}
+
+	hybridActions, err := p.Plan(merged, allAdapters, home, project)
+	if err != nil {
+		t.Fatalf("plan hybrid: %v", err)
+	}
+
+	// The hybrid plan should include the same team actions plus personal ones.
+	// Extract team-only actions from both plans for comparison.
+	teamOnly := filterByAgent(teamActions, domain.AgentOpenCode)
+	teamFromHybrid := filterByAgent(hybridActions, domain.AgentOpenCode)
+
+	if len(teamOnly) != len(teamFromHybrid) {
+		t.Errorf("team actions changed: team-only=%d, from-hybrid=%d", len(teamOnly), len(teamFromHybrid))
+	}
+
+	for i := range teamOnly {
+		if i >= len(teamFromHybrid) {
+			break
+		}
+		if teamOnly[i].ID != teamFromHybrid[i].ID {
+			t.Errorf("team action[%d] ID mismatch: %q vs %q", i, teamOnly[i].ID, teamFromHybrid[i].ID)
+		}
+		if teamOnly[i].Action != teamFromHybrid[i].Action {
+			t.Errorf("team action[%d] type mismatch: %q vs %q", i, teamOnly[i].Action, teamFromHybrid[i].Action)
+		}
+		if teamOnly[i].TargetPath != teamFromHybrid[i].TargetPath {
+			t.Errorf("team action[%d] path mismatch: %q vs %q", i, teamOnly[i].TargetPath, teamFromHybrid[i].TargetPath)
+		}
+	}
+
+	// Also check copilot action is present in both plans.
+	teamCopilot := filterByCopilot(teamActions)
+	hybridCopilot := filterByCopilot(hybridActions)
+	if len(teamCopilot) != len(hybridCopilot) {
+		t.Errorf("copilot actions changed: team=%d, hybrid=%d", len(teamCopilot), len(hybridCopilot))
+	}
+
+	// Execute the hybrid plan to verify it succeeds end-to-end.
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	report, execErr := exec.Execute(hybridActions)
+	if execErr != nil {
+		t.Fatalf("hybrid execute: %v", execErr)
+	}
+	if !report.Success {
+		for _, s := range report.Steps {
+			if s.Status == domain.StepFailed {
+				t.Errorf("step %q failed: %s", s.Action.ID, s.Error)
+			}
+		}
+		t.Fatal("hybrid apply should succeed")
+	}
+
+	// Verify: team files exist.
+	promptPath := ocAdapter.SystemPromptFile(home)
+	if _, err := os.Stat(promptPath); err != nil {
+		t.Errorf("team memory prompt file missing: %s", promptPath)
+	}
+
+	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
+	if _, err := os.Stat(copilotPath); err != nil {
+		t.Errorf("copilot instructions missing: %s", copilotPath)
+	}
+
+	// Verify: personal adapter files also exist (Claude and Codex).
+	claudePrompt := claudeAdapter.SystemPromptFile(home)
+	if _, err := os.Stat(claudePrompt); err != nil {
+		t.Errorf("claude memory prompt file missing: %s", claudePrompt)
+	}
+
+	codexPrompt := codexAdapter.SystemPromptFile(home)
+	if _, err := os.Stat(codexPrompt); err != nil {
+		t.Errorf("codex memory prompt file missing: %s", codexPrompt)
+	}
+
+	// Run verifier — all checks should pass.
+	v := verify.New()
+	vReport, err := v.Verify(merged, allAdapters, home, project)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !vReport.AllPass {
+		for _, r := range vReport.Results {
+			if !r.Passed {
+				t.Errorf("verify check %q failed: %s", r.Check, r.Message)
+			}
+		}
+	}
+}
+
+// TestPersonalLane_PolicyCannotEnablePersonalAdapters verifies that policy
+// locked fields prevent personal adapters from being force-enabled by policy.
+// Personal adapters should only be controlled by user config.
+func TestPersonalLane_PolicyCannotEnablePersonalAdapters(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	// User config: personal adapters disabled.
+	userCfg := domain.DefaultUserConfig()
+	userCfg.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: false}
+	config.WriteJSON(config.UserConfigPath(home), userCfg)
+
+	// Project config: standard.
+	projCfg := domain.DefaultProjectConfig()
+	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+
+	// Policy: standard (no locked fields for personal adapters).
+	policyCfg := domain.DefaultPolicyConfig()
+	config.WriteJSON(config.PolicyConfigPath(project), policyCfg)
+
+	user, _ := config.LoadUser(home)
+	proj, _ := config.LoadProject(project)
+	policy, _ := config.LoadPolicy(project)
+	merged := config.Merge(user, proj, policy)
+
+	// Personal adapter should remain disabled — user's choice.
+	if merged.Adapters[string(domain.AgentClaudeCode)].Enabled {
+		t.Error("claude-code should remain disabled (user choice)")
+	}
+
+	// Team adapter should be enabled by policy.
+	if !merged.Adapters["opencode"].Enabled {
+		t.Error("opencode must be enabled by policy")
+	}
+}
+
+// TestPersonalLane_SecondApplyIdempotent verifies that running apply twice
+// with personal adapters enabled still produces skip on second run.
+func TestPersonalLane_SecondApplyIdempotent(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	userCfg := domain.DefaultUserConfig()
+	userCfg.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
+	userCfg.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
+	config.WriteJSON(config.UserConfigPath(home), userCfg)
+
+	projCfg := domain.DefaultProjectConfig()
+	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+
+	user, _ := config.LoadUser(home)
+	proj, _ := config.LoadProject(project)
+	merged := config.Merge(user, proj, nil)
+
+	ocAdapter := opencode.New()
+	claudeAdapter := claude.New()
+	codexAdapter := codex.New()
+	adapters := []domain.Adapter{ocAdapter, claudeAdapter, codexAdapter}
+
+	p := planner.New()
+
+	// First apply.
+	actions1, _ := p.Plan(merged, adapters, home, project)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	exec.Execute(actions1)
+
+	// Second plan — all should be skip.
+	actions2, err := p.Plan(merged, adapters, home, project)
+	if err != nil {
+		t.Fatalf("second plan: %v", err)
+	}
+
+	for _, a := range actions2 {
+		if a.Action != domain.ActionSkip {
+			t.Errorf("second plan: action %q = %q, want skip", a.ID, a.Action)
+		}
+	}
+}
+
+func filterByAgent(actions []domain.PlannedAction, agent domain.AgentID) []domain.PlannedAction {
+	var result []domain.PlannedAction
+	for _, a := range actions {
+		if a.Agent == agent {
+			result = append(result, a)
+		}
+	}
+	return result
+}
+
+func filterByCopilot(actions []domain.PlannedAction) []domain.PlannedAction {
+	var result []domain.PlannedAction
+	for _, a := range actions {
+		if a.Component == domain.ComponentID("copilot") {
+			result = append(result, a)
+		}
+	}
+	return result
 }
