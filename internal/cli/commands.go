@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/alexmosquera/agent-manager-pro/internal/adapters/claude"
+	"github.com/alexmosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/alexmosquera/agent-manager-pro/internal/backup"
 	"github.com/alexmosquera/agent-manager-pro/internal/config"
@@ -164,7 +166,7 @@ func RunPlan(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	adapters := detectAdapters(homeDir)
+	adapters := DetectAdapters(homeDir)
 	p := planner.New()
 	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
 	if err != nil {
@@ -233,7 +235,7 @@ func RunApply(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	adapters := detectAdapters(homeDir)
+	adapters := DetectAdapters(homeDir)
 	p := planner.New()
 	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
 	if err != nil {
@@ -354,7 +356,7 @@ func RunVerify(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	adapters := detectAdapters(homeDir)
+	adapters := DetectAdapters(homeDir)
 	v := verify.New()
 	report, err := v.Verify(merged, adapters, homeDir, projectDir)
 	if err != nil {
@@ -425,7 +427,7 @@ func RunBackupCreate(args []string, stdout io.Writer) error {
 	}
 
 	// Plan to discover which files would be affected.
-	adapters := detectAdapters(homeDir)
+	adapters := DetectAdapters(homeDir)
 	p := planner.New()
 	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
 	if err != nil {
@@ -616,22 +618,34 @@ func collectAllTargetPaths(actions []domain.PlannedAction) []string {
 	return paths
 }
 
-// detectAdapters returns all registered adapters that are installed or have config.
-// For now this is just OpenCode. Claude/Codex will be added later.
-func detectAdapters(homeDir string) []domain.Adapter {
+// DetectAdapters returns all registered adapters that are installed or have config.
+// OpenCode (team lane) is always included. Claude Code and Codex (personal lane)
+// are included only when detected on the system.
+func DetectAdapters(homeDir string) []domain.Adapter {
+	ctx := context.Background()
 	var adapters []domain.Adapter
 
+	// OpenCode is always included — team baseline.
 	oc := opencode.New()
-	installed, configFound, err := oc.Detect(context.Background(), homeDir)
-	if err == nil && (installed || configFound) {
-		adapters = append(adapters, oc)
+	adapters = append(adapters, oc)
+
+	// Personal-lane adapters: include only if binary or config is found.
+	cc := claude.New()
+	if installed, configFound, err := cc.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, cc)
 	}
-	// Even if not detected, include OpenCode so the planner can plan file creation.
-	if len(adapters) == 0 {
-		adapters = append(adapters, oc)
+
+	cx := codex.New()
+	if installed, configFound, err := cx.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, cx)
 	}
 
 	return adapters
+}
+
+// LoadAndMerge is the shared config loading logic for commands that need merged config.
+func LoadAndMerge(homeDir, projectDir string) (*domain.MergedConfig, error) {
+	return loadAndMerge(homeDir, projectDir)
 }
 
 // loadAndMerge is the shared config loading logic for commands that need merged config.
