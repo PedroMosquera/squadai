@@ -5,16 +5,17 @@ import (
 	"io"
 
 	"github.com/alexmosquera/agent-manager-pro/internal/cli"
+	"github.com/alexmosquera/agent-manager-pro/internal/tui"
 )
 
 // Version is set from main via ldflags at build time.
 var Version = "dev"
 
 // Run is the top-level entry point. It parses args and dispatches to subcommands.
+// When no args are given, it launches the interactive TUI.
 func Run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		printUsage(stdout)
-		return nil
+		return tui.Run(Version)
 	}
 
 	switch args[0] {
