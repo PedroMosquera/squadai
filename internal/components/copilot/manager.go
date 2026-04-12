@@ -1,9 +1,11 @@
 package copilot
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"text/template"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
@@ -33,7 +35,7 @@ func New() *Manager {
 func (m *Manager) Plan(projectDir string, cfg domain.CopilotConfig) (domain.PlannedAction, error) {
 	targetPath := filepath.Join(projectDir, CopilotInstructionsPath)
 
-	content := TemplateContentWithContext(cfg.InstructionsTemplate, cfg.CustomContent, projectDir)
+	content := TemplateContentWithContext(cfg, projectDir)
 
 	existing, err := fileutil.ReadFileOrEmpty(targetPath)
 	if err != nil {
@@ -76,7 +78,7 @@ func (m *Manager) Plan(projectDir string, cfg domain.CopilotConfig) (domain.Plan
 // Apply writes the copilot instructions using marker blocks.
 func (m *Manager) Apply(projectDir string, cfg domain.CopilotConfig) error {
 	targetPath := filepath.Join(projectDir, CopilotInstructionsPath)
-	content := TemplateContentWithContext(cfg.InstructionsTemplate, cfg.CustomContent, projectDir)
+	content := TemplateContentWithContext(cfg, projectDir)
 
 	existing, err := fileutil.ReadFileOrEmpty(targetPath)
 	if err != nil {
@@ -128,7 +130,7 @@ func (m *Manager) Verify(projectDir string, cfg domain.CopilotConfig) []domain.V
 	})
 
 	current := marker.ExtractSection(doc, SectionID)
-	expected := TemplateContentWithContext(cfg.InstructionsTemplate, cfg.CustomContent, projectDir)
+	expected := TemplateContentWithContext(cfg, projectDir)
 	if current != expected {
 		results = append(results, domain.VerifyResult{
 			Check:   "copilot-content-current",
@@ -146,32 +148,59 @@ func (m *Manager) Verify(projectDir string, cfg domain.CopilotConfig) []domain.V
 }
 
 // TemplateContent returns the copilot instructions content for a given template reference.
-// Supports "standard" (built-in), "custom" with customContent, "file:<path>",
-// and arbitrary inline content.
+// Uses an empty ProjectMeta so the standard template renders a generic fallback.
 func TemplateContent(templateRef string) string {
-	return TemplateContentWithContext(templateRef, "", "")
+	cfg := domain.CopilotConfig{InstructionsTemplate: templateRef}
+	return TemplateContentWithContext(cfg, "")
 }
 
 // TemplateContentWithContext resolves a template reference with full context.
-// If customContent is non-empty and templateRef is "custom", uses customContent.
+// If cfg.CustomContent is non-empty and templateRef is "custom", uses CustomContent.
 // If templateRef is "file:<path>", reads from .agent-manager/<path> in projectDir.
 // Falls back to built-in standard template for "standard" or empty.
-func TemplateContentWithContext(templateRef, customContent, projectDir string) string {
-	resolved, err := templates.ResolveTemplate(templateRef, customContent, projectDir)
+// When the standard template is used, cfg.Meta is used for project-aware rendering.
+func TemplateContentWithContext(cfg domain.CopilotConfig, projectDir string) string {
+	resolved, err := templates.ResolveTemplate(cfg.InstructionsTemplate, cfg.CustomContent, projectDir)
 	if err != nil {
 		// On resolution error, fall back to standard template.
-		return standardTemplate()
+		return standardTemplate(cfg.Meta)
 	}
 	if resolved == "" {
-		return standardTemplate()
+		return standardTemplate(cfg.Meta)
 	}
 	return resolved
 }
 
-func standardTemplate() string {
-	return `## Team Standards
+// standardTemplate renders project-aware copilot instructions using ProjectMeta.
+// When Meta fields are empty, the template omits those sections gracefully.
+func standardTemplate(meta domain.ProjectMeta) string {
+	const tmpl = `## Team Standards
 
-This project uses agent-manager-pro for consistent AI agent configuration.
+{{- if .Name}}
+
+### Project: {{.Name}}
+{{- end}}
+{{- if or .Language .Framework}}
+
+**Stack**:
+{{- if .Language}} {{.Language}}{{end}}
+{{- if .Framework}} / {{.Framework}}{{end}}
+{{- end}}
+
+### Verification Commands
+{{- if or .TestCommand .BuildCommand .LintCommand}}
+{{- if .TestCommand}}
+- Tests: ` + "`{{.TestCommand}}`" + `
+{{- end}}
+{{- if .BuildCommand}}
+- Build: ` + "`{{.BuildCommand}}`" + `
+{{- end}}
+{{- if .LintCommand}}
+- Lint: ` + "`{{.LintCommand}}`" + `
+{{- end}}
+{{- else}}
+- No verification commands configured — add them to project.json meta section.
+{{- end}}
 
 ### Code Style
 - Follow existing patterns in the codebase
@@ -186,4 +215,17 @@ This project uses agent-manager-pro for consistent AI agent configuration.
 - Respect package boundaries and import rules
 - Keep domain logic free of infrastructure concerns
 - All mutating operations must support dry-run mode`
+
+	t, err := template.New("copilot").Parse(tmpl)
+	if err != nil {
+		// Should never happen with a hardcoded template; fall back to minimal.
+		return "## Team Standards\n\nManaged by agent-manager-pro."
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, meta); err != nil {
+		return "## Team Standards\n\nManaged by agent-manager-pro."
+	}
+
+	return buf.String()
 }

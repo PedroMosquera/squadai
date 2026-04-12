@@ -57,6 +57,10 @@ type ComponentConfig struct {
 type CopilotConfig struct {
 	InstructionsTemplate string `json:"instructions_template"`
 	CustomContent        string `json:"custom_content,omitempty"`
+
+	// Meta is populated by the merger from ProjectConfig.Meta. It is not
+	// serialized because the canonical source is ProjectConfig.Meta.
+	Meta ProjectMeta `json:"-"`
 }
 
 // RulesConfig defines team standards content for instruction files.

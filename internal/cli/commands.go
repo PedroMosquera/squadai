@@ -51,10 +51,16 @@ func RunInit(args []string, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "  exists  %s\n", relPath(projectDir, projectPath))
 	} else {
 		proj := domain.DefaultProjectConfig()
+		// Auto-detect project metadata.
+		meta := DetectProjectMeta(projectDir)
+		proj.Meta = meta
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
 		fmt.Fprintf(stdout, "  created %s\n", relPath(projectDir, projectPath))
+		if meta.Name != "" {
+			fmt.Fprintf(stdout, "  detected project: %s (%s)\n", meta.Name, meta.Language)
+		}
 	}
 
 	// Create policy config if requested.
