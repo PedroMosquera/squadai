@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
@@ -15,6 +16,7 @@ type Planner struct {
 	memoryInstaller   *memory.Installer
 	rulesInstaller    *rules.Installer
 	settingsInstaller *settings.Installer
+	mcpInstaller      *mcp.Installer
 	copilotManager    *copilot.Manager
 }
 
@@ -37,6 +39,9 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 
 	// Create settings installer from merged adapter configs (lazy init per plan call).
 	p.settingsInstaller = settings.New(cfg.Adapters)
+
+	// Create MCP installer from merged MCP config (lazy init per plan call).
+	p.mcpInstaller = mcp.New(cfg.MCP)
 
 	// Collect component actions for each enabled adapter.
 	for _, adapter := range adapters {
@@ -71,6 +76,15 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 			}
 			actions = append(actions, settingsActions...)
 		}
+
+		// MCP component.
+		if mcpCfg, ok := cfg.Components[string(domain.ComponentMCP)]; ok && mcpCfg.Enabled {
+			mcpActions, err := p.mcpInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan mcp for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, mcpActions...)
+		}
 	}
 
 	// Copilot instructions (project-level, not adapter-specific).
@@ -96,6 +110,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	}
 	if p.settingsInstaller != nil {
 		installers[domain.ComponentSettings] = p.settingsInstaller
+	}
+	if p.mcpInstaller != nil {
+		installers[domain.ComponentMCP] = p.mcpInstaller
 	}
 	return installers
 }

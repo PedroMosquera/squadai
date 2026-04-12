@@ -2,6 +2,7 @@ package verify
 
 import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
@@ -38,6 +39,12 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 	var settingsInstaller *settings.Installer
 	if settingsCfg, ok := cfg.Components[string(domain.ComponentSettings)]; ok && settingsCfg.Enabled {
 		settingsInstaller = settings.New(cfg.Adapters)
+	}
+
+	// Create MCP installer from merged MCP config (lazy init per verify call).
+	var mcpInstaller *mcp.Installer
+	if mcpCfg, ok := cfg.Components[string(domain.ComponentMCP)]; ok && mcpCfg.Enabled {
+		mcpInstaller = mcp.New(cfg.MCP)
 	}
 
 	// Verify components for each enabled adapter.
@@ -78,6 +85,20 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		// Settings component.
 		if settingsInstaller != nil {
 			results, err := settingsInstaller.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range results {
+				report.Results = append(report.Results, r)
+				if !r.Passed {
+					report.AllPass = false
+				}
+			}
+		}
+
+		// MCP component.
+		if mcpInstaller != nil {
+			results, err := mcpInstaller.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
