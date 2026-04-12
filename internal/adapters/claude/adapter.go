@@ -89,14 +89,43 @@ func (a *Adapter) SettingsPath(homeDir string) string {
 }
 
 // SupportsComponent reports whether Claude Code supports a given component.
-// V1: memory is the only supported component.
 func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
-	case domain.ComponentMemory:
+	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings:
 		return true
 	default:
 		return false
 	}
+}
+
+// ProjectConfigFile returns empty string — Claude Code has no project-level config file.
+func (a *Adapter) ProjectConfigFile(_ string) string {
+	return ""
+}
+
+// ProjectRulesFile returns <projectDir>/CLAUDE.md.
+func (a *Adapter) ProjectRulesFile(projectDir string) string {
+	return filepath.Join(projectDir, "CLAUDE.md")
+}
+
+// ProjectAgentsDir returns empty string — Claude Code does not support project agents.
+func (a *Adapter) ProjectAgentsDir(_ string) string {
+	return ""
+}
+
+// ProjectSkillsDir returns empty string — Claude Code does not support project skills.
+func (a *Adapter) ProjectSkillsDir(_ string) string {
+	return ""
+}
+
+// ProjectCommandsDir returns empty string — Claude Code does not support project commands.
+func (a *Adapter) ProjectCommandsDir(_ string) string {
+	return ""
+}
+
+// ProjectSettingsPath returns <projectDir>/.claude/settings.json.
+func (a *Adapter) ProjectSettingsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".claude", "settings.json")
 }
 
 // ConfigDir returns the root config directory for Claude Code.

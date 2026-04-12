@@ -27,10 +27,11 @@ func TestInstaller_ID(t *testing.T) {
 
 func TestPlan_NewFile_ReturnsCreate(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
-	actions, err := inst.Plan(adapter, home)
+	actions, err := inst.Plan(adapter, home, project)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,6 +45,7 @@ func TestPlan_NewFile_ReturnsCreate(t *testing.T) {
 
 func TestPlan_ExistingFileNoSection_ReturnsUpdate(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
@@ -56,7 +58,7 @@ func TestPlan_ExistingFileNoSection_ReturnsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, err := inst.Plan(adapter, home)
+	actions, err := inst.Plan(adapter, home, project)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,6 +72,7 @@ func TestPlan_ExistingFileNoSection_ReturnsUpdate(t *testing.T) {
 
 func TestPlan_UpToDate_ReturnsSkip(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
@@ -83,7 +86,7 @@ func TestPlan_UpToDate_ReturnsSkip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, err := inst.Plan(adapter, home)
+	actions, err := inst.Plan(adapter, home, project)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,6 +100,7 @@ func TestPlan_UpToDate_ReturnsSkip(t *testing.T) {
 
 func TestPlan_OutdatedSection_ReturnsUpdate(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
@@ -109,7 +113,7 @@ func TestPlan_OutdatedSection_ReturnsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, err := inst.Plan(adapter, home)
+	actions, err := inst.Plan(adapter, home, project)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -125,10 +129,11 @@ func TestPlan_OutdatedSection_ReturnsUpdate(t *testing.T) {
 
 func TestApply_CreatesFileWithMemorySection(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
-	actions, _ := inst.Plan(adapter, home)
+	actions, _ := inst.Plan(adapter, home, project)
 	if len(actions) == 0 {
 		t.Fatal("expected at least 1 action")
 	}
@@ -146,6 +151,7 @@ func TestApply_CreatesFileWithMemorySection(t *testing.T) {
 
 func TestApply_PreservesExistingContent(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
@@ -157,7 +163,7 @@ func TestApply_PreservesExistingContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := inst.Plan(adapter, home)
+	actions, _ := inst.Plan(adapter, home, project)
 	if err := inst.Apply(actions[0]); err != nil {
 		t.Fatal(err)
 	}
@@ -188,11 +194,12 @@ func TestApply_SkipDoesNothing(t *testing.T) {
 
 func TestApply_Idempotent(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
 	// First apply.
-	actions, _ := inst.Plan(adapter, home)
+	actions, _ := inst.Plan(adapter, home, project)
 	if err := inst.Apply(actions[0]); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +207,7 @@ func TestApply_Idempotent(t *testing.T) {
 	first, _ := os.ReadFile(actions[0].TargetPath)
 
 	// Second apply — should produce same content.
-	actions2, _ := inst.Plan(adapter, home)
+	actions2, _ := inst.Plan(adapter, home, project)
 	if actions2[0].Action != domain.ActionSkip {
 		t.Fatalf("second plan should be Skip, got %q", actions2[0].Action)
 	}
@@ -215,15 +222,16 @@ func TestApply_Idempotent(t *testing.T) {
 
 func TestVerify_AllPass_AfterApply(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
-	actions, _ := inst.Plan(adapter, home)
+	actions, _ := inst.Plan(adapter, home, project)
 	if err := inst.Apply(actions[0]); err != nil {
 		t.Fatal(err)
 	}
 
-	results, err := inst.Verify(adapter, home)
+	results, err := inst.Verify(adapter, home, project)
 	if err != nil {
 		t.Fatalf("Verify failed: %v", err)
 	}
@@ -236,10 +244,11 @@ func TestVerify_AllPass_AfterApply(t *testing.T) {
 
 func TestVerify_FailsWhenFileIsMissing(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
-	results, err := inst.Verify(adapter, home)
+	results, err := inst.Verify(adapter, home, project)
 	if err != nil {
 		t.Fatalf("Verify error: %v", err)
 	}
@@ -253,6 +262,7 @@ func TestVerify_FailsWhenFileIsMissing(t *testing.T) {
 
 func TestVerify_FailsWhenMarkersAreMissing(t *testing.T) {
 	home := t.TempDir()
+	project := t.TempDir()
 	adapter := opencode.New()
 	inst := New()
 
@@ -264,7 +274,7 @@ func TestVerify_FailsWhenMarkersAreMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, _ := inst.Verify(adapter, home)
+	results, _ := inst.Verify(adapter, home, project)
 
 	foundMarkerCheck := false
 	for _, r := range results {

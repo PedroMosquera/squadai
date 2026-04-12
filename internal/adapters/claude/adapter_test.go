@@ -151,6 +151,44 @@ func TestPaths(t *testing.T) {
 	}
 }
 
+func TestProjectPaths(t *testing.T) {
+	a := New()
+	project := "/Users/test/myproject"
+
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/CLAUDE.md"},
+		{"ProjectSettingsPath", a.ProjectSettingsPath(project), "/Users/test/myproject/.claude/settings.json"},
+	}
+
+	for _, tt := range tests {
+		if tt.got != tt.want {
+			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
+		}
+	}
+}
+
+func TestProjectPaths_EmptyForUnsupported(t *testing.T) {
+	a := New()
+	project := "/Users/test/myproject"
+
+	if a.ProjectConfigFile(project) != "" {
+		t.Error("ProjectConfigFile should be empty for Claude")
+	}
+	if a.ProjectAgentsDir(project) != "" {
+		t.Error("ProjectAgentsDir should be empty for Claude")
+	}
+	if a.ProjectSkillsDir(project) != "" {
+		t.Error("ProjectSkillsDir should be empty for Claude")
+	}
+	if a.ProjectCommandsDir(project) != "" {
+		t.Error("ProjectCommandsDir should be empty for Claude")
+	}
+}
+
 // ─── SupportsComponent ──────────────────────────────────────────────────────
 
 func TestSupportsComponent_Memory(t *testing.T) {
@@ -160,10 +198,20 @@ func TestSupportsComponent_Memory(t *testing.T) {
 	}
 }
 
+func TestSupportsComponent_RulesAndSettings(t *testing.T) {
+	a := New()
+	if !a.SupportsComponent(domain.ComponentRules) {
+		t.Error("Claude Code should support rules component")
+	}
+	if !a.SupportsComponent(domain.ComponentSettings) {
+		t.Error("Claude Code should support settings component")
+	}
+}
+
 func TestSupportsComponent_Unknown(t *testing.T) {
 	a := New()
-	if a.SupportsComponent(domain.ComponentID("mcp")) {
-		t.Error("Claude Code should not support unknown components in V1")
+	if a.SupportsComponent(domain.ComponentID("nonexistent")) {
+		t.Error("Claude Code should not support unknown components")
 	}
 }
 

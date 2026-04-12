@@ -89,7 +89,6 @@ func (a *Adapter) SettingsPath(homeDir string) string {
 }
 
 // SupportsComponent reports whether Codex supports a given component.
-// V1: memory is the only supported component.
 func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
 	case domain.ComponentMemory:
@@ -97,6 +96,31 @@ func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	default:
 		return false
 	}
+}
+
+// ProjectConfigFile returns empty string — Codex has no project-level config file.
+func (a *Adapter) ProjectConfigFile(_ string) string {
+	return ""
+}
+
+// ProjectRulesFile returns empty string — Codex has no project-level rules file.
+func (a *Adapter) ProjectRulesFile(_ string) string {
+	return ""
+}
+
+// ProjectAgentsDir returns empty string — Codex does not support project agents.
+func (a *Adapter) ProjectAgentsDir(_ string) string {
+	return ""
+}
+
+// ProjectSkillsDir returns empty string — Codex does not support project skills.
+func (a *Adapter) ProjectSkillsDir(_ string) string {
+	return ""
+}
+
+// ProjectCommandsDir returns empty string — Codex does not support project commands.
+func (a *Adapter) ProjectCommandsDir(_ string) string {
+	return ""
 }
 
 // ConfigDir returns the root config directory for Codex.
