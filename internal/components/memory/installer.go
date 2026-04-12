@@ -27,20 +27,32 @@ func (i *Installer) ID() domain.ComponentID {
 	return domain.ComponentMemory
 }
 
+// memoryTargetPath returns the file path where memory content should be injected
+// for the given adapter. Uses the project-level rules file if available, otherwise
+// falls back to the global system prompt file.
+func memoryTargetPath(adapter domain.Adapter, homeDir, projectDir string) string {
+	if projectDir != "" {
+		if p := adapter.ProjectRulesFile(projectDir); p != "" {
+			return p
+		}
+	}
+	return adapter.SystemPromptFile(homeDir)
+}
+
 // Plan determines what actions are needed for this adapter.
 func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]domain.PlannedAction, error) {
 	if !adapter.SupportsComponent(domain.ComponentMemory) {
 		return nil, nil
 	}
 
-	promptPath := adapter.SystemPromptFile(homeDir)
+	promptPath := memoryTargetPath(adapter, homeDir, projectDir)
 
 	existing, err := fileutil.ReadFileOrEmpty(promptPath)
 	if err != nil {
 		return nil, fmt.Errorf("read system prompt: %w", err)
 	}
 
-	desiredContent := ProtocolTemplate()
+	desiredContent := templateForAdapter(adapter)
 
 	// Check if the section already matches.
 	if marker.HasSection(string(existing), SectionID) {
@@ -97,7 +109,8 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return fmt.Errorf("read target: %w", err)
 	}
 
-	updated := marker.InjectSection(string(existing), SectionID, ProtocolTemplate())
+	content := templateForAgentID(action.Agent)
+	updated := marker.InjectSection(string(existing), SectionID, content)
 
 	_, err = fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644)
 	if err != nil {
@@ -119,7 +132,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		}, nil
 	}
 
-	promptPath := adapter.SystemPromptFile(homeDir)
+	promptPath := memoryTargetPath(adapter, homeDir, projectDir)
 	var results []domain.VerifyResult
 
 	// Check file exists.
@@ -158,7 +171,8 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 
 	// Check content matches expected.
 	current := marker.ExtractSection(string(content), SectionID)
-	if current != ProtocolTemplate() {
+	expected := templateForAdapter(adapter)
+	if current != expected {
 		results = append(results, domain.VerifyResult{
 			Check:   "memory-content-current",
 			Passed:  false,
@@ -174,10 +188,91 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	return results, nil
 }
 
-// ProtocolTemplate returns the memory protocol instructions injected into
-// the agent's system prompt. This defines the behavioral contract for
-// how the agent should use memory tools.
+// templateForAdapter returns the agent-specific memory protocol template
+// for the given adapter.
+func templateForAdapter(adapter domain.Adapter) string {
+	return templateForAgentID(adapter.ID())
+}
+
+// templateForAgentID returns the memory protocol template for a given agent ID.
+// Used by Apply which only has access to the action's Agent field.
+func templateForAgentID(agentID domain.AgentID) string {
+	switch agentID {
+	case domain.AgentOpenCode:
+		return openCodeMemoryTemplate()
+	case domain.AgentClaudeCode:
+		return claudeCodeMemoryTemplate()
+	case domain.AgentCodex:
+		return codexMemoryTemplate()
+	default:
+		return genericMemoryTemplate()
+	}
+}
+
+// ProtocolTemplate returns the generic memory protocol template.
+// Kept for backward compatibility with external callers.
 func ProtocolTemplate() string {
+	return genericMemoryTemplate()
+}
+
+// TemplateForAgentID returns the agent-specific memory protocol template.
+// Use this to get the expected content for a specific agent in tests and callers.
+func TemplateForAgentID(agentID domain.AgentID) string {
+	return templateForAgentID(agentID)
+}
+
+func openCodeMemoryTemplate() string {
+	return `## Memory Protocol
+
+### Session Start
+- Read the project's AGENTS.md for context
+- Check ` + "`.agent-manager/`" + ` for project configuration
+
+### Save Triggers
+Save important context to AGENTS.md or relevant documentation after:
+- Architecture decisions
+- Bug discoveries and fixes
+- New conventions or patterns established
+- Configuration changes
+
+### Session End
+Update AGENTS.md with a brief summary of significant changes made during this session.`
+}
+
+func claudeCodeMemoryTemplate() string {
+	return `## Memory Protocol
+
+### Session Start
+- Review CLAUDE.md for project context and prior decisions
+
+### Save Triggers
+When you discover important project context, update CLAUDE.md with:
+- Architecture decisions and rationale
+- Bug patterns and solutions
+- Project-specific conventions
+- Environment setup notes
+
+### Session End
+Append a session summary to the relevant section of CLAUDE.md.`
+}
+
+func codexMemoryTemplate() string {
+	return `## Memory Protocol
+
+### Session Start
+- Check project documentation for context and prior decisions
+
+### Save Triggers
+Save context after any of these events:
+- Important decisions or architecture choices
+- Bug discoveries and their fixes
+- New conventions or patterns established
+
+### Session End
+Save a brief summary of significant changes made during this session.`
+}
+
+func genericMemoryTemplate() string {
 	return `## Memory Protocol
 
 You have access to persistent memory tools. Follow these rules:

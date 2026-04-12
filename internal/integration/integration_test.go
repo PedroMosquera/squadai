@@ -109,9 +109,9 @@ func TestFullRoundTrip_PlanApplyVerify(t *testing.T) {
 	}
 
 	// Check files actually exist on disk.
-	promptPath := adapter.SystemPromptFile(home)
-	if _, err := os.Stat(promptPath); err != nil {
-		t.Errorf("memory prompt file missing: %s", promptPath)
+	memoryPath := filepath.Join(project, "AGENTS.md") // OpenCode memory targets project-level
+	if _, err := os.Stat(memoryPath); err != nil {
+		t.Errorf("memory file missing: %s", memoryPath)
 	}
 
 	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
@@ -222,11 +222,8 @@ func TestUserContent_Preserved(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Pre-populate system prompt with user content.
-	promptPath := adapter.SystemPromptFile(home)
-	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
-		t.Fatal(err)
-	}
+	// Pre-populate project-level AGENTS.md with user content.
+	promptPath := filepath.Join(project, "AGENTS.md")
 	if err := os.WriteFile(promptPath, []byte("# My Custom Agent Rules\n\nDo not touch this.\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -261,17 +258,17 @@ func TestUserContent_Preserved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify user content is preserved in system prompt.
+	// Verify user content is preserved in project-level AGENTS.md.
 	promptData, _ := os.ReadFile(promptPath)
 	promptStr := string(promptData)
 	if !strContains(promptStr, "# My Custom Agent Rules") {
-		t.Error("user content in system prompt was clobbered")
+		t.Error("user content in AGENTS.md was clobbered")
 	}
 	if !strContains(promptStr, "Do not touch this.") {
-		t.Error("user content in system prompt was clobbered")
+		t.Error("user content in AGENTS.md was clobbered")
 	}
 	if !marker.HasSection(promptStr, "memory") {
-		t.Error("memory section should be injected")
+		t.Error("memory section should be injected into AGENTS.md")
 	}
 
 	// Verify user content is preserved in copilot instructions.
@@ -295,11 +292,8 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Create file with outdated memory content.
-	promptPath := adapter.SystemPromptFile(home)
-	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
-		t.Fatal(err)
-	}
+	// Create file with outdated memory content at project-level.
+	promptPath := filepath.Join(project, "AGENTS.md")
 	outdated := marker.InjectSection("", "memory", "old protocol")
 	if err := os.WriteFile(promptPath, []byte(outdated), 0644); err != nil {
 		t.Fatal(err)
@@ -355,8 +349,8 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 	// Confirm the content is now current.
 	data, _ := os.ReadFile(promptPath)
 	extracted := marker.ExtractSection(string(data), "memory")
-	if extracted != memory.ProtocolTemplate() {
-		t.Error("memory content should match current protocol template")
+	if extracted != memory.TemplateForAgentID(domain.AgentOpenCode) {
+		t.Error("memory content should match current OpenCode protocol template")
 	}
 }
 
@@ -368,11 +362,8 @@ func TestBackup_RollbackOnFailure(t *testing.T) {
 	backupDir := t.TempDir()
 	adapter := opencode.New()
 
-	// Pre-create the memory prompt file with known content.
-	promptPath := adapter.SystemPromptFile(home)
-	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
-		t.Fatal(err)
-	}
+	// Pre-create the project-level AGENTS.md with known content.
+	promptPath := filepath.Join(project, "AGENTS.md")
 	originalContent := "# My original rules\n\nDo not change.\n"
 	if err := os.WriteFile(promptPath, []byte(originalContent), 0644); err != nil {
 		t.Fatal(err)
@@ -510,9 +501,9 @@ func TestBackup_SuccessfulApplyKeepsBackup(t *testing.T) {
 	}
 
 	// The files that were created should now be gone (they didn't exist before).
-	promptPath := adapter.SystemPromptFile(home)
-	if _, err := os.Stat(promptPath); err == nil {
-		t.Error("prompt file should have been removed (didn't exist before apply)")
+	memoryPath := filepath.Join(project, "AGENTS.md")
+	if _, err := os.Stat(memoryPath); err == nil {
+		t.Error("memory file should have been removed (didn't exist before apply)")
 	}
 }
 
@@ -638,9 +629,9 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 	}
 
 	// Verify: team files exist.
-	promptPath := ocAdapter.SystemPromptFile(home)
-	if _, err := os.Stat(promptPath); err != nil {
-		t.Errorf("team memory prompt file missing: %s", promptPath)
+	ocMemoryPath := filepath.Join(project, "AGENTS.md") // OpenCode targets project-level
+	if _, err := os.Stat(ocMemoryPath); err != nil {
+		t.Errorf("team memory file missing: %s", ocMemoryPath)
 	}
 
 	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
@@ -648,12 +639,14 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 		t.Errorf("copilot instructions missing: %s", copilotPath)
 	}
 
-	// Verify: personal adapter files also exist (Claude and Codex).
-	claudePrompt := claudeAdapter.SystemPromptFile(home)
-	if _, err := os.Stat(claudePrompt); err != nil {
-		t.Errorf("claude memory prompt file missing: %s", claudePrompt)
+	// Verify: personal adapter files also exist.
+	// Claude targets project-level CLAUDE.md.
+	claudeMemoryPath := filepath.Join(project, "CLAUDE.md")
+	if _, err := os.Stat(claudeMemoryPath); err != nil {
+		t.Errorf("claude memory file missing: %s", claudeMemoryPath)
 	}
 
+	// Codex targets global ~/.codex/instructions.md.
 	codexPrompt := codexAdapter.SystemPromptFile(home)
 	if _, err := os.Stat(codexPrompt); err != nil {
 		t.Errorf("codex memory prompt file missing: %s", codexPrompt)
