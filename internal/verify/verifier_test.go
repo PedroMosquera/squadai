@@ -17,13 +17,10 @@ func TestVerify_AllPass_AfterFullApply(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Create memory prompt.
-	promptPath := adapter.SystemPromptFile(home)
-	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
-	if err := os.WriteFile(promptPath, []byte(memContent), 0644); err != nil {
+	// Create memory content at project-level AGENTS.md with OpenCode template.
+	memoryPath := filepath.Join(project, "AGENTS.md")
+	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 

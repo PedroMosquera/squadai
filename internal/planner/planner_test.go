@@ -7,6 +7,7 @@ import (
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
 )
@@ -179,12 +180,9 @@ func TestPlan_UpToDate_AllSkip(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Pre-create memory prompt with correct content.
-	promptPath := adapter.SystemPromptFile(home)
-	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	memContent := marker.InjectSection("", "memory", memoryProtocolTemplate())
+	// Pre-create memory content at project-level AGENTS.md with OpenCode template.
+	promptPath := filepath.Join(project, "AGENTS.md")
+	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
 	if err := os.WriteFile(promptPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -223,33 +221,4 @@ func TestPlan_UpToDate_AllSkip(t *testing.T) {
 			t.Errorf("action %q should be skip, got %q", a.ID, a.Action)
 		}
 	}
-}
-
-// memoryProtocolTemplate duplicates the expected content for test setup.
-// This avoids importing the memory package's internal constant.
-func memoryProtocolTemplate() string {
-	// Must match memory.ProtocolTemplate() exactly.
-	return `## Memory Protocol
-
-You have access to persistent memory tools. Follow these rules:
-
-### Save Triggers
-Save context after any of these events:
-- Important decisions or architecture choices
-- Bug discoveries and their fixes
-- New conventions or patterns established
-- Configuration changes
-- Dependency additions or removals
-
-### Search Protocol
-- At session start, search memory for relevant context
-- Before making architectural decisions, check for prior decisions
-- Use keyword search for specific topics
-
-### Session Summary
-At the end of each session, save a summary including:
-- Goal: what was the objective
-- Accomplished: what was completed
-- Discoveries: what was learned
-- Next Steps: what remains to be done`
 }

@@ -49,9 +49,9 @@ func TestExecute_AllActionsSucceed(t *testing.T) {
 	}
 
 	// Verify files were created.
-	promptPath := adapter.SystemPromptFile(home)
-	if _, err := os.Stat(promptPath); err != nil {
-		t.Errorf("memory prompt file not created: %v", err)
+	memoryPath := filepath.Join(project, "AGENTS.md") // OpenCode memory targets project-level
+	if _, err := os.Stat(memoryPath); err != nil {
+		t.Errorf("memory file not created: %v", err)
 	}
 	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
 	if _, err := os.Stat(copilotPath); err != nil {
@@ -65,12 +65,9 @@ func TestExecute_SkipActionsSucceed(t *testing.T) {
 	adapter := opencode.New()
 
 	// Pre-create everything so plan returns all skips.
-	promptPath := adapter.SystemPromptFile(home)
-	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
-	if err := os.WriteFile(promptPath, []byte(memContent), 0644); err != nil {
+	memoryPath := filepath.Join(project, "AGENTS.md") // OpenCode memory targets project-level
+	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -216,13 +213,10 @@ func TestExecute_WithBackup_StopsOnFailureAndRollsBack(t *testing.T) {
 	backupDir := t.TempDir()
 	adapter := opencode.New()
 
-	// Pre-create the memory prompt file with known content.
-	promptPath := adapter.SystemPromptFile(home)
-	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
-		t.Fatal(err)
-	}
+	// Pre-create the memory file at project-level with known content.
+	memoryPath := filepath.Join(project, "AGENTS.md")
 	originalContent := "# Original user content\n"
-	if err := os.WriteFile(promptPath, []byte(originalContent), 0644); err != nil {
+	if err := os.WriteFile(memoryPath, []byte(originalContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +272,7 @@ func TestExecute_WithBackup_StopsOnFailureAndRollsBack(t *testing.T) {
 	_ = hasRolledBack
 
 	// Verify the original file was restored.
-	data, err := os.ReadFile(promptPath)
+	data, err := os.ReadFile(memoryPath)
 	if err != nil {
 		t.Fatalf("read prompt file: %v", err)
 	}
