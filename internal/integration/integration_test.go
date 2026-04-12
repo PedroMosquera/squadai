@@ -77,7 +77,7 @@ func TestFullRoundTrip_PlanApplyVerify(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		merged.Copilot.InstructionsTemplate,
+		merged.Copilot,
 		nil,
 	)
 	report, execErr := exec.Execute(actions)
@@ -144,7 +144,7 @@ func TestIdempotent_SecondApplyProducesAllSkips(t *testing.T) {
 
 	// First apply.
 	actions1, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot, nil)
 	if _, err := exec.Execute(actions1); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestUserContent_Preserved(t *testing.T) {
 	p := planner.New()
 	actions, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
 
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot, nil)
 	if _, err := exec.Execute(actions); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 		t.Error("expected update action for outdated memory")
 	}
 
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot, nil)
 	report, execErr := exec.Execute(actions)
 	if execErr != nil {
 		t.Fatalf("execute: %v", execErr)
@@ -410,7 +410,7 @@ func TestBackup_RollbackOnFailure(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		merged.Copilot.InstructionsTemplate,
+		merged.Copilot,
 		store,
 	)
 
@@ -479,7 +479,7 @@ func TestBackup_SuccessfulApplyKeepsBackup(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		merged.Copilot.InstructionsTemplate,
+		merged.Copilot,
 		store,
 	)
 
@@ -623,7 +623,7 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 	}
 
 	// Execute the hybrid plan to verify it succeeds end-to-end.
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot, nil)
 	report, execErr := exec.Execute(hybridActions)
 	if execErr != nil {
 		t.Fatalf("hybrid execute: %v", execErr)
@@ -747,7 +747,7 @@ func TestPersonalLane_SecondApplyIdempotent(t *testing.T) {
 
 	// First apply.
 	actions1, _ := p.Plan(merged, adapters, home, project)
-	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
+	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot, nil)
 	if _, err := exec.Execute(actions1); err != nil {
 		t.Fatal(err)
 	}

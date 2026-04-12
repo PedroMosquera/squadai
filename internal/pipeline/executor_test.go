@@ -30,7 +30,7 @@ func TestExecute_AllActionsSucceed(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		cfg.Copilot.InstructionsTemplate,
+		cfg.Copilot,
 		nil, // no backup store
 	)
 
@@ -91,7 +91,7 @@ func TestExecute_SkipActionsSucceed(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		cfg.Copilot.InstructionsTemplate,
+		cfg.Copilot,
 		nil,
 	)
 
@@ -125,7 +125,7 @@ func TestExecute_UnknownComponent_RecordsFailure(t *testing.T) {
 		map[domain.ComponentID]domain.ComponentInstaller{},
 		copilot.New(),
 		project,
-		"standard",
+		domain.CopilotConfig{InstructionsTemplate: "standard"},
 		nil,
 	)
 
@@ -166,7 +166,7 @@ func TestExecute_ContinuesAfterFailure_NoBackup(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		cfg.Copilot.InstructionsTemplate,
+		cfg.Copilot,
 		nil, // no backup — legacy continue-on-failure behavior
 	)
 
@@ -196,7 +196,7 @@ func TestExecute_ContinuesAfterFailure_NoBackup(t *testing.T) {
 }
 
 func TestExecute_EmptyPlan(t *testing.T) {
-	exec := New(nil, copilot.New(), t.TempDir(), "standard", nil)
+	exec := New(nil, copilot.New(), t.TempDir(), domain.CopilotConfig{InstructionsTemplate: "standard"}, nil)
 	report, err := exec.Execute(nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -247,7 +247,7 @@ func TestExecute_WithBackup_StopsOnFailureAndRollsBack(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		cfg.Copilot.InstructionsTemplate,
+		cfg.Copilot,
 		store,
 	)
 
@@ -330,7 +330,7 @@ func TestExecute_WithBackup_FailureInMiddle_RemainingRolledBack(t *testing.T) {
 		map[domain.ComponentID]domain.ComponentInstaller{},
 		copilot.New(),
 		project,
-		"standard",
+		domain.CopilotConfig{InstructionsTemplate: "standard"},
 		store,
 	)
 
@@ -382,7 +382,7 @@ func TestExecute_WithBackup_AllSucceed(t *testing.T) {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		project,
-		cfg.Copilot.InstructionsTemplate,
+		cfg.Copilot,
 		store,
 	)
 

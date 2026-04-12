@@ -8,6 +8,7 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
 	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/agent-manager-pro/internal/templates"
 )
 
 const (
@@ -29,10 +30,10 @@ func New() *Manager {
 }
 
 // Plan determines what action is needed for copilot instructions.
-func (m *Manager) Plan(projectDir, template string) (domain.PlannedAction, error) {
+func (m *Manager) Plan(projectDir string, cfg domain.CopilotConfig) (domain.PlannedAction, error) {
 	targetPath := filepath.Join(projectDir, CopilotInstructionsPath)
 
-	content := TemplateContent(template)
+	content := TemplateContentWithContext(cfg.InstructionsTemplate, cfg.CustomContent, projectDir)
 
 	existing, err := fileutil.ReadFileOrEmpty(targetPath)
 	if err != nil {
@@ -73,9 +74,9 @@ func (m *Manager) Plan(projectDir, template string) (domain.PlannedAction, error
 }
 
 // Apply writes the copilot instructions using marker blocks.
-func (m *Manager) Apply(projectDir, template string) error {
+func (m *Manager) Apply(projectDir string, cfg domain.CopilotConfig) error {
 	targetPath := filepath.Join(projectDir, CopilotInstructionsPath)
-	content := TemplateContent(template)
+	content := TemplateContentWithContext(cfg.InstructionsTemplate, cfg.CustomContent, projectDir)
 
 	existing, err := fileutil.ReadFileOrEmpty(targetPath)
 	if err != nil {
@@ -93,7 +94,7 @@ func (m *Manager) Apply(projectDir, template string) error {
 }
 
 // Verify checks that copilot instructions are correctly installed.
-func (m *Manager) Verify(projectDir, template string) []domain.VerifyResult {
+func (m *Manager) Verify(projectDir string, cfg domain.CopilotConfig) []domain.VerifyResult {
 	targetPath := filepath.Join(projectDir, CopilotInstructionsPath)
 	var results []domain.VerifyResult
 
@@ -127,7 +128,7 @@ func (m *Manager) Verify(projectDir, template string) []domain.VerifyResult {
 	})
 
 	current := marker.ExtractSection(doc, SectionID)
-	expected := TemplateContent(template)
+	expected := TemplateContentWithContext(cfg.InstructionsTemplate, cfg.CustomContent, projectDir)
 	if current != expected {
 		results = append(results, domain.VerifyResult{
 			Check:   "copilot-content-current",
@@ -144,15 +145,27 @@ func (m *Manager) Verify(projectDir, template string) []domain.VerifyResult {
 	return results
 }
 
-// TemplateContent returns the copilot instructions content for a given template name.
-// Currently only "standard" is supported.
-func TemplateContent(template string) string {
-	switch template {
-	case "standard":
-		return standardTemplate()
-	default:
+// TemplateContent returns the copilot instructions content for a given template reference.
+// Supports "standard" (built-in), "custom" with customContent, "file:<path>",
+// and arbitrary inline content.
+func TemplateContent(templateRef string) string {
+	return TemplateContentWithContext(templateRef, "", "")
+}
+
+// TemplateContentWithContext resolves a template reference with full context.
+// If customContent is non-empty and templateRef is "custom", uses customContent.
+// If templateRef is "file:<path>", reads from .agent-manager/<path> in projectDir.
+// Falls back to built-in standard template for "standard" or empty.
+func TemplateContentWithContext(templateRef, customContent, projectDir string) string {
+	resolved, err := templates.ResolveTemplate(templateRef, customContent, projectDir)
+	if err != nil {
+		// On resolution error, fall back to standard template.
 		return standardTemplate()
 	}
+	if resolved == "" {
+		return standardTemplate()
+	}
+	return resolved
 }
 
 func standardTemplate() string {

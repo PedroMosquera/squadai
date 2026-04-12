@@ -263,7 +263,7 @@ func RunApply(args []string, stdout io.Writer) error {
 		p.ComponentInstallers(),
 		p.CopilotManager(),
 		projectDir,
-		merged.Copilot.InstructionsTemplate,
+		merged.Copilot,
 		store,
 	)
 

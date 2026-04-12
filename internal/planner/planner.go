@@ -47,7 +47,7 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 
 	// Copilot instructions (project-level, not adapter-specific).
 	if cfg.Copilot.InstructionsTemplate != "" {
-		copilotAction, err := p.copilotManager.Plan(projectDir, cfg.Copilot.InstructionsTemplate)
+		copilotAction, err := p.copilotManager.Plan(projectDir, cfg.Copilot)
 		if err != nil {
 			return nil, fmt.Errorf("plan copilot instructions: %w", err)
 		}
