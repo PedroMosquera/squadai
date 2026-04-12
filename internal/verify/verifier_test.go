@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -396,5 +397,123 @@ func TestVerify_AllPass_MemoryAndRules(t *testing.T) {
 	// Should have both memory (3) and rules (3) checks = 6.
 	if len(report.Results) != 6 {
 		t.Errorf("expected 6 results (3 memory + 3 rules), got %d", len(report.Results))
+	}
+}
+
+// ─── Settings verification ──────────────────────────────────────────────────
+
+func TestVerify_SettingsPass_AfterApply(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	// Write opencode.json with correct managed settings.
+	targetPath := filepath.Join(project, "opencode.json")
+	writeVerifyJSON(t, targetPath, map[string]interface{}{
+		"model": "anthropic/claude-sonnet-4-5",
+		"_agent_manager": map[string]interface{}{
+			"managed_keys": []string{"model"},
+		},
+	})
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true, Settings: map[string]interface{}{
+				"model": "anthropic/claude-sonnet-4-5",
+			}},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"settings": {Enabled: true},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.AllPass {
+		for _, r := range report.Results {
+			if !r.Passed {
+				t.Errorf("check %q failed: %s", r.Check, r.Message)
+			}
+		}
+	}
+	// Should have 2 settings checks: file-exists, keys-current.
+	if len(report.Results) != 2 {
+		t.Errorf("expected 2 settings checks, got %d", len(report.Results))
+	}
+}
+
+func TestVerify_SettingsFails_WhenFileMissing(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true, Settings: map[string]interface{}{
+				"model": "anthropic/claude-sonnet-4-5",
+			}},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"settings": {Enabled: true},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.AllPass {
+		t.Error("should fail when settings file is missing")
+	}
+}
+
+func TestVerify_SettingsDisabled_Skipped(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true, Settings: map[string]interface{}{
+				"model": "some-model",
+			}},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"settings": {Enabled: false},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.AllPass {
+		t.Error("disabled settings should not cause failures")
+	}
+	for _, r := range report.Results {
+		if r.Check == "settings-file-exists" || r.Check == "settings-keys-current" {
+			t.Errorf("unexpected settings check %q when settings disabled", r.Check)
+		}
+	}
+}
+
+// writeVerifyJSON is a test helper to write a JSON file.
+func writeVerifyJSON(t *testing.T, path string, data map[string]interface{}) {
+	t.Helper()
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		t.Fatal(err)
 	}
 }
