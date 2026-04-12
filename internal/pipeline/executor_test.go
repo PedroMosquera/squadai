@@ -66,14 +66,22 @@ func TestExecute_SkipActionsSucceed(t *testing.T) {
 
 	// Pre-create everything so plan returns all skips.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
-	os.WriteFile(promptPath, []byte(memContent), 0644)
+	if err := os.WriteFile(promptPath, []byte(memContent), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(copilotPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(copilotPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	copilotContent := marker.InjectSection("", copilot.SectionID, copilot.TemplateContent("standard"))
-	os.WriteFile(copilotPath, []byte(copilotContent), 0644)
+	if err := os.WriteFile(copilotPath, []byte(copilotContent), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := fullConfig()
 	p := planner.New()
@@ -210,9 +218,13 @@ func TestExecute_WithBackup_StopsOnFailureAndRollsBack(t *testing.T) {
 
 	// Pre-create the memory prompt file with known content.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	originalContent := "# Original user content\n"
-	os.WriteFile(promptPath, []byte(originalContent), 0644)
+	if err := os.WriteFile(promptPath, []byte(originalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	store := backup.NewStore(backupDir)
 

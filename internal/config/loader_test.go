@@ -42,8 +42,12 @@ func TestLoadUser_ValidJSON_ParsesCorrectly(t *testing.T) {
 func TestLoadUser_InvalidJSON_ReturnsValidationError(t *testing.T) {
 	dir := t.TempDir()
 	path := UserConfigPath(dir)
-	os.MkdirAll(filepath.Dir(path), 0755)
-	os.WriteFile(path, []byte(`{invalid`), 0644)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{invalid`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := LoadUser(dir)
 	if err == nil {

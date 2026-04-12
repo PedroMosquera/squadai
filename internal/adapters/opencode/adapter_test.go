@@ -30,7 +30,9 @@ func TestAdapter_Lane(t *testing.T) {
 func TestDetect_BinaryAndConfigExist(t *testing.T) {
 	dir := t.TempDir()
 	configDir := ConfigDir(dir)
-	os.MkdirAll(configDir, 0755)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	a := NewWithDeps(
 		func(name string) (string, error) { return "/usr/local/bin/opencode", nil },
@@ -72,7 +74,9 @@ func TestDetect_BinaryExists_ConfigMissing(t *testing.T) {
 func TestDetect_BinaryMissing_ConfigExists(t *testing.T) {
 	dir := t.TempDir()
 	configDir := ConfigDir(dir)
-	os.MkdirAll(configDir, 0755)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	a := NewWithDeps(
 		func(name string) (string, error) { return "", fmt.Errorf("not found") },

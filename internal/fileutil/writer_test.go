@@ -33,7 +33,9 @@ func TestWriteAtomic_IdempotentWhenUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "idem.txt")
 
-	WriteAtomic(path, []byte("same"), 0644)
+	if _, err := WriteAtomic(path, []byte("same"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	res, err := WriteAtomic(path, []byte("same"), 0644)
 	if err != nil {
@@ -51,7 +53,9 @@ func TestWriteAtomic_UpdatesWhenDifferent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update.txt")
 
-	WriteAtomic(path, []byte("old"), 0644)
+	if _, err := WriteAtomic(path, []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	res, err := WriteAtomic(path, []byte("new"), 0644)
 	if err != nil {
@@ -87,7 +91,9 @@ func TestWriteAtomic_NoTempFileLeftOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clean.txt")
 
-	WriteAtomic(path, []byte("data"), 0644)
+	if _, err := WriteAtomic(path, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
@@ -102,7 +108,9 @@ func TestWriteAtomic_NoTempFileLeftOnSuccess(t *testing.T) {
 func TestReadFileOrEmpty_ExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "exists.txt")
-	os.WriteFile(path, []byte("content"), 0644)
+	if err := os.WriteFile(path, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	data, err := ReadFileOrEmpty(path)
 	if err != nil {

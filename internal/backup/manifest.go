@@ -32,7 +32,9 @@ type FileSnapshot struct {
 func GenerateID() string {
 	now := time.Now().UTC()
 	b := make([]byte, 4)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
 	return fmt.Sprintf("%s-%s", now.Format("20060102T150405Z"), hex.EncodeToString(b))
 }
 

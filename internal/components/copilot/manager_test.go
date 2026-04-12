@@ -29,8 +29,12 @@ func TestPlan_ExistingFileNoSection_ReturnsUpdate(t *testing.T) {
 	mgr := New()
 
 	target := filepath.Join(dir, CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(target), 0755)
-	os.WriteFile(target, []byte("# Custom Instructions\n\nUser content here.\n"), 0644)
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("# Custom Instructions\n\nUser content here.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	action, err := mgr.Plan(dir, "standard")
 	if err != nil {
@@ -46,9 +50,13 @@ func TestPlan_UpToDate_ReturnsSkip(t *testing.T) {
 	mgr := New()
 
 	target := filepath.Join(dir, CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(target), 0755)
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
 	content := marker.InjectSection("", SectionID, TemplateContent("standard"))
-	os.WriteFile(target, []byte(content), 0644)
+	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	action, err := mgr.Plan(dir, "standard")
 	if err != nil {
@@ -64,9 +72,13 @@ func TestPlan_OutdatedSection_ReturnsUpdate(t *testing.T) {
 	mgr := New()
 
 	target := filepath.Join(dir, CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(target), 0755)
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
 	content := marker.InjectSection("", SectionID, "old instructions")
-	os.WriteFile(target, []byte(content), 0644)
+	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	action, err := mgr.Plan(dir, "standard")
 	if err != nil {
@@ -103,10 +115,16 @@ func TestApply_PreservesUserContent(t *testing.T) {
 	mgr := New()
 
 	target := filepath.Join(dir, CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(target), 0755)
-	os.WriteFile(target, []byte("# My Custom Section\n\nDo not touch this.\n"), 0644)
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("# My Custom Section\n\nDo not touch this.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
-	mgr.Apply(dir, "standard")
+	if err := mgr.Apply(dir, "standard"); err != nil {
+		t.Fatal(err)
+	}
 
 	data, _ := os.ReadFile(target)
 	s := string(data)
@@ -125,12 +143,16 @@ func TestApply_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 	mgr := New()
 
-	mgr.Apply(dir, "standard")
+	if err := mgr.Apply(dir, "standard"); err != nil {
+		t.Fatal(err)
+	}
 
 	target := filepath.Join(dir, CopilotInstructionsPath)
 	first, _ := os.ReadFile(target)
 
-	mgr.Apply(dir, "standard")
+	if err := mgr.Apply(dir, "standard"); err != nil {
+		t.Fatal(err)
+	}
 	second, _ := os.ReadFile(target)
 
 	if string(first) != string(second) {
@@ -144,7 +166,9 @@ func TestVerify_AllPass_AfterApply(t *testing.T) {
 	dir := t.TempDir()
 	mgr := New()
 
-	mgr.Apply(dir, "standard")
+	if err := mgr.Apply(dir, "standard"); err != nil {
+		t.Fatal(err)
+	}
 
 	results := mgr.Verify(dir, "standard")
 	for _, r := range results {
@@ -172,8 +196,12 @@ func TestVerify_FailsWhenNoMarkers(t *testing.T) {
 	mgr := New()
 
 	target := filepath.Join(dir, CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(target), 0755)
-	os.WriteFile(target, []byte("no managed content"), 0644)
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("no managed content"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	results := mgr.Verify(dir, "standard")
 	foundMarkerCheck := false
