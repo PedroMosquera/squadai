@@ -1,0 +1,36 @@
+# Build artifacts
+dist/
+agent-manager
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+
+# Backup test artifacts
+*.bak
