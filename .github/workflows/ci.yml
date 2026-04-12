@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+  lint:
+    name: Lint
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  validate:
+    name: Validate policy fixtures
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -o agent-manager ./cmd/agent-manager
+
+      - name: Validate sample policy
+        run: |
+          mkdir -p .agent-manager
+          cat > .agent-manager/policy.json <<'EOF'
+          {
+            "version": 1,
+            "mode": "team",
+            "locked": [
+              "adapters.opencode.enabled",
+              "components.memory.enabled",
+              "copilot.instructions_template"
+            ],
+            "required": {
+              "adapters": {
+                "opencode": { "enabled": true }
+              },
+              "components": {
+                "memory": { "enabled": true }
+              },
+              "copilot": {
+                "instructions_template": "standard"
+              }
+            }
+          }
+          EOF
+          ./agent-manager validate-policy
