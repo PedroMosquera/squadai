@@ -49,7 +49,7 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 
 	// Verify copilot instructions.
 	if cfg.Copilot.InstructionsTemplate != "" {
-		results := v.copilotManager.Verify(projectDir, cfg.Copilot.InstructionsTemplate)
+		results := v.copilotManager.Verify(projectDir, cfg.Copilot)
 		for _, r := range results {
 			report.Results = append(report.Results, r)
 			if !r.Passed {

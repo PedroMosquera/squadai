@@ -9,13 +9,18 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
 )
 
+// standardCfg returns a CopilotConfig for the standard template.
+func standardCfg() domain.CopilotConfig {
+	return domain.CopilotConfig{InstructionsTemplate: "standard"}
+}
+
 // ─── Plan ───────────────────────────────────────────────────────────────────
 
 func TestPlan_NewProject_ReturnsCreate(t *testing.T) {
 	dir := t.TempDir()
 	mgr := New()
 
-	action, err := mgr.Plan(dir, "standard")
+	action, err := mgr.Plan(dir, standardCfg())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -36,7 +41,7 @@ func TestPlan_ExistingFileNoSection_ReturnsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	action, err := mgr.Plan(dir, "standard")
+	action, err := mgr.Plan(dir, standardCfg())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -58,7 +63,7 @@ func TestPlan_UpToDate_ReturnsSkip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	action, err := mgr.Plan(dir, "standard")
+	action, err := mgr.Plan(dir, standardCfg())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,7 +85,7 @@ func TestPlan_OutdatedSection_ReturnsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	action, err := mgr.Plan(dir, "standard")
+	action, err := mgr.Plan(dir, standardCfg())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -95,7 +100,7 @@ func TestApply_CreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	mgr := New()
 
-	err := mgr.Apply(dir, "standard")
+	err := mgr.Apply(dir, standardCfg())
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -122,7 +127,7 @@ func TestApply_PreservesUserContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := mgr.Apply(dir, "standard"); err != nil {
+	if err := mgr.Apply(dir, standardCfg()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -143,14 +148,14 @@ func TestApply_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 	mgr := New()
 
-	if err := mgr.Apply(dir, "standard"); err != nil {
+	if err := mgr.Apply(dir, standardCfg()); err != nil {
 		t.Fatal(err)
 	}
 
 	target := filepath.Join(dir, CopilotInstructionsPath)
 	first, _ := os.ReadFile(target)
 
-	if err := mgr.Apply(dir, "standard"); err != nil {
+	if err := mgr.Apply(dir, standardCfg()); err != nil {
 		t.Fatal(err)
 	}
 	second, _ := os.ReadFile(target)
@@ -166,11 +171,11 @@ func TestVerify_AllPass_AfterApply(t *testing.T) {
 	dir := t.TempDir()
 	mgr := New()
 
-	if err := mgr.Apply(dir, "standard"); err != nil {
+	if err := mgr.Apply(dir, standardCfg()); err != nil {
 		t.Fatal(err)
 	}
 
-	results := mgr.Verify(dir, "standard")
+	results := mgr.Verify(dir, standardCfg())
 	for _, r := range results {
 		if !r.Passed {
 			t.Errorf("check %q failed: %s", r.Check, r.Message)
@@ -182,7 +187,7 @@ func TestVerify_FailsWhenFileMissing(t *testing.T) {
 	dir := t.TempDir()
 	mgr := New()
 
-	results := mgr.Verify(dir, "standard")
+	results := mgr.Verify(dir, standardCfg())
 	if len(results) == 0 {
 		t.Fatal("expected verify results")
 	}
@@ -203,7 +208,7 @@ func TestVerify_FailsWhenNoMarkers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results := mgr.Verify(dir, "standard")
+	results := mgr.Verify(dir, standardCfg())
 	foundMarkerCheck := false
 	for _, r := range results {
 		if r.Check == "copilot-markers-present" {
@@ -230,11 +235,93 @@ func TestTemplateContent_Standard(t *testing.T) {
 	}
 }
 
-func TestTemplateContent_UnknownFallsToStandard(t *testing.T) {
-	content := TemplateContent("unknown-template")
-	standard := TemplateContent("standard")
-	if content != standard {
-		t.Error("unknown template should fall back to standard")
+func TestTemplateContent_UnknownTreatedAsInline(t *testing.T) {
+	content := TemplateContent("Some inline instructions")
+	if content != "Some inline instructions" {
+		t.Errorf("non-standard template ref should be treated as inline, got %q", content)
+	}
+}
+
+// ─── Custom template modes ─────────────────────────────────────────────────
+
+func TestApply_CustomInlineContent(t *testing.T) {
+	dir := t.TempDir()
+	mgr := New()
+
+	customCfg := domain.CopilotConfig{
+		InstructionsTemplate: "custom",
+		CustomContent:        "## Our Custom Standards\n\nUse TypeScript strict mode.",
+	}
+
+	if err := mgr.Apply(dir, customCfg); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	target := filepath.Join(dir, CopilotInstructionsPath)
+	data, _ := os.ReadFile(target)
+	s := string(data)
+	if !strContains(s, "Our Custom Standards") {
+		t.Error("custom content should be in file")
+	}
+	if !strContains(s, "TypeScript strict mode") {
+		t.Error("custom content should be in file")
+	}
+	if !marker.HasSection(s, SectionID) {
+		t.Error("managed section markers should be present")
+	}
+}
+
+func TestApply_FileTemplate(t *testing.T) {
+	projectDir := t.TempDir()
+	mgr := New()
+
+	// Create template file.
+	tmplDir := filepath.Join(projectDir, ".agent-manager", "templates")
+	if err := os.MkdirAll(tmplDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	tmplContent := "## File-Based Instructions\n\nLoaded from a file."
+	if err := os.WriteFile(filepath.Join(tmplDir, "copilot.md"), []byte(tmplContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fileCfg := domain.CopilotConfig{
+		InstructionsTemplate: "file:templates/copilot.md",
+	}
+
+	if err := mgr.Apply(projectDir, fileCfg); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	target := filepath.Join(projectDir, CopilotInstructionsPath)
+	data, _ := os.ReadFile(target)
+	s := string(data)
+	if !strContains(s, "File-Based Instructions") {
+		t.Error("file-based content should be in output")
+	}
+	if !marker.HasSection(s, SectionID) {
+		t.Error("managed section markers should be present")
+	}
+}
+
+func TestVerify_CustomContent_Passes(t *testing.T) {
+	dir := t.TempDir()
+	mgr := New()
+
+	customCfg := domain.CopilotConfig{
+		InstructionsTemplate: "custom",
+		CustomContent:        "## Custom Team Rules\n\nBe excellent.",
+	}
+
+	if err := mgr.Apply(dir, customCfg); err != nil {
+		t.Fatal(err)
+	}
+
+	results := mgr.Verify(dir, customCfg)
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("check %q failed: %s", r.Check, r.Message)
+		}
 	}
 }
 

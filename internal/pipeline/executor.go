@@ -13,7 +13,7 @@ type Executor struct {
 	installers     map[domain.ComponentID]domain.ComponentInstaller
 	copilotManager *copilot.Manager
 	projectDir     string
-	copilotTmpl    string
+	copilotCfg     domain.CopilotConfig
 	backupStore    *backup.Store // nil = no backup/rollback
 }
 
@@ -23,14 +23,14 @@ func New(
 	installers map[domain.ComponentID]domain.ComponentInstaller,
 	copilotMgr *copilot.Manager,
 	projectDir string,
-	copilotTemplate string,
+	copilotCfg domain.CopilotConfig,
 	backupStore *backup.Store,
 ) *Executor {
 	return &Executor{
 		installers:     installers,
 		copilotManager: copilotMgr,
 		projectDir:     projectDir,
-		copilotTmpl:    copilotTemplate,
+		copilotCfg:     copilotCfg,
 		backupStore:    backupStore,
 	}
 }
@@ -107,7 +107,7 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 
 	// Route to the right handler.
 	if action.ID == "copilot-instructions" {
-		err = e.copilotManager.Apply(e.projectDir, e.copilotTmpl)
+		err = e.copilotManager.Apply(e.projectDir, e.copilotCfg)
 	} else if action.Component != "" {
 		installer, ok := e.installers[action.Component]
 		if !ok {
