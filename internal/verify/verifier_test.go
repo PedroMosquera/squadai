@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/alexmosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/alexmosquera/agent-manager-pro/internal/components/memory"
-	"github.com/alexmosquera/agent-manager-pro/internal/domain"
-	"github.com/alexmosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
+	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
 )
 
 func TestVerify_AllPass_AfterFullApply(t *testing.T) {

@@ -3,9 +3,9 @@ package pipeline
 import (
 	"fmt"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/backup"
-	"github.com/alexmosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/alexmosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
+	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
 // Executor runs a plan and produces a step-level report.

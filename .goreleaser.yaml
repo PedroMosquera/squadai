@@ -20,7 +20,8 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
@@ -37,23 +38,26 @@ changelog:
       - "^test:"
       - "^chore:"
 
-brews:
-  - repository:
-      owner: alexmosquera
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    name: agent-manager-pro
-    homepage: "https://github.com/alexmosquera/agent-manager-pro"
-    description: "CLI tool that standardizes AI coding agent environments across a team"
-    license: "MIT"
-    install: |
-      bin.install "agent-manager"
-    test: |
-      system "#{bin}/agent-manager", "version"
+# TODO(v2): Enable Homebrew tap publishing
+# Requires HOMEBREW_TAP_GITHUB_TOKEN secret and PedroMosquera/homebrew-tap repo.
+#
+# brews:
+#   - repository:
+#       owner: PedroMosquera
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+#     name: agent-manager-pro
+#     homepage: "https://github.com/PedroMosquera/agent-manager-pro"
+#     description: "CLI tool that standardizes AI coding agent environments across a team"
+#     license: "MIT"
+#     install: |
+#       bin.install "agent-manager"
+#     test: |
+#       system "#{bin}/agent-manager", "version"
 
 release:
   github:
-    owner: alexmosquera
+    owner: PedroMosquera
     name: agent-manager-pro
   draft: false
   prerelease: auto

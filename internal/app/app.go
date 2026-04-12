@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/cli"
-	"github.com/alexmosquera/agent-manager-pro/internal/tui"
+	"github.com/PedroMosquera/agent-manager-pro/internal/cli"
+	"github.com/PedroMosquera/agent-manager-pro/internal/tui"
 )
 
 // Version is set from main via ldflags at build time.

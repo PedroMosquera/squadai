@@ -1,9 +1,9 @@
 package verify
 
 import (
-	"github.com/alexmosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/alexmosquera/agent-manager-pro/internal/components/memory"
-	"github.com/alexmosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
+	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
 // Verifier runs post-apply compliance checks across all components and adapters.

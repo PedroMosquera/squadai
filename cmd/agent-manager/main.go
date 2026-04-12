@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/app"
+	"github.com/PedroMosquera/agent-manager-pro/internal/app"
 )
 
 // version is set via ldflags at build time.
