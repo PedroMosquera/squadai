@@ -148,7 +148,8 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 
 	var results []domain.VerifyResult
 
-	for name, def := range i.skills {
+	for _, name := range sortedKeys(i.skills) {
+		def := i.skills[name]
 		targetPath := filepath.Join(skillsDir, name, "SKILL.md")
 		data, err := os.ReadFile(targetPath)
 		if err != nil {

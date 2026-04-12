@@ -388,6 +388,9 @@ func RunVerify(args []string, stdout io.Writer) error {
 		if !r.Passed {
 			icon = "FAIL"
 		}
+		if r.Severity == domain.SeverityWarning {
+			icon = "WARN"
+		}
 		line := fmt.Sprintf("  [%s] %s", icon, r.Check)
 		if r.Message != "" {
 			line += " — " + r.Message

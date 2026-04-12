@@ -84,11 +84,20 @@ type ApplyReport struct {
 	Success  bool         `json:"success"`
 }
 
+// Severity levels for verification results.
+const (
+	SeverityError   = "error"   // check failed — needs action
+	SeverityWarning = "warning" // informational — policy override, detected but not configured
+	SeverityInfo    = "info"    // check passed
+)
+
 // VerifyResult is a single check from the verifier.
 type VerifyResult struct {
-	Check   string `json:"check"`
-	Passed  bool   `json:"passed"`
-	Message string `json:"message,omitempty"`
+	Check     string `json:"check"`
+	Passed    bool   `json:"passed"`
+	Severity  string `json:"severity"`            // "error", "warning", "info"
+	Component string `json:"component,omitempty"`  // which component or subsystem produced this
+	Message   string `json:"message,omitempty"`
 }
 
 // VerifyReport is the full verification output.
