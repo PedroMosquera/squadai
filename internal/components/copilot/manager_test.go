@@ -335,3 +335,206 @@ func strContains(s, sub string) bool {
 	}
 	return false
 }
+
+// ─── Project-aware standard template ─────────────────────────────────────────
+
+func TestStandardTemplate_WithFullMeta(t *testing.T) {
+	cfg := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+		Meta: domain.ProjectMeta{
+			Name:         "my-project",
+			Language:     "Go",
+			Framework:    "Cobra",
+			TestCommand:  "go test ./...",
+			BuildCommand: "go build ./...",
+			LintCommand:  "golangci-lint run ./...",
+		},
+	}
+
+	content := TemplateContentWithContext(cfg, "")
+	if !strContains(content, "### Project: my-project") {
+		t.Error("expected project name in template")
+	}
+	if !strContains(content, "Go") {
+		t.Error("expected language in template")
+	}
+	if !strContains(content, "Cobra") {
+		t.Error("expected framework in template")
+	}
+	if !strContains(content, "`go test ./...`") {
+		t.Error("expected test command in template")
+	}
+	if !strContains(content, "`go build ./...`") {
+		t.Error("expected build command in template")
+	}
+	if !strContains(content, "`golangci-lint run ./...`") {
+		t.Error("expected lint command in template")
+	}
+}
+
+func TestStandardTemplate_WithPartialMeta(t *testing.T) {
+	cfg := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+		Meta: domain.ProjectMeta{
+			Name:        "api-server",
+			Language:    "TypeScript",
+			TestCommand: "npm test",
+		},
+	}
+
+	content := TemplateContentWithContext(cfg, "")
+	if !strContains(content, "### Project: api-server") {
+		t.Error("expected project name in template")
+	}
+	if !strContains(content, "TypeScript") {
+		t.Error("expected language in template")
+	}
+	if !strContains(content, "`npm test`") {
+		t.Error("expected test command in template")
+	}
+	// Framework should not appear when empty.
+	if strContains(content, "/ ") {
+		t.Error("framework separator should not appear when framework is empty")
+	}
+}
+
+func TestStandardTemplate_EmptyMeta_StillValid(t *testing.T) {
+	cfg := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+	}
+
+	content := TemplateContentWithContext(cfg, "")
+	if !strContains(content, "## Team Standards") {
+		t.Error("expected Team Standards heading")
+	}
+	if !strContains(content, "### Code Style") {
+		t.Error("expected Code Style section")
+	}
+	if !strContains(content, "No verification commands configured") {
+		t.Error("expected fallback message when no commands configured")
+	}
+	// Should NOT contain project name section.
+	if strContains(content, "### Project:") {
+		t.Error("project name section should not appear with empty meta")
+	}
+}
+
+func TestApply_WithMeta_RendersProjectAware(t *testing.T) {
+	dir := t.TempDir()
+	mgr := New()
+
+	cfg := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+		Meta: domain.ProjectMeta{
+			Name:        "test-app",
+			Language:    "Go",
+			TestCommand: "make test",
+		},
+	}
+
+	if err := mgr.Apply(dir, cfg); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	target := filepath.Join(dir, CopilotInstructionsPath)
+	data, _ := os.ReadFile(target)
+	s := string(data)
+
+	if !marker.HasSection(s, SectionID) {
+		t.Error("managed section markers should be present")
+	}
+	if !strContains(s, "### Project: test-app") {
+		t.Error("project name should be in applied file")
+	}
+	if !strContains(s, "`make test`") {
+		t.Error("test command should be in applied file")
+	}
+}
+
+func TestVerify_WithMeta_Passes(t *testing.T) {
+	dir := t.TempDir()
+	mgr := New()
+
+	cfg := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+		Meta: domain.ProjectMeta{
+			Name:         "verified-app",
+			Language:     "Go",
+			TestCommand:  "go test ./...",
+			BuildCommand: "go build ./...",
+		},
+	}
+
+	if err := mgr.Apply(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	results := mgr.Verify(dir, cfg)
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("check %q failed: %s", r.Check, r.Message)
+		}
+	}
+}
+
+func TestPlan_WithMeta_SkipsWhenCurrent(t *testing.T) {
+	dir := t.TempDir()
+	mgr := New()
+
+	cfg := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+		Meta: domain.ProjectMeta{
+			Name:     "skip-test",
+			Language: "Go",
+		},
+	}
+
+	// Apply first.
+	if err := mgr.Apply(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plan should return skip.
+	action, err := mgr.Plan(dir, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action.Action != domain.ActionSkip {
+		t.Errorf("Action = %q, want %q", action.Action, domain.ActionSkip)
+	}
+}
+
+func TestPlan_MetaChange_ReturnsUpdate(t *testing.T) {
+	dir := t.TempDir()
+	mgr := New()
+
+	cfg1 := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+		Meta: domain.ProjectMeta{
+			Name:     "evolving-app",
+			Language: "Go",
+		},
+	}
+
+	// Apply with initial meta.
+	if err := mgr.Apply(dir, cfg1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plan with different meta should return update.
+	cfg2 := domain.CopilotConfig{
+		InstructionsTemplate: "standard",
+		Meta: domain.ProjectMeta{
+			Name:        "evolving-app",
+			Language:    "Go",
+			TestCommand: "go test ./...",
+		},
+	}
+	action, err := mgr.Plan(dir, cfg2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action.Action != domain.ActionUpdate {
+		t.Errorf("Action = %q, want %q", action.Action, domain.ActionUpdate)
+	}
+}

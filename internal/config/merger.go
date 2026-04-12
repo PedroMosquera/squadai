@@ -85,6 +85,7 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 			merged.MCP = cloneMCPDefs(project.MCP)
 		}
 		merged.Meta = project.Meta
+		merged.Copilot.Meta = project.Meta
 	}
 
 	// Layer 3: policy locked fields override everything.
