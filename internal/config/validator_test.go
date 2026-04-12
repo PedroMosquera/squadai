@@ -268,6 +268,429 @@ func TestHasRequiredValue_ShortComponentPath(t *testing.T) {
 	}
 }
 
+// ─── hasRequiredValue tests for new sections ────────────────────────────────
+
+func TestHasRequiredValue_RulesPath(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Required: domain.RequiredBlock{
+			Rules: domain.RulesConfig{
+				TeamStandards: "standards",
+			},
+		},
+	}
+	if !hasRequiredValue(cfg, "rules.team_standards") {
+		t.Error("should find required value for rules.team_standards")
+	}
+}
+
+func TestHasRequiredValue_RulesPath_Empty(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Required: domain.RequiredBlock{},
+	}
+	if hasRequiredValue(cfg, "rules.team_standards") {
+		t.Error("should not find required value when rules is empty")
+	}
+}
+
+func TestHasRequiredValue_AgentsPath(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Required: domain.RequiredBlock{
+			Agents: map[string]domain.AgentDef{
+				"reviewer": {Description: "test", Mode: "subagent", Prompt: "test"},
+			},
+		},
+	}
+	if !hasRequiredValue(cfg, "agents.reviewer") {
+		t.Error("should find required value for agents.reviewer")
+	}
+	if hasRequiredValue(cfg, "agents.missing") {
+		t.Error("should not find required value for agents.missing")
+	}
+}
+
+func TestHasRequiredValue_MCPPath(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Required: domain.RequiredBlock{
+			MCP: map[string]domain.MCPServerDef{
+				"context7": {Type: "remote", URL: "https://example.com", Enabled: true},
+			},
+		},
+	}
+	if !hasRequiredValue(cfg, "mcp.context7") {
+		t.Error("should find required value for mcp.context7")
+	}
+	if hasRequiredValue(cfg, "mcp.missing") {
+		t.Error("should not find required value for mcp.missing")
+	}
+}
+
+// ─── ValidateProject — new section validation ──────────────────────────────
+
+func TestValidateProject_ValidAgents(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Agents: map[string]domain.AgentDef{
+			"reviewer": {Description: "Reviews code", Mode: "subagent", Prompt: "Review this"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got: %v", issues)
+	}
+}
+
+func TestValidateProject_AgentMissingDescription(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Agents: map[string]domain.AgentDef{
+			"reviewer": {Mode: "subagent", Prompt: "Review"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `agent "reviewer" must have a description`)
+}
+
+func TestValidateProject_AgentMissingMode(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Agents: map[string]domain.AgentDef{
+			"reviewer": {Description: "Code reviewer", Prompt: "Review"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `agent "reviewer" must have a mode`)
+}
+
+func TestValidateProject_AgentUnknownMode(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Agents: map[string]domain.AgentDef{
+			"reviewer": {Description: "Code reviewer", Mode: "unknown", Prompt: "Review"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `unknown mode "unknown"`)
+}
+
+func TestValidateProject_AgentMissingPrompt(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Agents: map[string]domain.AgentDef{
+			"reviewer": {Description: "Code reviewer", Mode: "subagent"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `agent "reviewer" must have prompt or prompt_file`)
+}
+
+func TestValidateProject_AgentWithPromptFile(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Agents: map[string]domain.AgentDef{
+			"reviewer": {Description: "Code reviewer", Mode: "subagent", PromptFile: "prompts/reviewer.md"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("prompt_file should satisfy prompt requirement, got: %v", issues)
+	}
+}
+
+func TestValidateProject_ValidSkills(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Skills: map[string]domain.SkillDef{
+			"release": {Description: "Generate release notes", Content: "content"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got: %v", issues)
+	}
+}
+
+func TestValidateProject_SkillMissingDescription(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Skills: map[string]domain.SkillDef{
+			"release": {Content: "content"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `skill "release" must have a description`)
+}
+
+func TestValidateProject_SkillMissingContent(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Skills: map[string]domain.SkillDef{
+			"release": {Description: "Generate release notes"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `skill "release" must have content or content_file`)
+}
+
+func TestValidateProject_ValidCommands(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Commands: map[string]domain.CommandDef{
+			"test": {Description: "Run tests"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got: %v", issues)
+	}
+}
+
+func TestValidateProject_CommandMissingDescription(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Commands: map[string]domain.CommandDef{
+			"test": {},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `command "test" must have a description`)
+}
+
+func TestValidateProject_ValidMCP(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		MCP: map[string]domain.MCPServerDef{
+			"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+			"local-db": {Type: "local", Command: []string{"npx", "server-pg"}, Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got: %v", issues)
+	}
+}
+
+func TestValidateProject_MCPMissingType(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		MCP: map[string]domain.MCPServerDef{
+			"bad": {URL: "https://example.com", Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `MCP server "bad" must have a type`)
+}
+
+func TestValidateProject_MCPUnknownType(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		MCP: map[string]domain.MCPServerDef{
+			"bad": {Type: "hybrid", Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `unknown type "hybrid"`)
+}
+
+func TestValidateProject_MCPLocalMissingCommand(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		MCP: map[string]domain.MCPServerDef{
+			"bad": {Type: "local", Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `(type=local) must have a command`)
+}
+
+func TestValidateProject_MCPRemoteMissingURL(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		MCP: map[string]domain.MCPServerDef{
+			"bad": {Type: "remote", Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `(type=remote) must have a url`)
+}
+
+func TestValidateProject_NewComponentsAccepted(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory":   {Enabled: true},
+			"rules":    {Enabled: true},
+			"settings": {Enabled: true},
+			"mcp":      {Enabled: true},
+			"agents":   {Enabled: true},
+			"skills":   {Enabled: true},
+			"commands": {Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("all new component names should be accepted, got: %v", issues)
+	}
+}
+
+func TestValidateProject_UnknownAdapter(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"unknown-agent": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `unknown adapter "unknown-agent"`)
+}
+
+// ─── ValidatePolicy — new section validation ────────────────────────────────
+
+func TestValidatePolicy_LockedRulesWithRequired(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Locked:  []string{"rules.team_standards"},
+		Required: domain.RequiredBlock{
+			Adapters:   map[string]domain.AdapterConfig{},
+			Components: map[string]domain.ComponentConfig{},
+			Rules:      domain.RulesConfig{TeamStandards: "team rules"},
+		},
+	}
+	issues := ValidatePolicy(cfg)
+	for _, issue := range issues {
+		if contains(issue, "locked field") {
+			t.Errorf("should not report issue for locked rules when required has value, got: %s", issue)
+		}
+	}
+}
+
+func TestValidatePolicy_LockedAgentWithRequired(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Locked:  []string{"agents.reviewer"},
+		Required: domain.RequiredBlock{
+			Adapters:   map[string]domain.AdapterConfig{},
+			Components: map[string]domain.ComponentConfig{},
+			Agents: map[string]domain.AgentDef{
+				"reviewer": {Description: "test", Mode: "subagent", Prompt: "test"},
+			},
+		},
+	}
+	issues := ValidatePolicy(cfg)
+	for _, issue := range issues {
+		if contains(issue, "locked field") {
+			t.Errorf("should not report issue for locked agent when required has value, got: %s", issue)
+		}
+	}
+}
+
+func TestValidatePolicy_LockedMCPWithRequired(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Locked:  []string{"mcp.context7"},
+		Required: domain.RequiredBlock{
+			Adapters:   map[string]domain.AdapterConfig{},
+			Components: map[string]domain.ComponentConfig{},
+			MCP: map[string]domain.MCPServerDef{
+				"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+			},
+		},
+	}
+	issues := ValidatePolicy(cfg)
+	for _, issue := range issues {
+		if contains(issue, "locked field") {
+			t.Errorf("should not report issue for locked mcp when required has value, got: %s", issue)
+		}
+	}
+}
+
+func TestValidatePolicy_InvalidAgentInRequired(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Required: domain.RequiredBlock{
+			Adapters:   map[string]domain.AdapterConfig{},
+			Components: map[string]domain.ComponentConfig{},
+			Agents: map[string]domain.AgentDef{
+				"bad-agent": {}, // missing description, mode, prompt
+			},
+		},
+	}
+	issues := ValidatePolicy(cfg)
+	assertContainsIssue(t, issues, `agent "bad-agent" must have a description`)
+	assertContainsIssue(t, issues, `agent "bad-agent" must have a mode`)
+	assertContainsIssue(t, issues, `agent "bad-agent" must have prompt or prompt_file`)
+}
+
+func TestValidatePolicy_InvalidMCPInRequired(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Required: domain.RequiredBlock{
+			Adapters:   map[string]domain.AdapterConfig{},
+			Components: map[string]domain.ComponentConfig{},
+			MCP: map[string]domain.MCPServerDef{
+				"bad-server": {Enabled: true}, // missing type
+			},
+		},
+	}
+	issues := ValidatePolicy(cfg)
+	assertContainsIssue(t, issues, `MCP server "bad-server" must have a type`)
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func contains(s, substr string) bool {

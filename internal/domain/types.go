@@ -21,7 +21,13 @@ const (
 type ComponentID string
 
 const (
-	ComponentMemory ComponentID = "memory"
+	ComponentMemory   ComponentID = "memory"
+	ComponentRules    ComponentID = "rules"
+	ComponentSettings ComponentID = "settings"
+	ComponentMCP      ComponentID = "mcp"
+	ComponentAgents   ComponentID = "agents"
+	ComponentSkills   ComponentID = "skills"
+	ComponentCommands ComponentID = "commands"
 )
 
 // OperationalMode determines config precedence behavior.

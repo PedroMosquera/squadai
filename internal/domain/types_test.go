@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -207,6 +208,316 @@ func TestValidationError_Unwrap(t *testing.T) {
 	err := &ValidationError{Source: "test", Issues: []string{"x"}}
 	if err.Unwrap() != ErrInvalidConfig {
 		t.Errorf("Unwrap = %v, want ErrInvalidConfig", err.Unwrap())
+	}
+}
+
+// ─── New ComponentID tests ──────────────────────────────────────────────────
+
+func TestComponentIDs_AllDefined(t *testing.T) {
+	ids := []ComponentID{
+		ComponentMemory,
+		ComponentRules,
+		ComponentSettings,
+		ComponentMCP,
+		ComponentAgents,
+		ComponentSkills,
+		ComponentCommands,
+	}
+	for _, id := range ids {
+		if id == "" {
+			t.Error("ComponentID should not be empty")
+		}
+	}
+	if len(ids) != 7 {
+		t.Errorf("expected 7 component IDs, got %d", len(ids))
+	}
+}
+
+// ─── Rich AdapterConfig tests ──────────────────────────────────────────────
+
+func TestAdapterConfig_WithSettings(t *testing.T) {
+	ac := AdapterConfig{
+		Enabled: true,
+		Settings: map[string]interface{}{
+			"model":      "anthropic/claude-sonnet-4-5",
+			"autoupdate": true,
+		},
+	}
+	if !ac.Enabled {
+		t.Error("adapter should be enabled")
+	}
+	if ac.Settings["model"] != "anthropic/claude-sonnet-4-5" {
+		t.Errorf("model = %v, want anthropic/claude-sonnet-4-5", ac.Settings["model"])
+	}
+	if ac.Settings["autoupdate"] != true {
+		t.Errorf("autoupdate = %v, want true", ac.Settings["autoupdate"])
+	}
+}
+
+func TestAdapterConfig_NilSettings(t *testing.T) {
+	ac := AdapterConfig{Enabled: true}
+	if ac.Settings != nil {
+		t.Error("settings should be nil by default")
+	}
+}
+
+// ─── Rich ComponentConfig tests ────────────────────────────────────────────
+
+func TestComponentConfig_WithSettings(t *testing.T) {
+	cc := ComponentConfig{
+		Enabled: true,
+		Settings: map[string]interface{}{
+			"depth": float64(5),
+		},
+	}
+	if !cc.Enabled {
+		t.Error("component should be enabled")
+	}
+	if cc.Settings["depth"] != float64(5) {
+		t.Errorf("depth = %v, want 5", cc.Settings["depth"])
+	}
+}
+
+// ─── CopilotConfig tests ───────────────────────────────────────────────────
+
+func TestCopilotConfig_CustomContent(t *testing.T) {
+	cc := CopilotConfig{
+		InstructionsTemplate: "custom",
+		CustomContent:        "## My Custom Instructions",
+	}
+	if cc.InstructionsTemplate != "custom" {
+		t.Errorf("InstructionsTemplate = %q, want custom", cc.InstructionsTemplate)
+	}
+	if cc.CustomContent != "## My Custom Instructions" {
+		t.Errorf("CustomContent = %q, want ## My Custom Instructions", cc.CustomContent)
+	}
+}
+
+// ─── New type tests ────────────────────────────────────────────────────────
+
+func TestRulesConfig_Fields(t *testing.T) {
+	rc := RulesConfig{
+		TeamStandards:     "## Standards",
+		TeamStandardsFile: "templates/team.md",
+		Instructions:      []string{"extra.md"},
+	}
+	if rc.TeamStandards != "## Standards" {
+		t.Error("TeamStandards mismatch")
+	}
+	if rc.TeamStandardsFile != "templates/team.md" {
+		t.Error("TeamStandardsFile mismatch")
+	}
+	if len(rc.Instructions) != 1 {
+		t.Error("Instructions count mismatch")
+	}
+}
+
+func TestAgentDef_Fields(t *testing.T) {
+	ad := AgentDef{
+		Description: "A code reviewer",
+		Mode:        "subagent",
+		Model:       "anthropic/claude-sonnet-4-5",
+		Prompt:      "Review this code",
+		Permission:  map[string]string{"edit": "deny"},
+	}
+	if ad.Description != "A code reviewer" {
+		t.Error("Description mismatch")
+	}
+	if ad.Mode != "subagent" {
+		t.Error("Mode mismatch")
+	}
+	if ad.Permission["edit"] != "deny" {
+		t.Error("Permission mismatch")
+	}
+}
+
+func TestSkillDef_Fields(t *testing.T) {
+	sd := SkillDef{
+		Description: "Generate release notes",
+		Content:     "## Release Notes\nGenerate...",
+	}
+	if sd.Description != "Generate release notes" {
+		t.Error("Description mismatch")
+	}
+}
+
+func TestCommandDef_Fields(t *testing.T) {
+	cd := CommandDef{
+		Description: "Run all tests",
+		Template:    "Run go test ./...",
+		Agent:       "code-reviewer",
+	}
+	if cd.Description != "Run all tests" {
+		t.Error("Description mismatch")
+	}
+}
+
+func TestMCPServerDef_Local(t *testing.T) {
+	mcp := MCPServerDef{
+		Type:    "local",
+		Command: []string{"npx", "-y", "@modelcontextprotocol/server-postgres"},
+		Enabled: true,
+		Environment: map[string]string{
+			"DATABASE_URL": "postgres://localhost:5432/db",
+		},
+	}
+	if mcp.Type != "local" {
+		t.Error("Type mismatch")
+	}
+	if len(mcp.Command) != 3 {
+		t.Errorf("Command length = %d, want 3", len(mcp.Command))
+	}
+	if !mcp.Enabled {
+		t.Error("should be enabled")
+	}
+}
+
+func TestMCPServerDef_Remote(t *testing.T) {
+	mcp := MCPServerDef{
+		Type:    "remote",
+		URL:     "https://mcp.context7.com/mcp",
+		Enabled: true,
+	}
+	if mcp.Type != "remote" {
+		t.Error("Type mismatch")
+	}
+	if mcp.URL != "https://mcp.context7.com/mcp" {
+		t.Error("URL mismatch")
+	}
+}
+
+func TestProjectMeta_Fields(t *testing.T) {
+	pm := ProjectMeta{
+		Name:         "my-project",
+		Language:     "Go",
+		Framework:    "bubbletea",
+		TestCommand:  "go test ./...",
+		BuildCommand: "go build ./...",
+		LintCommand:  "golangci-lint run ./...",
+	}
+	if pm.Name != "my-project" {
+		t.Error("Name mismatch")
+	}
+	if pm.Language != "Go" {
+		t.Error("Language mismatch")
+	}
+}
+
+// ─── JSON serialization tests ──────────────────────────────────────────────
+
+func TestAdapterConfig_JSONRoundTrip(t *testing.T) {
+	ac := AdapterConfig{
+		Enabled: true,
+		Settings: map[string]interface{}{
+			"model": "test-model",
+		},
+	}
+
+	data, err := json.Marshal(ac)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded AdapterConfig
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if !decoded.Enabled {
+		t.Error("decoded Enabled should be true")
+	}
+	if decoded.Settings["model"] != "test-model" {
+		t.Errorf("decoded model = %v, want test-model", decoded.Settings["model"])
+	}
+}
+
+func TestProjectConfig_JSONRoundTrip(t *testing.T) {
+	pc := ProjectConfig{
+		Version: 1,
+		Adapters: map[string]AdapterConfig{
+			"opencode": {
+				Enabled: true,
+				Settings: map[string]interface{}{
+					"model": "test",
+				},
+			},
+		},
+		Components: map[string]ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Copilot: CopilotConfig{
+			InstructionsTemplate: "custom",
+			CustomContent:        "my content",
+		},
+		Rules: RulesConfig{
+			TeamStandards: "## Standards",
+		},
+		Agents: map[string]AgentDef{
+			"reviewer": {Description: "Reviews code", Mode: "subagent", Prompt: "Review"},
+		},
+		MCP: map[string]MCPServerDef{
+			"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+		},
+		Meta: ProjectMeta{Name: "test-proj", Language: "Go"},
+	}
+
+	data, err := json.Marshal(pc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded ProjectConfig
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Version != 1 {
+		t.Errorf("Version = %d, want 1", decoded.Version)
+	}
+	if decoded.Copilot.CustomContent != "my content" {
+		t.Error("CustomContent mismatch after round-trip")
+	}
+	if decoded.Rules.TeamStandards != "## Standards" {
+		t.Error("TeamStandards mismatch after round-trip")
+	}
+	if _, ok := decoded.Agents["reviewer"]; !ok {
+		t.Error("reviewer agent missing after round-trip")
+	}
+	if _, ok := decoded.MCP["context7"]; !ok {
+		t.Error("context7 MCP server missing after round-trip")
+	}
+	if decoded.Meta.Name != "test-proj" {
+		t.Error("Meta.Name mismatch after round-trip")
+	}
+	if decoded.Adapters["opencode"].Settings["model"] != "test" {
+		t.Error("adapter settings model mismatch after round-trip")
+	}
+}
+
+func TestAdapterConfig_JSONOmitsNilSettings(t *testing.T) {
+	ac := AdapterConfig{Enabled: true}
+
+	data, err := json.Marshal(ac)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// JSON should not contain "settings" when nil
+	if stringContains(string(data), "settings") {
+		t.Errorf("JSON should omit nil settings, got: %s", string(data))
+	}
+}
+
+func TestComponentConfig_JSONOmitsNilSettings(t *testing.T) {
+	cc := ComponentConfig{Enabled: true}
+
+	data, err := json.Marshal(cc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if stringContains(string(data), "settings") {
+		t.Errorf("JSON should omit nil settings, got: %s", string(data))
 	}
 }
 
