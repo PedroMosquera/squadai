@@ -142,6 +142,31 @@ func TestPaths(t *testing.T) {
 		{"SystemPromptFile", a.SystemPromptFile(home), "/Users/test/.config/opencode/AGENTS.md"},
 		{"SkillsDir", a.SkillsDir(home), "/Users/test/.config/opencode/skills"},
 		{"SettingsPath", a.SettingsPath(home), "/Users/test/.config/opencode/opencode.json"},
+		{"AgentsDir", a.AgentsDir(home), "/Users/test/.config/opencode/agents"},
+		{"CommandsDir", a.CommandsDir(home), "/Users/test/.config/opencode/commands"},
+	}
+
+	for _, tt := range tests {
+		if tt.got != tt.want {
+			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
+		}
+	}
+}
+
+func TestProjectPaths(t *testing.T) {
+	a := New()
+	project := "/Users/test/myproject"
+
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/opencode.json"},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/AGENTS.md"},
+		{"ProjectAgentsDir", a.ProjectAgentsDir(project), "/Users/test/myproject/.opencode/agents"},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), "/Users/test/myproject/.opencode/skills"},
+		{"ProjectCommandsDir", a.ProjectCommandsDir(project), "/Users/test/myproject/.opencode/commands"},
 	}
 
 	for _, tt := range tests {
@@ -160,10 +185,27 @@ func TestSupportsComponent_Memory(t *testing.T) {
 	}
 }
 
+func TestSupportsComponent_NewComponents(t *testing.T) {
+	a := New()
+	components := []domain.ComponentID{
+		domain.ComponentRules,
+		domain.ComponentSettings,
+		domain.ComponentMCP,
+		domain.ComponentAgents,
+		domain.ComponentSkills,
+		domain.ComponentCommands,
+	}
+	for _, c := range components {
+		if !a.SupportsComponent(c) {
+			t.Errorf("OpenCode should support component %q", c)
+		}
+	}
+}
+
 func TestSupportsComponent_Unknown(t *testing.T) {
 	a := New()
-	if a.SupportsComponent(domain.ComponentID("mcp")) {
-		t.Error("OpenCode should not support unknown components in V1")
+	if a.SupportsComponent(domain.ComponentID("nonexistent")) {
+		t.Error("OpenCode should not support unknown components")
 	}
 }
 

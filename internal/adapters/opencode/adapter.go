@@ -89,14 +89,50 @@ func (a *Adapter) SettingsPath(homeDir string) string {
 }
 
 // SupportsComponent reports whether OpenCode supports a given component.
-// V1: memory is the only supported component.
 func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
-	case domain.ComponentMemory:
+	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings,
+		domain.ComponentMCP, domain.ComponentAgents, domain.ComponentSkills,
+		domain.ComponentCommands:
 		return true
 	default:
 		return false
 	}
+}
+
+// ProjectConfigFile returns <projectDir>/opencode.json.
+func (a *Adapter) ProjectConfigFile(projectDir string) string {
+	return filepath.Join(projectDir, "opencode.json")
+}
+
+// ProjectRulesFile returns <projectDir>/AGENTS.md.
+func (a *Adapter) ProjectRulesFile(projectDir string) string {
+	return filepath.Join(projectDir, "AGENTS.md")
+}
+
+// ProjectAgentsDir returns <projectDir>/.opencode/agents.
+func (a *Adapter) ProjectAgentsDir(projectDir string) string {
+	return filepath.Join(projectDir, ".opencode", "agents")
+}
+
+// ProjectSkillsDir returns <projectDir>/.opencode/skills.
+func (a *Adapter) ProjectSkillsDir(projectDir string) string {
+	return filepath.Join(projectDir, ".opencode", "skills")
+}
+
+// ProjectCommandsDir returns <projectDir>/.opencode/commands.
+func (a *Adapter) ProjectCommandsDir(projectDir string) string {
+	return filepath.Join(projectDir, ".opencode", "commands")
+}
+
+// AgentsDir returns ~/.config/opencode/agents.
+func (a *Adapter) AgentsDir(homeDir string) string {
+	return filepath.Join(ConfigDir(homeDir), "agents")
+}
+
+// CommandsDir returns ~/.config/opencode/commands.
+func (a *Adapter) CommandsDir(homeDir string) string {
+	return filepath.Join(ConfigDir(homeDir), "commands")
 }
 
 // ConfigDir returns the root config directory for OpenCode.

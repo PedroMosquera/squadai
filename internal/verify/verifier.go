@@ -34,7 +34,7 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		if memCfg, ok := cfg.Components[string(domain.ComponentMemory)]; ok && memCfg.Enabled {
-			results, err := v.memoryInstaller.Verify(adapter, homeDir)
+			results, err := v.memoryInstaller.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}

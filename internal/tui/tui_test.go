@@ -22,11 +22,16 @@ func (m *mockAdapter) Lane() domain.AdapterLane                                {
 func (m *mockAdapter) Detect(_ context.Context, homeDir string) (bool, bool, error) {
 	return true, true, nil
 }
-func (m *mockAdapter) GlobalConfigDir(homeDir string) string      { return "" }
-func (m *mockAdapter) SystemPromptFile(homeDir string) string     { return "" }
-func (m *mockAdapter) SkillsDir(homeDir string) string            { return "" }
-func (m *mockAdapter) SettingsPath(homeDir string) string         { return "" }
+func (m *mockAdapter) GlobalConfigDir(homeDir string) string       { return "" }
+func (m *mockAdapter) SystemPromptFile(homeDir string) string      { return "" }
+func (m *mockAdapter) SkillsDir(homeDir string) string             { return "" }
+func (m *mockAdapter) SettingsPath(homeDir string) string          { return "" }
 func (m *mockAdapter) SupportsComponent(c domain.ComponentID) bool { return false }
+func (m *mockAdapter) ProjectConfigFile(projectDir string) string  { return "" }
+func (m *mockAdapter) ProjectRulesFile(projectDir string) string   { return "" }
+func (m *mockAdapter) ProjectAgentsDir(projectDir string) string   { return "" }
+func (m *mockAdapter) ProjectSkillsDir(projectDir string) string   { return "" }
+func (m *mockAdapter) ProjectCommandsDir(projectDir string) string { return "" }
 
 // ─── Intro Screen ───────────────────────────────────────────────────────────
 

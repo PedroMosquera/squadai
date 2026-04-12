@@ -37,7 +37,7 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 
 		// Memory component.
 		if memCfg, ok := cfg.Components[string(domain.ComponentMemory)]; ok && memCfg.Enabled {
-			memActions, err := p.memoryInstaller.Plan(adapter, homeDir)
+			memActions, err := p.memoryInstaller.Plan(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, fmt.Errorf("plan memory for %s: %w", adapter.ID(), err)
 			}

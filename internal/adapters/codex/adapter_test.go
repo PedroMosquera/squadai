@@ -151,6 +151,27 @@ func TestPaths(t *testing.T) {
 	}
 }
 
+func TestProjectPaths_AllEmpty(t *testing.T) {
+	a := New()
+	project := "/Users/test/myproject"
+
+	if a.ProjectConfigFile(project) != "" {
+		t.Error("ProjectConfigFile should be empty for Codex")
+	}
+	if a.ProjectRulesFile(project) != "" {
+		t.Error("ProjectRulesFile should be empty for Codex")
+	}
+	if a.ProjectAgentsDir(project) != "" {
+		t.Error("ProjectAgentsDir should be empty for Codex")
+	}
+	if a.ProjectSkillsDir(project) != "" {
+		t.Error("ProjectSkillsDir should be empty for Codex")
+	}
+	if a.ProjectCommandsDir(project) != "" {
+		t.Error("ProjectCommandsDir should be empty for Codex")
+	}
+}
+
 // ─── SupportsComponent ──────────────────────────────────────────────────────
 
 func TestSupportsComponent_Memory(t *testing.T) {
@@ -162,8 +183,8 @@ func TestSupportsComponent_Memory(t *testing.T) {
 
 func TestSupportsComponent_Unknown(t *testing.T) {
 	a := New()
-	if a.SupportsComponent(domain.ComponentID("mcp")) {
-		t.Error("Codex should not support unknown components in V1")
+	if a.SupportsComponent(domain.ComponentID("nonexistent")) {
+		t.Error("Codex should not support unknown components")
 	}
 }
 

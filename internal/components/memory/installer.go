@@ -28,7 +28,7 @@ func (i *Installer) ID() domain.ComponentID {
 }
 
 // Plan determines what actions are needed for this adapter.
-func (i *Installer) Plan(adapter domain.Adapter, homeDir string) ([]domain.PlannedAction, error) {
+func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]domain.PlannedAction, error) {
 	if !adapter.SupportsComponent(domain.ComponentMemory) {
 		return nil, nil
 	}
@@ -108,7 +108,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 }
 
 // Verify checks post-apply state for the memory component.
-func (i *Installer) Verify(adapter domain.Adapter, homeDir string) ([]domain.VerifyResult, error) {
+func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) ([]domain.VerifyResult, error) {
 	if !adapter.SupportsComponent(domain.ComponentMemory) {
 		return []domain.VerifyResult{
 			{
