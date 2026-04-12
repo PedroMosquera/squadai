@@ -165,8 +165,10 @@ func TestVerify_DisabledComponents_Skipped(t *testing.T) {
 	if !report.AllPass {
 		t.Error("disabled components should not cause failures")
 	}
-	if len(report.Results) != 0 {
-		t.Errorf("expected 0 results for disabled components, got %d", len(report.Results))
+	for _, r := range report.Results {
+		if r.Component != "health" && r.Component != "policy" {
+			t.Errorf("unexpected non-health check %q when components disabled", r.Check)
+		}
 	}
 }
 
@@ -394,9 +396,9 @@ func TestVerify_AllPass_MemoryAndRules(t *testing.T) {
 		}
 	}
 
-	// Should have both memory (3) and rules (3) checks = 6.
-	if len(report.Results) != 6 {
-		t.Errorf("expected 6 results (3 memory + 3 rules), got %d", len(report.Results))
+	// Should have both memory (3) and rules (3) checks + 1 health check = 7.
+	if len(report.Results) != 7 {
+		t.Errorf("expected 7 results (3 memory + 3 rules + 1 health), got %d", len(report.Results))
 	}
 }
 
@@ -440,8 +442,14 @@ func TestVerify_SettingsPass_AfterApply(t *testing.T) {
 		}
 	}
 	// Should have 2 settings checks: file-exists, keys-current.
-	if len(report.Results) != 2 {
-		t.Errorf("expected 2 settings checks, got %d", len(report.Results))
+	settingsChecks := 0
+	for _, r := range report.Results {
+		if r.Component == "settings" {
+			settingsChecks++
+		}
+	}
+	if settingsChecks != 2 {
+		t.Errorf("expected 2 settings checks, got %d", settingsChecks)
 	}
 }
 
@@ -515,5 +523,357 @@ func writeVerifyJSON(t *testing.T, path string, data map[string]interface{}) {
 	}
 	if err := os.WriteFile(path, b, 0644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// ─── Severity and component tagging ─────────────────────────────────────────
+
+func TestVerify_ResultsHaveSeverity(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, r := range report.Results {
+		if r.Severity == "" {
+			t.Errorf("result %q has empty severity", r.Check)
+		}
+		if r.Severity != domain.SeverityError && r.Severity != domain.SeverityWarning && r.Severity != domain.SeverityInfo {
+			t.Errorf("result %q has unknown severity %q", r.Check, r.Severity)
+		}
+	}
+}
+
+func TestVerify_ResultsHaveComponent(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	// Create memory content so we get passing results.
+	memoryPath := filepath.Join(project, "AGENTS.md")
+	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, r := range report.Results {
+		if r.Component == "" {
+			t.Errorf("result %q has empty component", r.Check)
+		}
+	}
+
+	// Memory results should be tagged with "memory".
+	for _, r := range report.Results {
+		if r.Check == "memory-file-exists" || r.Check == "memory-markers-present" || r.Check == "memory-content-current" {
+			if r.Component != "memory" {
+				t.Errorf("expected component 'memory' for check %q, got %q", r.Check, r.Component)
+			}
+		}
+	}
+}
+
+func TestVerify_PassedResultsHaveInfoSeverity(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	// Create memory content.
+	memoryPath := filepath.Join(project, "AGENTS.md")
+	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, r := range report.Results {
+		if r.Passed && r.Severity != domain.SeverityInfo && r.Severity != domain.SeverityWarning {
+			t.Errorf("passed result %q should be info or warning, got %q", r.Check, r.Severity)
+		}
+	}
+}
+
+func TestVerify_FailedResultsHaveErrorSeverity(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, r := range report.Results {
+		if !r.Passed && r.Severity != domain.SeverityError {
+			t.Errorf("failed result %q should be error, got %q", r.Check, r.Severity)
+		}
+	}
+}
+
+func TestVerify_PolicyViolationsAreWarnings(t *testing.T) {
+	cfg := &domain.MergedConfig{
+		Mode:       domain.ModeTeam,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+		Violations: []string{"locked field overridden"},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, nil, t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, r := range report.Results {
+		if r.Check == "policy-override" {
+			if r.Severity != domain.SeverityWarning {
+				t.Errorf("policy-override should be warning, got %q", r.Severity)
+			}
+			if r.Component != "policy" {
+				t.Errorf("policy-override component should be 'policy', got %q", r.Component)
+			}
+		}
+	}
+}
+
+// ─── Agent health checks ────────────────────────────────────────────────────
+
+func TestVerify_HealthCheck_ConfiguredAndDetected(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, r := range report.Results {
+		if r.Check == "agent-opencode-detected" {
+			found = true
+			if !r.Passed {
+				t.Error("opencode should be reported as detected")
+			}
+			if r.Component != "health" {
+				t.Errorf("expected component 'health', got %q", r.Component)
+			}
+			if r.Severity != domain.SeverityInfo {
+				t.Errorf("detected agent should be info severity, got %q", r.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected agent-opencode-detected health check")
+	}
+}
+
+func TestVerify_HealthCheck_ConfiguredButNotDetected(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	// Configure claude-code but don't pass it as detected adapter.
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode":    {Enabled: true},
+			"claude-code": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+
+	// Only opencode is detected.
+	adapter := opencode.New()
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, r := range report.Results {
+		if r.Check == "agent-claude-code-detected" {
+			found = true
+			if r.Passed {
+				t.Error("claude-code should fail — configured but not detected")
+			}
+			if r.Severity != domain.SeverityError {
+				t.Errorf("configured-but-not-detected should be error, got %q", r.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected agent-claude-code-detected health check")
+	}
+
+	if report.AllPass {
+		t.Error("should not pass when configured adapter is not detected")
+	}
+}
+
+func TestVerify_HealthCheck_DetectedButNotConfigured(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	// Config does NOT include opencode.
+	cfg := &domain.MergedConfig{
+		Mode:       domain.ModeTeam,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, r := range report.Results {
+		if r.Check == "agent-opencode-unconfigured" {
+			found = true
+			if !r.Passed {
+				t.Error("unconfigured agent should pass (informational)")
+			}
+			if r.Severity != domain.SeverityWarning {
+				t.Errorf("unconfigured agent should be warning, got %q", r.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected agent-opencode-unconfigured health check")
+	}
+}
+
+func TestVerify_HealthCheck_DisabledAdapter_Skipped(t *testing.T) {
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: false},
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+
+	adapter := opencode.New()
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Disabled adapter should not get a "detected" check (only "unconfigured" may appear).
+	for _, r := range report.Results {
+		if r.Check == "agent-opencode-detected" {
+			t.Error("disabled adapter should not get a 'detected' health check")
+		}
+	}
+}
+
+func TestVerify_JSONOutput_HasSeverityAndComponent(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify JSON round-trip preserves severity and component.
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var decoded domain.VerifyReport
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	for i, r := range decoded.Results {
+		if r.Severity == "" {
+			t.Errorf("result[%d] %q lost severity after JSON round-trip", i, r.Check)
+		}
+		if r.Component == "" {
+			t.Errorf("result[%d] %q lost component after JSON round-trip", i, r.Check)
+		}
 	}
 }

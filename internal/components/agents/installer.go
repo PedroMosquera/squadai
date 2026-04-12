@@ -147,7 +147,8 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 
 	var results []domain.VerifyResult
 
-	for name, def := range i.agents {
+	for _, name := range sortedKeys(i.agents) {
+		def := i.agents[name]
 		targetPath := filepath.Join(agentsDir, name+".md")
 		data, err := os.ReadFile(targetPath)
 		if err != nil {
