@@ -3,11 +3,14 @@ package planner
 import (
 	"fmt"
 
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/agents"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/commands"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/skills"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
@@ -17,6 +20,9 @@ type Planner struct {
 	rulesInstaller    *rules.Installer
 	settingsInstaller *settings.Installer
 	mcpInstaller      *mcp.Installer
+	agentsInstaller   *agents.Installer
+	skillsInstaller   *skills.Installer
+	commandsInstaller *commands.Installer
 	copilotManager    *copilot.Manager
 }
 
@@ -42,6 +48,11 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 
 	// Create MCP installer from merged MCP config (lazy init per plan call).
 	p.mcpInstaller = mcp.New(cfg.MCP)
+
+	// Create agents/skills/commands installers (lazy init per plan call).
+	p.agentsInstaller = agents.New(cfg.Agents, projectDir)
+	p.skillsInstaller = skills.New(cfg.Skills, projectDir)
+	p.commandsInstaller = commands.New(cfg.Commands)
 
 	// Collect component actions for each enabled adapter.
 	for _, adapter := range adapters {
@@ -85,6 +96,33 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 			}
 			actions = append(actions, mcpActions...)
 		}
+
+		// Agents component.
+		if agentsCfg, ok := cfg.Components[string(domain.ComponentAgents)]; ok && agentsCfg.Enabled {
+			agentsActions, err := p.agentsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan agents for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, agentsActions...)
+		}
+
+		// Skills component.
+		if skillsCfg, ok := cfg.Components[string(domain.ComponentSkills)]; ok && skillsCfg.Enabled {
+			skillsActions, err := p.skillsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan skills for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, skillsActions...)
+		}
+
+		// Commands component.
+		if cmdsCfg, ok := cfg.Components[string(domain.ComponentCommands)]; ok && cmdsCfg.Enabled {
+			cmdsActions, err := p.commandsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan commands for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, cmdsActions...)
+		}
 	}
 
 	// Copilot instructions (project-level, not adapter-specific).
@@ -113,6 +151,15 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	}
 	if p.mcpInstaller != nil {
 		installers[domain.ComponentMCP] = p.mcpInstaller
+	}
+	if p.agentsInstaller != nil {
+		installers[domain.ComponentAgents] = p.agentsInstaller
+	}
+	if p.skillsInstaller != nil {
+		installers[domain.ComponentSkills] = p.skillsInstaller
+	}
+	if p.commandsInstaller != nil {
+		installers[domain.ComponentCommands] = p.commandsInstaller
 	}
 	return installers
 }

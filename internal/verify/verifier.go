@@ -1,11 +1,14 @@
 package verify
 
 import (
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/agents"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/commands"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/skills"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
@@ -45,6 +48,24 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 	var mcpInstaller *mcp.Installer
 	if mcpCfg, ok := cfg.Components[string(domain.ComponentMCP)]; ok && mcpCfg.Enabled {
 		mcpInstaller = mcp.New(cfg.MCP)
+	}
+
+	// Create agents installer from merged config (lazy init per verify call).
+	var agentsInstaller *agents.Installer
+	if agentsCfg, ok := cfg.Components[string(domain.ComponentAgents)]; ok && agentsCfg.Enabled {
+		agentsInstaller = agents.New(cfg.Agents, projectDir)
+	}
+
+	// Create skills installer from merged config (lazy init per verify call).
+	var skillsInstaller *skills.Installer
+	if skillsCfg, ok := cfg.Components[string(domain.ComponentSkills)]; ok && skillsCfg.Enabled {
+		skillsInstaller = skills.New(cfg.Skills, projectDir)
+	}
+
+	// Create commands installer from merged config (lazy init per verify call).
+	var commandsInstaller *commands.Installer
+	if cmdsCfg, ok := cfg.Components[string(domain.ComponentCommands)]; ok && cmdsCfg.Enabled {
+		commandsInstaller = commands.New(cfg.Commands)
 	}
 
 	// Verify components for each enabled adapter.
@@ -99,6 +120,48 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		// MCP component.
 		if mcpInstaller != nil {
 			results, err := mcpInstaller.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range results {
+				report.Results = append(report.Results, r)
+				if !r.Passed {
+					report.AllPass = false
+				}
+			}
+		}
+
+		// Agents component.
+		if agentsInstaller != nil {
+			results, err := agentsInstaller.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range results {
+				report.Results = append(report.Results, r)
+				if !r.Passed {
+					report.AllPass = false
+				}
+			}
+		}
+
+		// Skills component.
+		if skillsInstaller != nil {
+			results, err := skillsInstaller.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range results {
+				report.Results = append(report.Results, r)
+				if !r.Passed {
+					report.AllPass = false
+				}
+			}
+		}
+
+		// Commands component.
+		if commandsInstaller != nil {
+			results, err := commandsInstaller.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
