@@ -47,11 +47,22 @@ func ValidateProject(cfg *domain.ProjectConfig) []string {
 		issues = append(issues, "version must be >= 1")
 	}
 
+	for name := range cfg.Adapters {
+		if !isKnownAdapter(name) {
+			issues = append(issues, fmt.Sprintf("unknown adapter %q", name))
+		}
+	}
+
 	for name := range cfg.Components {
 		if !isKnownComponent(name) {
 			issues = append(issues, fmt.Sprintf("unknown component %q", name))
 		}
 	}
+
+	issues = append(issues, validateAgentDefs(cfg.Agents)...)
+	issues = append(issues, validateSkillDefs(cfg.Skills)...)
+	issues = append(issues, validateCommandDefs(cfg.Commands)...)
+	issues = append(issues, validateMCPDefs(cfg.MCP)...)
 
 	return issues
 }
@@ -95,6 +106,10 @@ func ValidatePolicy(cfg *domain.PolicyConfig) []string {
 		}
 	}
 
+	// Validate required agents, MCP definitions.
+	issues = append(issues, validateAgentDefs(cfg.Required.Agents)...)
+	issues = append(issues, validateMCPDefs(cfg.Required.MCP)...)
+
 	return issues
 }
 
@@ -124,9 +139,99 @@ func hasRequiredValue(cfg *domain.PolicyConfig, field string) bool {
 	case "copilot":
 		return cfg.Required.Copilot.InstructionsTemplate != ""
 
+	case "rules":
+		return cfg.Required.Rules.TeamStandards != "" || cfg.Required.Rules.TeamStandardsFile != ""
+
+	case "agents":
+		if len(parts) < 2 {
+			return false
+		}
+		_, exists := cfg.Required.Agents[parts[1]]
+		return exists
+
+	case "mcp":
+		if len(parts) < 2 {
+			return false
+		}
+		_, exists := cfg.Required.MCP[parts[1]]
+		return exists
+
 	default:
 		return false
 	}
+}
+
+// validateAgentDefs checks that agent definitions have required fields.
+func validateAgentDefs(agents map[string]domain.AgentDef) []string {
+	var issues []string
+	for name, def := range agents {
+		if def.Description == "" {
+			issues = append(issues, fmt.Sprintf("agent %q must have a description", name))
+		}
+		if def.Mode == "" {
+			issues = append(issues, fmt.Sprintf("agent %q must have a mode", name))
+		} else {
+			switch def.Mode {
+			case "subagent", "byoa":
+				// valid modes
+			default:
+				issues = append(issues, fmt.Sprintf("agent %q has unknown mode %q (expected: subagent, byoa)", name, def.Mode))
+			}
+		}
+		if def.Prompt == "" && def.PromptFile == "" {
+			issues = append(issues, fmt.Sprintf("agent %q must have prompt or prompt_file", name))
+		}
+	}
+	return issues
+}
+
+// validateSkillDefs checks that skill definitions have required fields.
+func validateSkillDefs(skills map[string]domain.SkillDef) []string {
+	var issues []string
+	for name, def := range skills {
+		if def.Description == "" {
+			issues = append(issues, fmt.Sprintf("skill %q must have a description", name))
+		}
+		if def.Content == "" && def.ContentFile == "" {
+			issues = append(issues, fmt.Sprintf("skill %q must have content or content_file", name))
+		}
+	}
+	return issues
+}
+
+// validateCommandDefs checks that command definitions have required fields.
+func validateCommandDefs(commands map[string]domain.CommandDef) []string {
+	var issues []string
+	for name, def := range commands {
+		if def.Description == "" {
+			issues = append(issues, fmt.Sprintf("command %q must have a description", name))
+		}
+	}
+	return issues
+}
+
+// validateMCPDefs checks that MCP server definitions have required fields.
+func validateMCPDefs(mcpServers map[string]domain.MCPServerDef) []string {
+	var issues []string
+	for name, def := range mcpServers {
+		if def.Type == "" {
+			issues = append(issues, fmt.Sprintf("MCP server %q must have a type", name))
+		} else {
+			switch def.Type {
+			case "local", "remote":
+				// valid types
+			default:
+				issues = append(issues, fmt.Sprintf("MCP server %q has unknown type %q (expected: local, remote)", name, def.Type))
+			}
+		}
+		if def.Type == "local" && len(def.Command) == 0 {
+			issues = append(issues, fmt.Sprintf("MCP server %q (type=local) must have a command", name))
+		}
+		if def.Type == "remote" && def.URL == "" {
+			issues = append(issues, fmt.Sprintf("MCP server %q (type=remote) must have a url", name))
+		}
+	}
+	return issues
 }
 
 var knownAdapters = map[string]struct{}{
@@ -136,7 +241,13 @@ var knownAdapters = map[string]struct{}{
 }
 
 var knownComponents = map[string]struct{}{
-	string(domain.ComponentMemory): {},
+	string(domain.ComponentMemory):   {},
+	string(domain.ComponentRules):    {},
+	string(domain.ComponentSettings): {},
+	string(domain.ComponentMCP):      {},
+	string(domain.ComponentAgents):   {},
+	string(domain.ComponentSkills):   {},
+	string(domain.ComponentCommands): {},
 }
 
 func isKnownAdapter(name string) bool {
