@@ -98,9 +98,9 @@ func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	}
 }
 
-// ProjectConfigFile returns empty string — Claude Code has no project-level config file.
-func (a *Adapter) ProjectConfigFile(_ string) string {
-	return ""
+// ProjectConfigFile returns <projectDir>/.claude/settings.json.
+func (a *Adapter) ProjectConfigFile(projectDir string) string {
+	return filepath.Join(projectDir, ".claude", "settings.json")
 }
 
 // ProjectRulesFile returns <projectDir>/CLAUDE.md.

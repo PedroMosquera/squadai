@@ -4,6 +4,7 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
@@ -33,6 +34,12 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		rulesInstaller = rules.New(cfg.Rules, projectDir)
 	}
 
+	// Create settings installer from merged adapter configs (lazy init per verify call).
+	var settingsInstaller *settings.Installer
+	if settingsCfg, ok := cfg.Components[string(domain.ComponentSettings)]; ok && settingsCfg.Enabled {
+		settingsInstaller = settings.New(cfg.Adapters)
+	}
+
 	// Verify components for each enabled adapter.
 	for _, adapter := range adapters {
 		adapterCfg, ok := cfg.Adapters[string(adapter.ID())]
@@ -57,6 +64,20 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		// Rules component.
 		if rulesInstaller != nil {
 			results, err := rulesInstaller.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range results {
+				report.Results = append(report.Results, r)
+				if !r.Passed {
+					report.AllPass = false
+				}
+			}
+		}
+
+		// Settings component.
+		if settingsInstaller != nil {
+			results, err := settingsInstaller.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}

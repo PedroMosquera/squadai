@@ -6,14 +6,16 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
 // Planner computes the full action plan from merged config and detected adapters.
 type Planner struct {
-	memoryInstaller *memory.Installer
-	rulesInstaller  *rules.Installer
-	copilotManager  *copilot.Manager
+	memoryInstaller   *memory.Installer
+	rulesInstaller    *rules.Installer
+	settingsInstaller *settings.Installer
+	copilotManager    *copilot.Manager
 }
 
 // New returns a Planner with default component installers.
@@ -32,6 +34,9 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 
 	// Create rules installer from merged config (lazy init per plan call).
 	p.rulesInstaller = rules.New(cfg.Rules, projectDir)
+
+	// Create settings installer from merged adapter configs (lazy init per plan call).
+	p.settingsInstaller = settings.New(cfg.Adapters)
 
 	// Collect component actions for each enabled adapter.
 	for _, adapter := range adapters {
@@ -57,6 +62,15 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 			}
 			actions = append(actions, rulesActions...)
 		}
+
+		// Settings component.
+		if settingsCfg, ok := cfg.Components[string(domain.ComponentSettings)]; ok && settingsCfg.Enabled {
+			settingsActions, err := p.settingsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan settings for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, settingsActions...)
+		}
 	}
 
 	// Copilot instructions (project-level, not adapter-specific).
@@ -79,6 +93,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	}
 	if p.rulesInstaller != nil {
 		installers[domain.ComponentRules] = p.rulesInstaller
+	}
+	if p.settingsInstaller != nil {
+		installers[domain.ComponentSettings] = p.settingsInstaller
 	}
 	return installers
 }

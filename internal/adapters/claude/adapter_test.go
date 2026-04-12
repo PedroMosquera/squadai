@@ -162,6 +162,7 @@ func TestProjectPaths(t *testing.T) {
 	}{
 		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/CLAUDE.md"},
 		{"ProjectSettingsPath", a.ProjectSettingsPath(project), "/Users/test/myproject/.claude/settings.json"},
+		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/.claude/settings.json"},
 	}
 
 	for _, tt := range tests {
@@ -175,9 +176,6 @@ func TestProjectPaths_EmptyForUnsupported(t *testing.T) {
 	a := New()
 	project := "/Users/test/myproject"
 
-	if a.ProjectConfigFile(project) != "" {
-		t.Error("ProjectConfigFile should be empty for Claude")
-	}
 	if a.ProjectAgentsDir(project) != "" {
 		t.Error("ProjectAgentsDir should be empty for Claude")
 	}
