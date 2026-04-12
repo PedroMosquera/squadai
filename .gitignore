@@ -34,3 +34,6 @@ Thumbs.db
 
 # Backup test artifacts
 *.bak
+
+# Local workspace
+.x9k4v/
