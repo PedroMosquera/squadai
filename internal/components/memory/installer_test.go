@@ -49,8 +49,12 @@ func TestPlan_ExistingFileNoSection_ReturnsUpdate(t *testing.T) {
 
 	// Create prompt file with existing content but no memory section.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
-	os.WriteFile(promptPath, []byte("# Existing Prompt\n\nSome content.\n"), 0644)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(promptPath, []byte("# Existing Prompt\n\nSome content.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	actions, err := inst.Plan(adapter, home)
 	if err != nil {
@@ -71,9 +75,13 @@ func TestPlan_UpToDate_ReturnsSkip(t *testing.T) {
 
 	// Create file with correct memory section.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	content := marker.InjectSection("", SectionID, ProtocolTemplate())
-	os.WriteFile(promptPath, []byte(content), 0644)
+	if err := os.WriteFile(promptPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	actions, err := inst.Plan(adapter, home)
 	if err != nil {
@@ -93,9 +101,13 @@ func TestPlan_OutdatedSection_ReturnsUpdate(t *testing.T) {
 	inst := New()
 
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	content := marker.InjectSection("", SectionID, "old protocol content")
-	os.WriteFile(promptPath, []byte(content), 0644)
+	if err := os.WriteFile(promptPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	actions, err := inst.Plan(adapter, home)
 	if err != nil {
@@ -138,11 +150,17 @@ func TestApply_PreservesExistingContent(t *testing.T) {
 	inst := New()
 
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
-	os.WriteFile(promptPath, []byte("# My Custom Prompt\n\nDo not delete this.\n"), 0644)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(promptPath, []byte("# My Custom Prompt\n\nDo not delete this.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	actions, _ := inst.Plan(adapter, home)
-	inst.Apply(actions[0])
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
 
 	content, _ := os.ReadFile(promptPath)
 	s := string(content)
@@ -175,7 +193,9 @@ func TestApply_Idempotent(t *testing.T) {
 
 	// First apply.
 	actions, _ := inst.Plan(adapter, home)
-	inst.Apply(actions[0])
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
 
 	first, _ := os.ReadFile(actions[0].TargetPath)
 
@@ -199,7 +219,9 @@ func TestVerify_AllPass_AfterApply(t *testing.T) {
 	inst := New()
 
 	actions, _ := inst.Plan(adapter, home)
-	inst.Apply(actions[0])
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
 
 	results, err := inst.Verify(adapter, home)
 	if err != nil {
@@ -235,8 +257,12 @@ func TestVerify_FailsWhenMarkersAreMissing(t *testing.T) {
 	inst := New()
 
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
-	os.WriteFile(promptPath, []byte("no markers"), 0644)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(promptPath, []byte("no markers"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	results, _ := inst.Verify(adapter, home)
 

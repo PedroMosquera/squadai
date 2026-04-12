@@ -47,7 +47,9 @@ func TestChecksumFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
 	content := []byte("file content for checksum")
-	os.WriteFile(path, content, 0644)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := ChecksumFile(path)
 	if err != nil {
@@ -113,8 +115,12 @@ func TestSnapshotFiles_ExistingFiles(t *testing.T) {
 	dir := t.TempDir()
 	file1 := filepath.Join(dir, "a.txt")
 	file2 := filepath.Join(dir, "b.txt")
-	os.WriteFile(file1, []byte("content A"), 0644)
-	os.WriteFile(file2, []byte("content B"), 0644)
+	if err := os.WriteFile(file1, []byte("content A"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file2, []byte("content B"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := store.SnapshotFiles([]string{file1, file2}, "test")
 	if err != nil {
@@ -183,7 +189,9 @@ func TestSnapshotFiles_DeduplicatesPaths(t *testing.T) {
 
 	dir := t.TempDir()
 	file := filepath.Join(dir, "dup.txt")
-	os.WriteFile(file, []byte("content"), 0644)
+	if err := os.WriteFile(file, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := store.SnapshotFiles([]string{file, file, file}, "test")
 	if err != nil {
@@ -202,13 +210,17 @@ func TestRollback_RestoresFiles(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "data.txt")
 	original := []byte("original content")
-	os.WriteFile(file, original, 0644)
+	if err := os.WriteFile(file, original, 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Snapshot.
 	manifest, _ := store.SnapshotFiles([]string{file}, "test")
 
 	// Modify the file.
-	os.WriteFile(file, []byte("modified content"), 0644)
+	if err := os.WriteFile(file, []byte("modified content"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Rollback.
 	if err := store.Rollback(manifest.ID); err != nil {
@@ -239,7 +251,9 @@ func TestRollback_RemovesNewlyCreatedFiles(t *testing.T) {
 	manifest, _ := store.SnapshotFiles([]string{newFile}, "test")
 
 	// Create the file (simulating apply).
-	os.WriteFile(newFile, []byte("created during apply"), 0644)
+	if err := os.WriteFile(newFile, []byte("created during apply"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Rollback should remove the file.
 	if err := store.Rollback(manifest.ID); err != nil {
@@ -258,10 +272,14 @@ func TestRestore_RestoresFiles(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "data.txt")
 	original := []byte("original content")
-	os.WriteFile(file, original, 0644)
+	if err := os.WriteFile(file, original, 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, _ := store.SnapshotFiles([]string{file}, "manual")
-	os.WriteFile(file, []byte("changed"), 0644)
+	if err := os.WriteFile(file, []byte("changed"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := store.Restore(manifest.ID); err != nil {
 		t.Fatalf("Restore: %v", err)
@@ -284,7 +302,9 @@ func TestGet_ValidManifest(t *testing.T) {
 
 	dir := t.TempDir()
 	file := filepath.Join(dir, "test.txt")
-	os.WriteFile(file, []byte("test"), 0644)
+	if err := os.WriteFile(file, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	created, _ := store.SnapshotFiles([]string{file}, "test")
 
@@ -315,7 +335,9 @@ func TestList_SortedByTimestamp(t *testing.T) {
 
 	dir := t.TempDir()
 	file := filepath.Join(dir, "test.txt")
-	os.WriteFile(file, []byte("test"), 0644)
+	if err := os.WriteFile(file, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create two backups.
 	m1, _ := store.SnapshotFiles([]string{file}, "first")
@@ -367,7 +389,9 @@ func TestDelete_RemovesBackup(t *testing.T) {
 
 	dir := t.TempDir()
 	file := filepath.Join(dir, "test.txt")
-	os.WriteFile(file, []byte("test"), 0644)
+	if err := os.WriteFile(file, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, _ := store.SnapshotFiles([]string{file}, "test")
 
@@ -396,7 +420,9 @@ func TestManifest_JSONRoundTrip(t *testing.T) {
 
 	dir := t.TempDir()
 	file := filepath.Join(dir, "data.txt")
-	os.WriteFile(file, []byte("round trip test"), 0644)
+	if err := os.WriteFile(file, []byte("round trip test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	created, _ := store.SnapshotFiles([]string{file}, "roundtrip")
 

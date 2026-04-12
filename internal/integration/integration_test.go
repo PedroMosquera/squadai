@@ -127,9 +127,13 @@ func TestIdempotent_SecondApplyProducesAllSkips(t *testing.T) {
 	project := t.TempDir()
 
 	userCfg := domain.DefaultUserConfig()
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -141,7 +145,9 @@ func TestIdempotent_SecondApplyProducesAllSkips(t *testing.T) {
 	// First apply.
 	actions1, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
 	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
-	exec.Execute(actions1)
+	if _, err := exec.Execute(actions1); err != nil {
+		t.Fatal(err)
+	}
 
 	// Second plan — everything should be skip.
 	actions2, err := p.Plan(merged, []domain.Adapter{adapter}, home, project)
@@ -165,14 +171,20 @@ func TestPolicyLockedFields_Enforced(t *testing.T) {
 	// User tries to disable opencode.
 	userCfg := domain.DefaultUserConfig()
 	userCfg.Adapters["opencode"] = domain.AdapterConfig{Enabled: false}
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	// Policy locks opencode enabled.
 	policyCfg := domain.DefaultPolicyConfig()
-	config.WriteJSON(config.PolicyConfigPath(project), policyCfg)
+	if err := config.WriteJSON(config.PolicyConfigPath(project), policyCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -212,18 +224,30 @@ func TestUserContent_Preserved(t *testing.T) {
 
 	// Pre-populate system prompt with user content.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
-	os.WriteFile(promptPath, []byte("# My Custom Agent Rules\n\nDo not touch this.\n"), 0644)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(promptPath, []byte("# My Custom Agent Rules\n\nDo not touch this.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Pre-populate copilot instructions with user content.
 	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(copilotPath), 0755)
-	os.WriteFile(copilotPath, []byte("# Project-specific rules\n\nCustom instructions.\n"), 0644)
+	if err := os.MkdirAll(filepath.Dir(copilotPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(copilotPath, []byte("# Project-specific rules\n\nCustom instructions.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	userCfg := domain.DefaultUserConfig()
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -233,7 +257,9 @@ func TestUserContent_Preserved(t *testing.T) {
 	actions, _ := p.Plan(merged, []domain.Adapter{adapter}, home, project)
 
 	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
-	exec.Execute(actions)
+	if _, err := exec.Execute(actions); err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify user content is preserved in system prompt.
 	promptData, _ := os.ReadFile(promptPath)
@@ -271,14 +297,22 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 
 	// Create file with outdated memory content.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	outdated := marker.InjectSection("", "memory", "old protocol")
-	os.WriteFile(promptPath, []byte(outdated), 0644)
+	if err := os.WriteFile(promptPath, []byte(outdated), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	userCfg := domain.DefaultUserConfig()
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -336,15 +370,23 @@ func TestBackup_RollbackOnFailure(t *testing.T) {
 
 	// Pre-create the memory prompt file with known content.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	originalContent := "# My original rules\n\nDo not change.\n"
-	os.WriteFile(promptPath, []byte(originalContent), 0644)
+	if err := os.WriteFile(promptPath, []byte(originalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Set up config.
 	userCfg := domain.DefaultUserConfig()
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -417,9 +459,13 @@ func TestBackup_SuccessfulApplyKeepsBackup(t *testing.T) {
 	adapter := opencode.New()
 
 	userCfg := domain.DefaultUserConfig()
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -638,15 +684,21 @@ func TestPersonalLane_PolicyCannotEnablePersonalAdapters(t *testing.T) {
 	// User config: personal adapters disabled.
 	userCfg := domain.DefaultUserConfig()
 	userCfg.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: false}
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	// Project config: standard.
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	// Policy: standard (no locked fields for personal adapters).
 	policyCfg := domain.DefaultPolicyConfig()
-	config.WriteJSON(config.PolicyConfigPath(project), policyCfg)
+	if err := config.WriteJSON(config.PolicyConfigPath(project), policyCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -673,10 +725,14 @@ func TestPersonalLane_SecondApplyIdempotent(t *testing.T) {
 	userCfg := domain.DefaultUserConfig()
 	userCfg.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
 	userCfg.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
-	config.WriteJSON(config.UserConfigPath(home), userCfg)
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	projCfg := domain.DefaultProjectConfig()
-	config.WriteJSON(config.ProjectConfigPath(project), projCfg)
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatal(err)
+	}
 
 	user, _ := config.LoadUser(home)
 	proj, _ := config.LoadProject(project)
@@ -692,7 +748,9 @@ func TestPersonalLane_SecondApplyIdempotent(t *testing.T) {
 	// First apply.
 	actions1, _ := p.Plan(merged, adapters, home, project)
 	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot.InstructionsTemplate, nil)
-	exec.Execute(actions1)
+	if _, err := exec.Execute(actions1); err != nil {
+		t.Fatal(err)
+	}
 
 	// Second plan — all should be skip.
 	actions2, err := p.Plan(merged, adapters, home, project)

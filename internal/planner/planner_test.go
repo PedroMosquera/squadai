@@ -181,15 +181,23 @@ func TestPlan_UpToDate_AllSkip(t *testing.T) {
 
 	// Pre-create memory prompt with correct content.
 	promptPath := adapter.SystemPromptFile(home)
-	os.MkdirAll(filepath.Dir(promptPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	memContent := marker.InjectSection("", "memory", memoryProtocolTemplate())
-	os.WriteFile(promptPath, []byte(memContent), 0644)
+	if err := os.WriteFile(promptPath, []byte(memContent), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Pre-create copilot instructions with correct content.
 	copilotPath := filepath.Join(project, copilot.CopilotInstructionsPath)
-	os.MkdirAll(filepath.Dir(copilotPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(copilotPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	copilotContent := marker.InjectSection("", copilot.SectionID, copilot.TemplateContent("standard"))
-	os.WriteFile(copilotPath, []byte(copilotContent), 0644)
+	if err := os.WriteFile(copilotPath, []byte(copilotContent), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &domain.MergedConfig{
 		Mode: domain.ModeTeam,
