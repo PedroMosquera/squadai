@@ -1,4 +1,4 @@
-module github.com/alexmosquera/agent-manager-pro
+module github.com/PedroMosquera/agent-manager-pro
 
 go 1.24.0
 

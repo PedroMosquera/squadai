@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/alexmosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/alexmosquera/agent-manager-pro/internal/domain"
-	"github.com/alexmosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
+	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
 )
 
 func TestPlan_MemoryAndCopilot_BothEnabled(t *testing.T) {

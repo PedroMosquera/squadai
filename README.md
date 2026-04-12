@@ -9,23 +9,23 @@ A CLI tool that standardizes AI coding agent environments across a team. It mana
 ### Homebrew (recommended)
 
 ```sh
-brew install alexmosquera/tap/agent-manager-pro
+brew install PedroMosquera/tap/agent-manager-pro
 ```
 
 ### Shell script
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/alexmosquera/agent-manager-pro/main/scripts/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/PedroMosquera/agent-manager-pro/main/scripts/install.sh | sh
 ```
 
 ### GitHub Releases
 
-Download the archive for your architecture from [Releases](https://github.com/alexmosquera/agent-manager-pro/releases), extract it, and move the `agent-manager` binary to a directory on your `PATH`.
+Download the archive for your architecture from [Releases](https://github.com/PedroMosquera/agent-manager-pro/releases), extract it, and move the `agent-manager` binary to a directory on your `PATH`.
 
 ### From source (requires Go 1.24+)
 
 ```sh
-go install github.com/alexmosquera/agent-manager-pro/cmd/agent-manager@latest
+go install github.com/PedroMosquera/agent-manager-pro/cmd/agent-manager@latest
 ```
 
 ## Quick Start

@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/domain"
-	"github.com/alexmosquera/agent-manager-pro/internal/fileutil"
-	"github.com/alexmosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
+	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
 )
 
 const (

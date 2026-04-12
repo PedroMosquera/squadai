@@ -1,13 +1,13 @@
 #!/bin/sh
 # install.sh — Downloads the latest agent-manager binary to /usr/local/bin.
-# Usage: curl -sSL https://raw.githubusercontent.com/alexmosquera/agent-manager-pro/main/scripts/install.sh | sh
+# Usage: curl -sSL https://raw.githubusercontent.com/PedroMosquera/agent-manager-pro/main/scripts/install.sh | sh
 #
 # Requirements: curl (pre-installed on macOS)
 # Supports: darwin/arm64 (Apple Silicon), darwin/amd64 (Intel)
 
 set -e
 
-REPO="alexmosquera/agent-manager-pro"
+REPO="PedroMosquera/agent-manager-pro"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="agent-manager"
 

@@ -9,15 +9,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/alexmosquera/agent-manager-pro/internal/adapters/codex"
-	"github.com/alexmosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/alexmosquera/agent-manager-pro/internal/backup"
-	"github.com/alexmosquera/agent-manager-pro/internal/config"
-	"github.com/alexmosquera/agent-manager-pro/internal/domain"
-	"github.com/alexmosquera/agent-manager-pro/internal/pipeline"
-	"github.com/alexmosquera/agent-manager-pro/internal/planner"
-	"github.com/alexmosquera/agent-manager-pro/internal/verify"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
+	"github.com/PedroMosquera/agent-manager-pro/internal/config"
+	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/pipeline"
+	"github.com/PedroMosquera/agent-manager-pro/internal/planner"
+	"github.com/PedroMosquera/agent-manager-pro/internal/verify"
 )
 
 // RunInit creates .agent-manager/project.json and optionally .agent-manager/policy.json

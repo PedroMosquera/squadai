@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/alexmosquera/agent-manager-pro/internal/cli"
-	"github.com/alexmosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/cli"
+	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
 // screen tracks which screen is active.
