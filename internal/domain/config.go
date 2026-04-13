@@ -90,9 +90,9 @@ type PluginDef struct {
 // TeamRole defines a role within a methodology team.
 type TeamRole struct {
 	Description string   `json:"description"`
-	Mode        string   `json:"mode"`                        // "subagent" or "inline"
-	SkillRef    string   `json:"skill_ref,omitempty"`         // e.g., "tdd/brainstorming"
-	DelegatesTo []string `json:"delegates_to,omitempty"`      // roles this role can delegate to
+	Mode        string   `json:"mode"`                   // "subagent" or "inline"
+	SkillRef    string   `json:"skill_ref,omitempty"`    // e.g., "tdd/brainstorming"
+	DelegatesTo []string `json:"delegates_to,omitempty"` // roles this role can delegate to
 }
 
 // AgentDef defines a custom agent for OpenCode's .opencode/agents/ directory.
@@ -197,6 +197,42 @@ func DefaultProjectConfig() *ProjectConfig {
 			InstructionsTemplate: "standard",
 		},
 	}
+}
+
+// DefaultTeam returns the default team composition for the given methodology.
+// Each role has a description, mode ("subagent"), and a SkillRef pointing to
+// the embedded skill asset. Returns nil for unknown methodologies.
+func DefaultTeam(m Methodology) map[string]TeamRole {
+	switch m {
+	case MethodologyTDD:
+		return map[string]TeamRole{
+			"orchestrator": {Description: "TDD orchestrator — delegates phases to specialized sub-agents", Mode: "subagent"},
+			"brainstormer": {Description: "Question-asking and requirements exploration", Mode: "subagent", SkillRef: "tdd/brainstorming"},
+			"planner":      {Description: "Test plan and implementation plan creation", Mode: "subagent", SkillRef: "tdd/writing-plans"},
+			"implementer":  {Description: "Red-green-refactor implementation cycles", Mode: "subagent", SkillRef: "tdd/test-driven-development"},
+			"reviewer":     {Description: "Two-stage code review: automated + design", Mode: "subagent", SkillRef: "shared/code-review"},
+			"debugger":     {Description: "4-phase debugging: reproduce → isolate → fix → verify", Mode: "subagent", SkillRef: "tdd/systematic-debugging"},
+		}
+	case MethodologySDD:
+		return map[string]TeamRole{
+			"orchestrator": {Description: "SDD orchestrator — manages spec-driven workflow", Mode: "subagent"},
+			"explorer":     {Description: "Codebase analysis and context gathering", Mode: "subagent", SkillRef: "sdd/sdd-explore"},
+			"proposer":     {Description: "Solution proposals with tradeoff analysis", Mode: "subagent", SkillRef: "sdd/sdd-propose"},
+			"spec-writer":  {Description: "Formal specification document authoring", Mode: "subagent", SkillRef: "sdd/sdd-spec"},
+			"designer":     {Description: "Architecture and interface design", Mode: "subagent", SkillRef: "sdd/sdd-design"},
+			"task-planner": {Description: "Dependency-ordered task breakdown", Mode: "subagent", SkillRef: "sdd/sdd-tasks"},
+			"implementer":  {Description: "Spec-faithful implementation", Mode: "subagent", SkillRef: "sdd/sdd-apply"},
+			"verifier":     {Description: "Spec compliance verification", Mode: "subagent", SkillRef: "sdd/sdd-verify"},
+		}
+	case MethodologyConventional:
+		return map[string]TeamRole{
+			"orchestrator": {Description: "Conventional orchestrator — direct implementation with review gates", Mode: "subagent"},
+			"implementer":  {Description: "General-purpose implementation", Mode: "subagent"},
+			"reviewer":     {Description: "Code review checklist", Mode: "subagent", SkillRef: "shared/code-review"},
+			"tester":       {Description: "Test writing and coverage", Mode: "subagent", SkillRef: "shared/testing"},
+		}
+	}
+	return nil
 }
 
 // DefaultPolicyConfig returns a team policy that locks the baseline.
