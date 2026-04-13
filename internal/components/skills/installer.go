@@ -7,19 +7,23 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
 )
 
 // Installer implements domain.ComponentInstaller for skill definitions.
 // It writes .opencode/skills/<name>/SKILL.md files with YAML frontmatter.
+// When config.Methodology is set, it also installs embedded methodology skills.
 type Installer struct {
-	skills     map[string]domain.SkillDef
+	skills     map[string]domain.SkillDef // custom skills from config
+	config     *domain.MergedConfig       // methodology config (nil = V1 behavior)
 	projectDir string
 }
 
 // New returns a skills installer configured from the merged skill definitions.
-func New(skills map[string]domain.SkillDef, projectDir string) *Installer {
+// cfg may be nil for backward compatibility (V1 behavior: only custom skills).
+func New(skills map[string]domain.SkillDef, cfg *domain.MergedConfig, projectDir string) *Installer {
 	resolved := make(map[string]domain.SkillDef)
 	for name, def := range skills {
 		// Resolve content from file if needed.
@@ -32,7 +36,11 @@ func New(skills map[string]domain.SkillDef, projectDir string) *Installer {
 		}
 		resolved[name] = def
 	}
-	return &Installer{skills: resolved, projectDir: projectDir}
+	return &Installer{
+		skills:     resolved,
+		config:     cfg,
+		projectDir: projectDir,
+	}
 }
 
 // ID returns the component identifier.
@@ -53,6 +61,31 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	var actions []domain.PlannedAction
 
+	// Phase 1: Embedded methodology skills (V2 behavior).
+	if i.config != nil && i.config.Methodology != "" {
+		// Shared skills (always installed regardless of methodology).
+		for _, assetDir := range sharedSkillPaths() {
+			a, err := i.planEmbeddedSkill(adapter, assetDir, skillsDir)
+			if err != nil {
+				return nil, err
+			}
+			if a != nil {
+				actions = append(actions, *a)
+			}
+		}
+		// Methodology-specific skills.
+		for _, assetDir := range methodologySkillPaths(i.config.Methodology) {
+			a, err := i.planEmbeddedSkill(adapter, assetDir, skillsDir)
+			if err != nil {
+				return nil, err
+			}
+			if a != nil {
+				actions = append(actions, *a)
+			}
+		}
+	}
+
+	// Phase 2: Custom skills from config (V1 behavior).
 	names := sortedKeys(i.skills)
 	for _, name := range names {
 		def := i.skills[name]
@@ -95,6 +128,54 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	return actions, nil
 }
 
+// planEmbeddedSkill produces a PlannedAction for a single embedded skill asset.
+// assetDir is the directory under assets (e.g., "skills/tdd/brainstorming").
+// skillsDir is the project-level skills directory for the adapter.
+func (i *Installer) planEmbeddedSkill(adapter domain.Adapter, assetDir, skillsDir string) (*domain.PlannedAction, error) {
+	assetPath := assetDir + "/SKILL.md"
+	content, err := assets.Read(assetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read embedded skill %s: %w", assetPath, err)
+	}
+
+	// Target: <skillsDir>/<relative>/SKILL.md
+	// e.g., assetDir = "skills/tdd/brainstorming" → relative = "tdd/brainstorming"
+	relative := strings.TrimPrefix(assetDir, "skills/")
+	targetPath := filepath.Join(skillsDir, relative, "SKILL.md")
+	actionID := fmt.Sprintf("skill-embedded-%s", relative)
+	description := fmt.Sprintf("skill:embedded:%s", relative)
+
+	existing, err := fileutil.ReadFileOrEmpty(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read skill target %s: %w", targetPath, err)
+	}
+
+	if string(existing) == content {
+		return &domain.PlannedAction{
+			ID:          actionID,
+			Agent:       adapter.ID(),
+			Component:   domain.ComponentSkills,
+			Action:      domain.ActionSkip,
+			TargetPath:  targetPath,
+			Description: description,
+		}, nil
+	}
+
+	action := domain.ActionCreate
+	if len(existing) > 0 {
+		action = domain.ActionUpdate
+	}
+
+	return &domain.PlannedAction{
+		ID:          actionID,
+		Agent:       adapter.ID(),
+		Component:   domain.ComponentSkills,
+		Action:      action,
+		TargetPath:  targetPath,
+		Description: description,
+	}, nil
+}
+
 // Apply executes a single planned action.
 func (i *Installer) Apply(action domain.PlannedAction) error {
 	if action.Action == domain.ActionSkip {
@@ -110,7 +191,41 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return nil
 	}
 
-	// Extract skill name from path: .../skills/<name>/SKILL.md
+	// Embedded skill: description starts with "skill:embedded:"
+	if strings.HasPrefix(action.Description, "skill:embedded:") {
+		return i.applyEmbeddedSkill(action)
+	}
+
+	// Custom skill: extract skill name from path: .../skills/<name>/SKILL.md
+	return i.applyCustomSkill(action)
+}
+
+// applyEmbeddedSkill writes an embedded skill asset to the target path.
+func (i *Installer) applyEmbeddedSkill(action domain.PlannedAction) error {
+	// Reconstruct the asset path from the description.
+	// description = "skill:embedded:tdd/brainstorming"
+	relative := strings.TrimPrefix(action.Description, "skill:embedded:")
+	assetPath := "skills/" + relative + "/SKILL.md"
+
+	content, err := assets.Read(assetPath)
+	if err != nil {
+		return fmt.Errorf("read embedded skill %s: %w", assetPath, err)
+	}
+
+	dir := filepath.Dir(action.TargetPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create skill dir: %w", err)
+	}
+
+	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("write embedded skill: %w", err)
+	}
+
+	return nil
+}
+
+// applyCustomSkill writes a custom skill definition from config.
+func (i *Installer) applyCustomSkill(action domain.PlannedAction) error {
 	dir := filepath.Dir(action.TargetPath)
 	name := filepath.Base(dir)
 	def, ok := i.skills[name]
@@ -142,11 +257,28 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	if len(i.skills) == 0 {
-		return nil, nil
+	var results []domain.VerifyResult
+
+	// Verify embedded methodology skills.
+	if i.config != nil && i.config.Methodology != "" {
+		for _, assetDir := range sharedSkillPaths() {
+			r := i.verifyEmbeddedSkill(assetDir, skillsDir)
+			if r != nil {
+				results = append(results, *r)
+			}
+		}
+		for _, assetDir := range methodologySkillPaths(i.config.Methodology) {
+			r := i.verifyEmbeddedSkill(assetDir, skillsDir)
+			if r != nil {
+				results = append(results, *r)
+			}
+		}
 	}
 
-	var results []domain.VerifyResult
+	// Verify custom skills.
+	if len(i.skills) == 0 {
+		return results, nil
+	}
 
 	for _, name := range sortedKeys(i.skills) {
 		def := i.skills[name]
@@ -179,8 +311,82 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	return results, nil
 }
 
-// renderSkill generates the markdown content for a skill definition
-// with YAML frontmatter.
+// verifyEmbeddedSkill checks that an embedded skill file exists and is current.
+func (i *Installer) verifyEmbeddedSkill(assetDir, skillsDir string) *domain.VerifyResult {
+	assetPath := assetDir + "/SKILL.md"
+	expected, err := assets.Read(assetPath)
+	if err != nil {
+		return nil // asset doesn't exist; skip
+	}
+
+	relative := strings.TrimPrefix(assetDir, "skills/")
+	targetPath := filepath.Join(skillsDir, relative, "SKILL.md")
+	checkName := fmt.Sprintf("skill-embedded-%s", relative)
+
+	data, err := os.ReadFile(targetPath)
+	if err != nil {
+		r := domain.VerifyResult{
+			Check:   checkName + "-exists",
+			Passed:  false,
+			Message: fmt.Sprintf("embedded skill file not found: %s", targetPath),
+		}
+		return &r
+	}
+
+	if string(data) == expected {
+		r := domain.VerifyResult{
+			Check:  checkName + "-current",
+			Passed: true,
+		}
+		return &r
+	}
+
+	r := domain.VerifyResult{
+		Check:   checkName + "-current",
+		Passed:  false,
+		Message: fmt.Sprintf("embedded skill %s content does not match", relative),
+	}
+	return &r
+}
+
+// methodologySkillPaths returns the embedded skill asset directories for a methodology.
+// Each path is relative to the assets root (e.g., "skills/tdd/brainstorming").
+func methodologySkillPaths(m domain.Methodology) []string {
+	switch m {
+	case domain.MethodologyTDD:
+		return []string{
+			"skills/tdd/brainstorming",
+			"skills/tdd/writing-plans",
+			"skills/tdd/test-driven-development",
+			"skills/tdd/subagent-driven-development",
+			"skills/tdd/systematic-debugging",
+		}
+	case domain.MethodologySDD:
+		return []string{
+			"skills/sdd/sdd-explore",
+			"skills/sdd/sdd-propose",
+			"skills/sdd/sdd-spec",
+			"skills/sdd/sdd-design",
+			"skills/sdd/sdd-tasks",
+			"skills/sdd/sdd-apply",
+			"skills/sdd/sdd-verify",
+		}
+	default:
+		// Conventional uses shared skills only.
+		return nil
+	}
+}
+
+// sharedSkillPaths returns the shared embedded skill asset directories.
+func sharedSkillPaths() []string {
+	return []string{
+		"skills/shared/code-review",
+		"skills/shared/testing",
+		"skills/shared/pr-description",
+	}
+}
+
+// renderSkill generates the markdown content for a skill definition with YAML frontmatter.
 func renderSkill(name string, def domain.SkillDef) string {
 	var b strings.Builder
 	b.WriteString("---\n")

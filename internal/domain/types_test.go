@@ -218,14 +218,28 @@ func TestComponentIDs_AllDefined(t *testing.T) {
 		ComponentAgents,
 		ComponentSkills,
 		ComponentCommands,
+		ComponentPlugins,
+		ComponentWorkflows,
 	}
 	for _, id := range ids {
 		if id == "" {
 			t.Error("ComponentID should not be empty")
 		}
 	}
-	if len(ids) != 7 {
-		t.Errorf("expected 7 component IDs, got %d", len(ids))
+	if len(ids) != 9 {
+		t.Errorf("expected 9 component IDs, got %d", len(ids))
+	}
+}
+
+func TestComponentPlugins_HasCorrectValue(t *testing.T) {
+	if ComponentPlugins != "plugins" {
+		t.Errorf("ComponentPlugins = %q, want %q", ComponentPlugins, "plugins")
+	}
+}
+
+func TestComponentWorkflows_HasCorrectValue(t *testing.T) {
+	if ComponentWorkflows != "workflows" {
+		t.Errorf("ComponentWorkflows = %q, want %q", ComponentWorkflows, "workflows")
 	}
 }
 

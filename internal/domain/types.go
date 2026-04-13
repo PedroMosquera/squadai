@@ -41,13 +41,15 @@ const (
 type ComponentID string
 
 const (
-	ComponentMemory   ComponentID = "memory"
-	ComponentRules    ComponentID = "rules"
-	ComponentSettings ComponentID = "settings"
-	ComponentMCP      ComponentID = "mcp"
-	ComponentAgents   ComponentID = "agents"
-	ComponentSkills   ComponentID = "skills"
-	ComponentCommands ComponentID = "commands"
+	ComponentMemory    ComponentID = "memory"
+	ComponentRules     ComponentID = "rules"
+	ComponentSettings  ComponentID = "settings"
+	ComponentMCP       ComponentID = "mcp"
+	ComponentAgents    ComponentID = "agents"
+	ComponentSkills    ComponentID = "skills"
+	ComponentCommands  ComponentID = "commands"
+	ComponentPlugins   ComponentID = "plugins"
+	ComponentWorkflows ComponentID = "workflows"
 )
 
 // OperationalMode determines config precedence behavior.
@@ -63,10 +65,10 @@ const (
 type StepStatus string
 
 const (
-	StepPending  StepStatus = "pending"
-	StepRunning  StepStatus = "running"
-	StepSuccess  StepStatus = "success"
-	StepFailed   StepStatus = "failed"
+	StepPending    StepStatus = "pending"
+	StepRunning    StepStatus = "running"
+	StepSuccess    StepStatus = "success"
+	StepFailed     StepStatus = "failed"
 	StepRolledBack StepStatus = "rolled_back"
 )
 
@@ -74,10 +76,10 @@ const (
 type ActionType string
 
 const (
-	ActionCreate  ActionType = "create"
-	ActionUpdate  ActionType = "update"
-	ActionDelete  ActionType = "delete"
-	ActionSkip    ActionType = "skip"
+	ActionCreate ActionType = "create"
+	ActionUpdate ActionType = "update"
+	ActionDelete ActionType = "delete"
+	ActionSkip   ActionType = "skip"
 )
 
 // PlannedAction is a single step the planner produces before execution.
@@ -116,7 +118,7 @@ type VerifyResult struct {
 	Check     string `json:"check"`
 	Passed    bool   `json:"passed"`
 	Severity  string `json:"severity"`            // "error", "warning", "info"
-	Component string `json:"component,omitempty"`  // which component or subsystem produced this
+	Component string `json:"component,omitempty"` // which component or subsystem produced this
 	Message   string `json:"message,omitempty"`
 }
 
