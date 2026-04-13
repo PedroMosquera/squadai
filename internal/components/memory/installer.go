@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
 	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
@@ -222,78 +223,17 @@ func TemplateForAgentID(agentID domain.AgentID) string {
 }
 
 func openCodeMemoryTemplate() string {
-	return `## Memory Protocol
-
-### Session Start
-- Read the project's AGENTS.md for context
-- Check ` + "`.agent-manager/`" + ` for project configuration
-
-### Save Triggers
-Save important context to AGENTS.md or relevant documentation after:
-- Architecture decisions
-- Bug discoveries and fixes
-- New conventions or patterns established
-- Configuration changes
-
-### Session End
-Update AGENTS.md with a brief summary of significant changes made during this session.`
+	return assets.MustRead("memory/opencode.md")
 }
 
 func claudeCodeMemoryTemplate() string {
-	return `## Memory Protocol
-
-### Session Start
-- Review CLAUDE.md for project context and prior decisions
-
-### Save Triggers
-When you discover important project context, update CLAUDE.md with:
-- Architecture decisions and rationale
-- Bug patterns and solutions
-- Project-specific conventions
-- Environment setup notes
-
-### Session End
-Append a session summary to the relevant section of CLAUDE.md.`
+	return assets.MustRead("memory/claude.md")
 }
 
 func codexMemoryTemplate() string {
-	return `## Memory Protocol
-
-### Session Start
-- Check project documentation for context and prior decisions
-
-### Save Triggers
-Save context after any of these events:
-- Important decisions or architecture choices
-- Bug discoveries and their fixes
-- New conventions or patterns established
-
-### Session End
-Save a brief summary of significant changes made during this session.`
+	return assets.MustRead("memory/codex.md")
 }
 
 func genericMemoryTemplate() string {
-	return `## Memory Protocol
-
-You have access to persistent memory tools. Follow these rules:
-
-### Save Triggers
-Save context after any of these events:
-- Important decisions or architecture choices
-- Bug discoveries and their fixes
-- New conventions or patterns established
-- Configuration changes
-- Dependency additions or removals
-
-### Search Protocol
-- At session start, search memory for relevant context
-- Before making architectural decisions, check for prior decisions
-- Use keyword search for specific topics
-
-### Session Summary
-At the end of each session, save a summary including:
-- Goal: what was the objective
-- Accomplished: what was completed
-- Discoveries: what was learned
-- Next Steps: what remains to be done`
+	return assets.MustRead("memory/generic.md")
 }
