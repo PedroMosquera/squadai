@@ -84,6 +84,15 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		if project.MCP != nil {
 			merged.MCP = cloneMCPDefs(project.MCP)
 		}
+		if project.Methodology != "" {
+			merged.Methodology = project.Methodology
+		}
+		if project.Team != nil {
+			merged.Team = cloneTeamRoles(project.Team)
+		}
+		if project.Plugins != nil {
+			merged.Plugins = clonePluginDefs(project.Plugins)
+		}
 		merged.Meta = project.Meta
 		merged.Copilot.Meta = project.Meta
 	}
@@ -201,6 +210,21 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 			}
 			merged.MCP[name] = def
 		}
+
+		// Apply required plugins, overriding project plugins for locked definitions.
+		for name, def := range policy.Required.Plugins {
+			field := fmt.Sprintf("plugins.%s", name)
+			if _, isLocked := locked[field]; isLocked {
+				if _, exists := merged.Plugins[name]; exists {
+					merged.Violations = append(merged.Violations,
+						fmt.Sprintf("field %q locked by policy", field))
+				}
+			}
+			if merged.Plugins == nil {
+				merged.Plugins = make(map[string]domain.PluginDef)
+			}
+			merged.Plugins[name] = def
+		}
 	}
 
 	return merged
@@ -312,6 +336,44 @@ func cloneMCPDefs(defs map[string]domain.MCPServerDef) map[string]domain.MCPServ
 	clone := make(map[string]domain.MCPServerDef, len(defs))
 	for k, v := range defs {
 		clone[k] = v
+	}
+	return clone
+}
+
+// cloneTeamRoles returns a copy of a team roles map.
+func cloneTeamRoles(defs map[string]domain.TeamRole) map[string]domain.TeamRole {
+	clone := make(map[string]domain.TeamRole, len(defs))
+	for k, v := range defs {
+		role := domain.TeamRole{
+			Description: v.Description,
+			Mode:        v.Mode,
+			SkillRef:    v.SkillRef,
+		}
+		if v.DelegatesTo != nil {
+			role.DelegatesTo = make([]string, len(v.DelegatesTo))
+			copy(role.DelegatesTo, v.DelegatesTo)
+		}
+		clone[k] = role
+	}
+	return clone
+}
+
+// clonePluginDefs returns a copy of a plugin definitions map.
+func clonePluginDefs(defs map[string]domain.PluginDef) map[string]domain.PluginDef {
+	clone := make(map[string]domain.PluginDef, len(defs))
+	for k, v := range defs {
+		plugin := domain.PluginDef{
+			Description:         v.Description,
+			Enabled:             v.Enabled,
+			InstallMethod:       v.InstallMethod,
+			PluginID:            v.PluginID,
+			ExcludesMethodology: v.ExcludesMethodology,
+		}
+		if v.SupportedAgents != nil {
+			plugin.SupportedAgents = make([]string, len(v.SupportedAgents))
+			copy(plugin.SupportedAgents, v.SupportedAgents)
+		}
+		clone[k] = plugin
 	}
 	return clone
 }

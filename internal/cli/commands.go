@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
 	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
@@ -186,9 +185,6 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter)
 	for _, a := range adapters {
 		if a.ID() == domain.AgentClaudeCode {
 			proj.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
-		}
-		if a.ID() == domain.AgentCodex {
-			proj.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
 		}
 	}
 
@@ -873,7 +869,7 @@ func collectAllTargetPaths(actions []domain.PlannedAction) []string {
 }
 
 // DetectAdapters returns all registered adapters that are installed or have config.
-// OpenCode (team lane) is always included. Claude Code and Codex (personal lane)
+// OpenCode (team lane) is always included. Personal-lane adapters (Claude Code)
 // are included only when detected on the system.
 func DetectAdapters(homeDir string) []domain.Adapter {
 	ctx := context.Background()
@@ -887,11 +883,6 @@ func DetectAdapters(homeDir string) []domain.Adapter {
 	cc := claude.New()
 	if installed, configFound, err := cc.Detect(ctx, homeDir); err == nil && (installed || configFound) {
 		adapters = append(adapters, cc)
-	}
-
-	cx := codex.New()
-	if installed, configFound, err := cx.Detect(ctx, homeDir); err == nil && (installed || configFound) {
-		adapters = append(adapters, cx)
 	}
 
 	return adapters

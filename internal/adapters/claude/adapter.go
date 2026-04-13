@@ -132,3 +132,28 @@ func (a *Adapter) ProjectSettingsPath(projectDir string) string {
 func ConfigDir(homeDir string) string {
 	return filepath.Join(homeDir, ".claude")
 }
+
+// DelegationStrategy returns DelegationPromptBased — Claude Code uses Task tool delegation.
+func (a *Adapter) DelegationStrategy() domain.DelegationStrategy {
+	return domain.DelegationPromptBased
+}
+
+// SupportsSubAgents returns false — Claude Code does not create named sub-agent files.
+func (a *Adapter) SupportsSubAgents() bool {
+	return false
+}
+
+// SubAgentsDir returns empty string — Claude Code does not support sub-agent files.
+func (a *Adapter) SubAgentsDir(_ string) string {
+	return ""
+}
+
+// SupportsWorkflows returns false — Claude Code does not support workflow files.
+func (a *Adapter) SupportsWorkflows() bool {
+	return false
+}
+
+// WorkflowsDir returns empty string — Claude Code does not support workflows.
+func (a *Adapter) WorkflowsDir(_ string) string {
+	return ""
+}

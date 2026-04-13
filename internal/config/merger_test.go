@@ -674,6 +674,156 @@ func TestMerge_CopilotCustomContent_CarriedThrough(t *testing.T) {
 
 // ─── Settings isolation tests ───────────────────────────────────────────────
 
+// ─── Methodology/Team/Plugins merge tests ───────────────────────────────────
+
+func TestMerge_ProjectMethodology_CarriedThrough(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version:     1,
+		Methodology: domain.MethodologyTDD,
+	}
+
+	merged := Merge(nil, project, nil)
+
+	if merged.Methodology != domain.MethodologyTDD {
+		t.Errorf("Methodology = %q, want %q", merged.Methodology, domain.MethodologyTDD)
+	}
+}
+
+func TestMerge_ProjectTeam_CarriedThrough(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Team: map[string]domain.TeamRole{
+			"brainstormer": {Description: "Brainstorm ideas", Mode: "subagent"},
+			"implementer":  {Description: "Implement code", Mode: "inline", DelegatesTo: []string{"brainstormer"}},
+		},
+	}
+
+	merged := Merge(nil, project, nil)
+
+	if len(merged.Team) != 2 {
+		t.Fatalf("Team count = %d, want 2", len(merged.Team))
+	}
+	if merged.Team["brainstormer"].Description != "Brainstorm ideas" {
+		t.Error("brainstormer description mismatch")
+	}
+	if merged.Team["implementer"].Mode != "inline" {
+		t.Error("implementer mode mismatch")
+	}
+	if len(merged.Team["implementer"].DelegatesTo) != 1 || merged.Team["implementer"].DelegatesTo[0] != "brainstormer" {
+		t.Error("implementer DelegatesTo mismatch")
+	}
+}
+
+func TestMerge_ProjectTeam_DeepCopied(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Team: map[string]domain.TeamRole{
+			"reviewer": {Description: "Review", Mode: "subagent", DelegatesTo: []string{"a", "b"}},
+		},
+	}
+
+	merged := Merge(nil, project, nil)
+
+	// Mutate the merged copy — original should be unaffected.
+	merged.Team["reviewer"] = domain.TeamRole{Description: "Mutated"}
+
+	if project.Team["reviewer"].Description != "Review" {
+		t.Error("merge should deep-copy team roles, not alias")
+	}
+}
+
+func TestMerge_ProjectPlugins_CarriedThrough(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Description:     "Claude superpowers",
+				Enabled:         true,
+				SupportedAgents: []string{"claude-code"},
+				InstallMethod:   "claude_plugin",
+				PluginID:        "superpowers@claude-plugins-official",
+			},
+		},
+	}
+
+	merged := Merge(nil, project, nil)
+
+	if len(merged.Plugins) != 1 {
+		t.Fatalf("Plugins count = %d, want 1", len(merged.Plugins))
+	}
+	p := merged.Plugins["superpowers"]
+	if p.PluginID != "superpowers@claude-plugins-official" {
+		t.Errorf("PluginID = %q, want expected", p.PluginID)
+	}
+	if !p.Enabled {
+		t.Error("superpowers should be enabled")
+	}
+}
+
+func TestMerge_PolicyPlugins_Override(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Description: "Project version",
+				Enabled:     true,
+				PluginID:    "project-id",
+			},
+		},
+	}
+	policy := &domain.PolicyConfig{
+		Mode:   domain.ModeTeam,
+		Locked: []string{"plugins.superpowers"},
+		Required: domain.RequiredBlock{
+			Plugins: map[string]domain.PluginDef{
+				"superpowers": {
+					Description: "Policy version",
+					Enabled:     false,
+					PluginID:    "policy-id",
+				},
+			},
+		},
+	}
+
+	merged := Merge(nil, project, policy)
+
+	if merged.Plugins["superpowers"].PluginID != "policy-id" {
+		t.Errorf("PluginID = %q, want policy-id", merged.Plugins["superpowers"].PluginID)
+	}
+	if merged.Plugins["superpowers"].Enabled {
+		t.Error("superpowers should be disabled by policy")
+	}
+	if len(merged.Violations) == 0 {
+		t.Fatal("expected violation for locked plugins.superpowers")
+	}
+}
+
+func TestMerge_MethodologyEmpty_WhenNoProject(t *testing.T) {
+	merged := Merge(nil, nil, nil)
+
+	if merged.Methodology != "" {
+		t.Errorf("Methodology = %q, want empty", merged.Methodology)
+	}
+}
+
+func TestMerge_TeamNil_WhenNoProject(t *testing.T) {
+	merged := Merge(nil, nil, nil)
+
+	if merged.Team != nil {
+		t.Errorf("Team = %v, want nil", merged.Team)
+	}
+}
+
+func TestMerge_PluginsNil_WhenNoProject(t *testing.T) {
+	merged := Merge(nil, nil, nil)
+
+	if merged.Plugins != nil {
+		t.Errorf("Plugins = %v, want nil", merged.Plugins)
+	}
+}
+
+// ─── Settings isolation tests ───────────────────────────────────────────────
+
 func TestMerge_DoesNotMutateInput_UserAdapterSettings(t *testing.T) {
 	user := &domain.UserConfig{
 		Mode: domain.ModePersonal,

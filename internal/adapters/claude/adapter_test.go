@@ -218,3 +218,40 @@ func TestSupportsComponent_Unknown(t *testing.T) {
 func TestAdapter_ImplementsInterface(t *testing.T) {
 	var _ domain.Adapter = (*Adapter)(nil)
 }
+
+// ─── V2 interface methods ───────────────────────────────────────────────────
+
+func TestAdapter_DelegationStrategy(t *testing.T) {
+	a := New()
+	if a.DelegationStrategy() != domain.DelegationPromptBased {
+		t.Errorf("DelegationStrategy() = %q, want %q", a.DelegationStrategy(), domain.DelegationPromptBased)
+	}
+}
+
+func TestAdapter_SupportsSubAgents(t *testing.T) {
+	a := New()
+	if a.SupportsSubAgents() {
+		t.Error("Claude Code should not support sub-agents")
+	}
+}
+
+func TestAdapter_SubAgentsDir(t *testing.T) {
+	a := New()
+	if a.SubAgentsDir("/Users/test") != "" {
+		t.Error("SubAgentsDir should be empty for Claude Code")
+	}
+}
+
+func TestAdapter_SupportsWorkflows(t *testing.T) {
+	a := New()
+	if a.SupportsWorkflows() {
+		t.Error("Claude Code should not support workflows")
+	}
+}
+
+func TestAdapter_WorkflowsDir(t *testing.T) {
+	a := New()
+	if a.WorkflowsDir("/project") != "" {
+		t.Error("WorkflowsDir should be empty for Claude Code")
+	}
+}

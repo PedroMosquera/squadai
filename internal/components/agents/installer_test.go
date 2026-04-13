@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -149,17 +148,6 @@ func TestPlan_Claude_ReturnsNil(t *testing.T) {
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if len(actions) != 0 {
 		t.Errorf("expected 0 actions for claude, got %d", len(actions))
-	}
-}
-
-func TestPlan_Codex_ReturnsNil(t *testing.T) {
-	project := t.TempDir()
-	adapter := codex.New()
-	inst := New(testAgents(), project)
-
-	actions, _ := inst.Plan(adapter, t.TempDir(), project)
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for codex, got %d", len(actions))
 	}
 }
 

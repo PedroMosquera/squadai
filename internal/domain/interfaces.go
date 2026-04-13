@@ -3,7 +3,8 @@ package domain
 import "context"
 
 // Adapter is the core abstraction for AI agent integration.
-// Each supported agent (OpenCode, Claude Code, Codex) implements this interface.
+// Each supported agent (OpenCode, Claude Code, VS Code Copilot, Cursor, Windsurf)
+// implements this interface.
 // No path logic should exist outside adapter implementations.
 type Adapter interface {
 	// ID returns the unique identifier for this agent.
@@ -50,6 +51,23 @@ type Adapter interface {
 	// ProjectCommandsDir returns the path to project-level command definitions.
 	// Returns empty string if this adapter does not support project commands.
 	ProjectCommandsDir(projectDir string) string
+
+	// DelegationStrategy returns how this agent handles sub-agent delegation.
+	DelegationStrategy() DelegationStrategy
+
+	// SupportsSubAgents reports whether this adapter can create named sub-agents.
+	SupportsSubAgents() bool
+
+	// SubAgentsDir returns the global sub-agents directory for this adapter.
+	// Returns empty string if sub-agents are not supported.
+	SubAgentsDir(homeDir string) string
+
+	// SupportsWorkflows reports whether this adapter supports workflow files.
+	SupportsWorkflows() bool
+
+	// WorkflowsDir returns the project-level workflows directory.
+	// Returns empty string if workflows are not supported.
+	WorkflowsDir(projectDir string) string
 }
 
 // ComponentInstaller handles installation and sync for a single component.
