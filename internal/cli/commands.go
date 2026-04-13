@@ -476,6 +476,9 @@ func RunApply(args []string, stdout io.Writer) error {
 		}
 	}
 
+	// Print summary line.
+	printApplySummary(stdout, report.Steps)
+
 	if !report.Success {
 		fmt.Fprintf(stdout, "\nApply failed. All changes rolled back (backup: %s).\n", report.BackupID)
 		fmt.Fprintf(stdout, "Use 'agent-manager restore %s' to manually restore if needed.\n", report.BackupID)
@@ -542,27 +545,110 @@ func RunVerify(args []string, stdout io.Writer) error {
 		return nil
 	}
 
-	for _, r := range report.Results {
-		icon := "PASS"
-		if !r.Passed {
-			icon = "FAIL"
+	// Group results by component if there are enough.
+	if len(report.Results) > 5 {
+		printGroupedResults(stdout, report.Results)
+	} else {
+		for _, r := range report.Results {
+			printVerifyResult(stdout, r)
 		}
-		if r.Severity == domain.SeverityWarning {
-			icon = "WARN"
-		}
-		line := fmt.Sprintf("  [%s] %s", icon, r.Check)
-		if r.Message != "" {
-			line += " — " + r.Message
-		}
-		fmt.Fprintln(stdout, line)
 	}
+
+	// Print summary line.
+	printVerifySummary(stdout, report.Results)
 
 	if !report.AllPass {
 		return fmt.Errorf("verification failed")
 	}
 
-	fmt.Fprintln(stdout, "\nAll checks passed.")
 	return nil
+}
+
+// printVerifyResult prints a single verification result line.
+func printVerifyResult(stdout io.Writer, r domain.VerifyResult) {
+	icon := "PASS"
+	if !r.Passed {
+		icon = "FAIL"
+	}
+	if r.Severity == domain.SeverityWarning {
+		icon = "WARN"
+	}
+	line := fmt.Sprintf("  [%s] %s", icon, r.Check)
+	if r.Message != "" {
+		line += " — " + r.Message
+	}
+	fmt.Fprintln(stdout, line)
+}
+
+// printGroupedResults groups verification results by Component field and prints them.
+func printGroupedResults(stdout io.Writer, results []domain.VerifyResult) {
+	// Collect groups in order of first appearance.
+	type group struct {
+		name    string
+		results []domain.VerifyResult
+	}
+	var groups []group
+	seen := make(map[string]int)
+
+	for _, r := range results {
+		comp := r.Component
+		if comp == "" {
+			comp = "General"
+		}
+		if idx, ok := seen[comp]; ok {
+			groups[idx].results = append(groups[idx].results, r)
+		} else {
+			seen[comp] = len(groups)
+			groups = append(groups, group{name: comp, results: []domain.VerifyResult{r}})
+		}
+	}
+
+	for i, g := range groups {
+		if i > 0 {
+			fmt.Fprintln(stdout)
+		}
+		fmt.Fprintf(stdout, "%s:\n", g.name)
+		for _, r := range g.results {
+			printVerifyResult(stdout, r)
+		}
+	}
+}
+
+// printApplySummary counts written/skipped/failed steps and prints a one-line summary.
+func printApplySummary(stdout io.Writer, steps []domain.StepResult) {
+	var written, skipped, failed int
+	for _, s := range steps {
+		switch {
+		case s.Status == domain.StepSuccess:
+			if s.Action.Action == domain.ActionSkip {
+				skipped++
+			} else {
+				written++
+			}
+		case s.Status == domain.StepFailed:
+			failed++
+		case s.Status == domain.StepRolledBack:
+			failed++
+		default:
+			written++
+		}
+	}
+	fmt.Fprintf(stdout, "\nApplied %d action(s): %d written, %d skipped, %d failed\n", len(steps), written, skipped, failed)
+}
+
+// printVerifySummary counts passed/failed/warning results and prints a one-line summary.
+func printVerifySummary(stdout io.Writer, results []domain.VerifyResult) {
+	var passed, failedCount, warnings int
+	for _, r := range results {
+		if r.Severity == domain.SeverityWarning {
+			warnings++
+		} else if r.Passed {
+			passed++
+		} else {
+			failedCount++
+		}
+	}
+	fmt.Fprintf(stdout, "\n%d checks: %d passed, %d failed, %d warnings\n", len(results), passed, failedCount, warnings)
 }
 
 // RunBackupCreate creates a manual backup snapshot of all managed files.
