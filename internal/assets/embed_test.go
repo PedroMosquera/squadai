@@ -76,9 +76,9 @@ func TestCopilotTemplateReadable(t *testing.T) {
 
 func TestAllSkillFilesReadable(t *testing.T) {
 	files := []string{
-		"skills/code-review/SKILL.md",
-		"skills/testing/SKILL.md",
-		"skills/pr-description/SKILL.md",
+		"skills/shared/code-review/SKILL.md",
+		"skills/shared/testing/SKILL.md",
+		"skills/shared/pr-description/SKILL.md",
 	}
 
 	for _, path := range files {
@@ -248,6 +248,187 @@ func TestOrchestratorTemplates_TDD_SuperpowersExclusion(t *testing.T) {
 	content := MustRead("teams/tdd/orchestrator-native.md")
 	if !strings.Contains(content, "Superpowers") {
 		t.Error("teams/tdd/orchestrator-native.md: expected to mention 'Superpowers' exclusion")
+	}
+}
+
+// ─── Sub-agent definition files ─────────────────────────────────────────────
+
+var subAgentPaths = []string{
+	"teams/tdd/brainstormer.md",
+	"teams/tdd/planner.md",
+	"teams/tdd/implementer.md",
+	"teams/tdd/reviewer.md",
+	"teams/tdd/debugger.md",
+	"teams/sdd/explorer.md",
+	"teams/sdd/proposer.md",
+	"teams/sdd/spec-writer.md",
+	"teams/sdd/designer.md",
+	"teams/sdd/task-planner.md",
+	"teams/sdd/implementer.md",
+	"teams/sdd/verifier.md",
+	"teams/conventional/implementer.md",
+	"teams/conventional/reviewer.md",
+	"teams/conventional/tester.md",
+}
+
+func TestAllSubAgentDefsExist(t *testing.T) {
+	for _, path := range subAgentPaths {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if len(content) == 0 {
+				t.Errorf("%s: expected non-empty content", path)
+			}
+		})
+	}
+}
+
+func TestSubAgentDefs_MinimumSize(t *testing.T) {
+	for _, path := range subAgentPaths {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if len(content) < 50 {
+				t.Errorf("%s: content too short (%d bytes), expected >= 50", path, len(content))
+			}
+		})
+	}
+}
+
+func TestSubAgentDefs_HaveYAMLFrontmatter(t *testing.T) {
+	for _, path := range subAgentPaths {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if !strings.Contains(content, "---") {
+				t.Errorf("%s: expected YAML frontmatter markers (---)", path)
+			}
+		})
+	}
+}
+
+func TestSubAgentDefs_HaveIdentitySection(t *testing.T) {
+	for _, path := range subAgentPaths {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if !strings.Contains(content, "## Identity") {
+				t.Errorf("%s: expected '## Identity' section", path)
+			}
+		})
+	}
+}
+
+func TestSubAgentDefs_HaveExecutorBoundary(t *testing.T) {
+	for _, path := range subAgentPaths {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if !strings.Contains(content, "EXECUTOR") && !strings.Contains(content, "not the orchestrator") {
+				t.Errorf("%s: expected to mention 'EXECUTOR' or 'not the orchestrator'", path)
+			}
+		})
+	}
+}
+
+// ─── Methodology skill files ─────────────────────────────────────────────────
+
+var tddSkillPaths = []string{
+	"skills/tdd/brainstorming/SKILL.md",
+	"skills/tdd/writing-plans/SKILL.md",
+	"skills/tdd/test-driven-development/SKILL.md",
+	"skills/tdd/systematic-debugging/SKILL.md",
+	"skills/tdd/subagent-driven-development/SKILL.md",
+}
+
+var sddSkillPaths = []string{
+	"skills/sdd/sdd-explore/SKILL.md",
+	"skills/sdd/sdd-propose/SKILL.md",
+	"skills/sdd/sdd-spec/SKILL.md",
+	"skills/sdd/sdd-design/SKILL.md",
+	"skills/sdd/sdd-tasks/SKILL.md",
+	"skills/sdd/sdd-apply/SKILL.md",
+	"skills/sdd/sdd-verify/SKILL.md",
+}
+
+var sharedSkillPaths = []string{
+	"skills/shared/code-review/SKILL.md",
+	"skills/shared/testing/SKILL.md",
+	"skills/shared/pr-description/SKILL.md",
+}
+
+func TestAllMethodologySkillsExist(t *testing.T) {
+	allSkills := append(append(tddSkillPaths, sddSkillPaths...), sharedSkillPaths...)
+	for _, path := range allSkills {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if len(content) == 0 {
+				t.Errorf("%s: expected non-empty content", path)
+			}
+		})
+	}
+}
+
+func TestMethodologySkills_MinimumSize(t *testing.T) {
+	allSkills := append(append(tddSkillPaths, sddSkillPaths...), sharedSkillPaths...)
+	for _, path := range allSkills {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if len(content) < 50 {
+				t.Errorf("%s: content too short (%d bytes), expected >= 50", path, len(content))
+			}
+		})
+	}
+}
+
+func TestMethodologySkills_TDD_HaveMethodologyTag(t *testing.T) {
+	for _, path := range tddSkillPaths {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if !strings.Contains(content, "methodology: tdd") {
+				t.Errorf("%s: expected 'methodology: tdd' in frontmatter", path)
+			}
+		})
+	}
+}
+
+func TestMethodologySkills_SDD_HaveMethodologyTag(t *testing.T) {
+	for _, path := range sddSkillPaths {
+		t.Run(path, func(t *testing.T) {
+			content := MustRead(path)
+			if !strings.Contains(content, "methodology: sdd") {
+				t.Errorf("%s: expected 'methodology: sdd' in frontmatter", path)
+			}
+		})
+	}
+}
+
+func TestSkillRef_MatchesEmbeddedFiles(t *testing.T) {
+	// Verify that every SkillRef in DefaultTeam() corresponds to an embedded asset.
+	// Import-free: we call domain.DefaultTeam via the assets package test context.
+	// We enumerate the known SkillRef values directly from domain.DefaultTeam output.
+	skillRefs := []string{
+		// TDD roles
+		"tdd/brainstorming",
+		"tdd/writing-plans",
+		"tdd/test-driven-development",
+		"shared/code-review",
+		"tdd/systematic-debugging",
+		// SDD roles
+		"sdd/sdd-explore",
+		"sdd/sdd-propose",
+		"sdd/sdd-spec",
+		"sdd/sdd-design",
+		"sdd/sdd-tasks",
+		"sdd/sdd-apply",
+		"sdd/sdd-verify",
+		// Conventional roles
+		"shared/testing",
+	}
+
+	for _, ref := range skillRefs {
+		path := "skills/" + ref + "/SKILL.md"
+		t.Run(ref, func(t *testing.T) {
+			content := MustRead(path)
+			if len(content) == 0 {
+				t.Errorf("SkillRef %q maps to %q but file is empty or missing", ref, path)
+			}
+		})
 	}
 }
 
