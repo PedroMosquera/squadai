@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "adapters": {
+    "claude-code": {
+      "enabled": true
+    },
+    "opencode": {
+      "enabled": true
+    }
+  },
+  "components": {
+    "copilot": {
+      "enabled": true
+    },
+    "memory": {
+      "enabled": true
+    },
+    "rules": {
+      "enabled": true,
+      "settings": {
+        "team_standards_file": "templates/team-standards.md"
+      }
+    }
+  },
+  "copilot": {
+    "instructions_template": "standard"
+  },
+  "rules": {},
+  "skills": {
+    "code-review": {
+      "description": "Structured code review",
+      "content_file": "skills/code-review.md"
+    },
+    "pr-description": {
+      "description": "PR description generation",
+      "content_file": "skills/pr-description.md"
+    },
+    "testing": {
+      "description": "Test writing protocol",
+      "content_file": "skills/testing.md"
+    }
+  },
+  "meta": {
+    "name": "agent-manager-pro",
+    "language": "Go",
+    "test_command": "go test ./...",
+    "build_command": "go build ./...",
+    "lint_command": "go vet ./..."
+  }
+}

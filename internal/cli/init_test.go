@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +23,7 @@ func TestBuildSmartProjectConfig_GoProject(t *testing.T) {
 	}
 
 	adapters := []domain.Adapter{}
-	proj := buildSmartProjectConfig(meta, adapters)
+	proj := buildSmartProjectConfig(meta, adapters, "")
 
 	if proj.Version != 1 {
 		t.Errorf("Version = %d, want 1", proj.Version)
@@ -50,11 +51,59 @@ func TestBuildSmartProjectConfig_DetectedAdapters(t *testing.T) {
 	// Create mock adapters that look like detected ones.
 	adapters := DetectAdapters(t.TempDir()) // Will at least include OpenCode
 
-	proj := buildSmartProjectConfig(meta, adapters)
+	proj := buildSmartProjectConfig(meta, adapters, "")
 
 	// OpenCode should always be enabled.
 	if !proj.Adapters[string(domain.AgentOpenCode)].Enabled {
 		t.Error("OpenCode adapter should be enabled")
+	}
+}
+
+func TestBuildSmartProjectConfig_WithMethodology_TDD(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD)
+
+	if proj.Methodology != domain.MethodologyTDD {
+		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyTDD)
+	}
+	if len(proj.Team) != 6 {
+		t.Errorf("Team len = %d, want 6 for TDD", len(proj.Team))
+	}
+}
+
+func TestBuildSmartProjectConfig_WithMethodology_SDD(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologySDD)
+
+	if proj.Methodology != domain.MethodologySDD {
+		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologySDD)
+	}
+	if len(proj.Team) != 8 {
+		t.Errorf("Team len = %d, want 8 for SDD", len(proj.Team))
+	}
+}
+
+func TestBuildSmartProjectConfig_WithMethodology_Conventional(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyConventional)
+
+	if proj.Methodology != domain.MethodologyConventional {
+		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyConventional)
+	}
+	if len(proj.Team) != 4 {
+		t.Errorf("Team len = %d, want 4 for Conventional", len(proj.Team))
+	}
+}
+
+func TestBuildSmartProjectConfig_WithMethodology_Empty(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "")
+
+	if proj.Methodology != "" {
+		t.Errorf("Methodology = %q, want empty", proj.Methodology)
+	}
+	if proj.Team != nil {
+		t.Errorf("Team should be nil when no methodology, got %v", proj.Team)
 	}
 }
 
@@ -218,7 +267,7 @@ func TestInit_WritesSkillFiles(t *testing.T) {
 	}
 }
 
-// ─── Init help includes --force ─────────────────────────────────────────────
+// ─── Init help flags ─────────────────────────────────────────────────────────
 
 func TestRunInit_HelpIncludesForce(t *testing.T) {
 	var buf bytes.Buffer
@@ -228,5 +277,115 @@ func TestRunInit_HelpIncludesForce(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "--force") {
 		t.Error("help output should mention --force flag")
+	}
+}
+
+func TestRunInit_HelpIncludesMethodology(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunInit([]string{"--help"}, &buf)
+	if err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--methodology") {
+		t.Error("help output should mention --methodology flag")
+	}
+}
+
+// ─── RunInit --methodology flag ──────────────────────────────────────────────
+
+func TestRunInit_MethodologyFlag_TDD(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=tdd"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	// Read back the written project.json.
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	if proj.Methodology != domain.MethodologyTDD {
+		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyTDD)
+	}
+	if len(proj.Team) != 6 {
+		t.Errorf("Team len = %d, want 6 for TDD", len(proj.Team))
+	}
+}
+
+func TestRunInit_MethodologyFlag_SDD(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=sdd"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	if proj.Methodology != domain.MethodologySDD {
+		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologySDD)
+	}
+	if len(proj.Team) != 8 {
+		t.Errorf("Team len = %d, want 8 for SDD", len(proj.Team))
+	}
+}
+
+func TestRunInit_MethodologyFlag_Unknown_Error(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunInit([]string{"--methodology=invalid"}, &buf)
+	if err == nil {
+		t.Fatal("expected error for unknown methodology, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown methodology") {
+		t.Errorf("error = %q, want to contain 'unknown methodology'", err.Error())
+	}
+}
+
+func TestRunInit_MethodologySummaryPrinted(t *testing.T) {
+	dir := t.TempDir()
+	// Create a go.mod so we get project metadata (triggers the summary block).
+	goMod := "module github.com/example/test\n\ngo 1.24\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=tdd"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Methodology: tdd") {
+		t.Errorf("output should contain 'Methodology: tdd', got:\n%s", out)
+	}
+	if !strings.Contains(out, "Team roles:") {
+		t.Errorf("output should contain 'Team roles:', got:\n%s", out)
 	}
 }

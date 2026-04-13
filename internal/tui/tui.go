@@ -20,6 +20,8 @@ const (
 	screenMenu
 	screenRunning
 	screenResult
+	screenInitMethodology
+	screenTeamStatus
 )
 
 // menuItem is a selectable action.
@@ -29,9 +31,11 @@ type menuItem struct {
 }
 
 var menuItems = []menuItem{
+	{label: "Init / Setup", command: "init"},
 	{label: "Plan (dry-run)", command: "plan"},
 	{label: "Apply", command: "apply"},
 	{label: "Sync", command: "sync"},
+	{label: "Team Status", command: "team-status"},
 	{label: "Verify", command: "verify"},
 	{label: "Restore backup", command: "restore"},
 	{label: "Quit", command: "quit"},
@@ -49,6 +53,10 @@ type Model struct {
 	output   string
 	err      error
 	quitting bool
+
+	// Init wizard state.
+	methodology domain.Methodology
+	initCursor  int
 }
 
 // NewModel creates a TUI model with the given state.
@@ -113,20 +121,30 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter":
-			item := menuItems[m.cursor]
-			if item.command == "quit" {
+			selected := menuItems[m.cursor].command
+			switch selected {
+			case "init":
+				m.screen = screenInitMethodology
+				m.initCursor = 0
+				return m, nil
+			case "team-status":
+				m.screen = screenTeamStatus
+				return m, nil
+			case "quit":
 				m.quitting = true
 				return m, tea.Quit
-			}
-			if item.command == "restore" {
+			case "restore":
 				// Restore requires an ID — show prompt in output.
 				m.output = "Use CLI: agent-manager restore <backup-id>\n\nRestore requires a backup ID argument.\nRun 'agent-manager backup list' to see available backups."
 				m.err = nil
 				m.screen = screenResult
 				return m, nil
+			default:
+				m.screen = screenRunning
+				m.output = ""
+				m.err = nil
+				return m, m.runCommand(selected)
 			}
-			m.screen = screenRunning
-			return m, m.runCommand(item.command)
 		case "q":
 			m.quitting = true
 			return m, tea.Quit
@@ -141,6 +159,37 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case screenRunning:
 		// Ignore input while running.
+
+	case screenInitMethodology:
+		methodologies := []domain.Methodology{
+			domain.MethodologyTDD,
+			domain.MethodologySDD,
+			domain.MethodologyConventional,
+		}
+		switch key {
+		case "up", "k":
+			if m.initCursor > 0 {
+				m.initCursor--
+			}
+		case "down", "j":
+			if m.initCursor < len(methodologies)-1 {
+				m.initCursor++
+			}
+		case "enter":
+			m.methodology = methodologies[m.initCursor]
+			m.screen = screenMenu // Commit 5 will wire to MCP screen
+			return m, nil
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		}
+
+	case screenTeamStatus:
+		switch key {
+		case "esc", "enter", "q":
+			m.screen = screenMenu
+			return m, nil
+		}
 	}
 
 	return m, nil
@@ -181,6 +230,10 @@ func (m Model) View() string {
 		return m.viewRunning()
 	case screenResult:
 		return m.viewResult()
+	case screenInitMethodology:
+		return m.viewInitMethodology()
+	case screenTeamStatus:
+		return m.viewTeamStatus()
 	}
 	return ""
 }
@@ -240,6 +293,47 @@ func (m Model) viewResult() string {
 		b.WriteString(fmt.Sprintf("\nError: %v\n", m.err))
 	}
 
+	b.WriteString("\nPress any key to return to menu.")
+	return b.String()
+}
+
+// viewInitMethodology renders the methodology selection screen.
+func (m Model) viewInitMethodology() string {
+	var b strings.Builder
+	b.WriteString("Select Methodology\n\n")
+	methodologies := []struct {
+		value domain.Methodology
+		label string
+		desc  string
+	}{
+		{domain.MethodologyTDD, "TDD (Test-Driven Development)", "6 roles: red-green-refactor workflow"},
+		{domain.MethodologySDD, "SDD (Spec-Driven Development)", "8 roles: specification-first workflow"},
+		{domain.MethodologyConventional, "Conventional", "4 roles: standard development workflow"},
+	}
+	for i, m2 := range methodologies {
+		cursor := "  "
+		if i == m.initCursor {
+			cursor = "> "
+		}
+		fmt.Fprintf(&b, "%s%s\n    %s\n\n", cursor, m2.label, m2.desc)
+	}
+	b.WriteString("\n↑/↓: navigate  enter: select  esc: back")
+	return b.String()
+}
+
+// viewTeamStatus renders the team status screen showing the configured team composition.
+func (m Model) viewTeamStatus() string {
+	var b strings.Builder
+	b.WriteString("Team Status\n\n")
+	if m.methodology == "" {
+		b.WriteString("No methodology selected.\nRun Init to configure your team.\n")
+	} else {
+		fmt.Fprintf(&b, "Methodology: %s\n\n", m.methodology)
+		team := domain.DefaultTeam(m.methodology)
+		for name, role := range team {
+			fmt.Fprintf(&b, "  %-14s %s\n", name+":", role.Description)
+		}
+	}
 	b.WriteString("\nPress any key to return to menu.")
 	return b.String()
 }

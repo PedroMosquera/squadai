@@ -17,8 +17,8 @@ type mockAdapter struct {
 	lane domain.AdapterLane
 }
 
-func (m *mockAdapter) ID() domain.AgentID                                      { return m.id }
-func (m *mockAdapter) Lane() domain.AdapterLane                                { return m.lane }
+func (m *mockAdapter) ID() domain.AgentID       { return m.id }
+func (m *mockAdapter) Lane() domain.AdapterLane { return m.lane }
 func (m *mockAdapter) Detect(_ context.Context, homeDir string) (bool, bool, error) {
 	return true, true, nil
 }
@@ -35,9 +35,9 @@ func (m *mockAdapter) ProjectCommandsDir(projectDir string) string { return "" }
 func (m *mockAdapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationSoloAgent
 }
-func (m *mockAdapter) SupportsSubAgents() bool            { return false }
-func (m *mockAdapter) SubAgentsDir(homeDir string) string  { return "" }
-func (m *mockAdapter) SupportsWorkflows() bool             { return false }
+func (m *mockAdapter) SupportsSubAgents() bool               { return false }
+func (m *mockAdapter) SubAgentsDir(homeDir string) string    { return "" }
+func (m *mockAdapter) SupportsWorkflows() bool               { return false }
 func (m *mockAdapter) WorkflowsDir(projectDir string) string { return "" }
 
 // ─── Intro Screen ───────────────────────────────────────────────────────────
@@ -316,7 +316,147 @@ func TestMenu_CursorIndicator(t *testing.T) {
 	m.cursor = 0
 
 	view := m.View()
-	if !strings.Contains(view, "> Plan (dry-run)") {
+	if !strings.Contains(view, "> Init / Setup") {
 		t.Error("first item should have cursor indicator")
+	}
+}
+
+// ─── Menu new items ──────────────────────────────────────────────────────────
+
+func TestMenu_ShowsInitSetup(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	view := m.View()
+	if !strings.Contains(view, "Init / Setup") {
+		t.Error("menu should contain 'Init / Setup'")
+	}
+}
+
+func TestMenu_ShowsTeamStatus(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	view := m.View()
+	if !strings.Contains(view, "Team Status") {
+		t.Error("menu should contain 'Team Status'")
+	}
+}
+
+// ─── Init Methodology Screen ─────────────────────────────────────────────────
+
+func TestInitMethodology_Navigation(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+	m.initCursor = 0
+
+	// Move down.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model := updated.(Model)
+	if model.initCursor != 1 {
+		t.Errorf("initCursor = %d, want 1 after down", model.initCursor)
+	}
+
+	// Move up.
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = updated.(Model)
+	if model.initCursor != 0 {
+		t.Errorf("initCursor = %d, want 0 after up", model.initCursor)
+	}
+}
+
+func TestInitMethodology_SelectTDD(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+	m.initCursor = 0 // TDD is first
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.methodology != domain.MethodologyTDD {
+		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologyTDD)
+	}
+	if model.screen != screenMenu {
+		t.Errorf("screen = %d, want screenMenu (%d)", model.screen, screenMenu)
+	}
+}
+
+func TestInitMethodology_SelectSDD(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+	m.initCursor = 1 // SDD is second
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.methodology != domain.MethodologySDD {
+		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologySDD)
+	}
+	if model.screen != screenMenu {
+		t.Errorf("screen = %d, want screenMenu (%d)", model.screen, screenMenu)
+	}
+}
+
+func TestInitMethodology_SelectConventional(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+	m.initCursor = 2 // Conventional is third
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.methodology != domain.MethodologyConventional {
+		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologyConventional)
+	}
+	if model.screen != screenMenu {
+		t.Errorf("screen = %d, want screenMenu (%d)", model.screen, screenMenu)
+	}
+}
+
+func TestInitMethodology_EscReturnsToMenu(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenMenu {
+		t.Errorf("screen = %d, want screenMenu (%d) after esc", model.screen, screenMenu)
+	}
+}
+
+// ─── Team Status Screen ───────────────────────────────────────────────────────
+
+func TestTeamStatus_ShowsNoMethodology(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenTeamStatus
+	m.methodology = "" // no methodology set
+
+	view := m.View()
+	if !strings.Contains(view, "No methodology") {
+		t.Errorf("team status with no methodology should show 'No methodology', got:\n%s", view)
+	}
+}
+
+func TestTeamStatus_ShowsTDDTeam(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenTeamStatus
+	m.methodology = domain.MethodologyTDD
+
+	view := m.View()
+	if !strings.Contains(view, "orchestrator") {
+		t.Errorf("TDD team status should show 'orchestrator', got:\n%s", view)
+	}
+}
+
+func TestTeamStatus_EscReturnsToMenu(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenTeamStatus
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenMenu {
+		t.Errorf("screen = %d, want screenMenu (%d) after esc", model.screen, screenMenu)
 	}
 }

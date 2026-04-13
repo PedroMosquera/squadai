@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/cursor"
@@ -29,20 +30,38 @@ import (
 func RunInit(args []string, stdout io.Writer) error {
 	withPolicy := false
 	force := false
+	var methodology string
 	for _, arg := range args {
+		if strings.HasPrefix(arg, "--methodology=") {
+			methodology = strings.TrimPrefix(arg, "--methodology=")
+			continue
+		}
 		switch arg {
 		case "--with-policy":
 			withPolicy = true
 		case "--force":
 			force = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager init [--with-policy] [--force]")
+			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--with-policy] [--force]")
 			fmt.Fprintln(stdout, "  Creates .agent-manager/project.json in the current directory.")
+			fmt.Fprintln(stdout, "  --methodology  Set the development methodology (tdd, sdd, conventional).")
 			fmt.Fprintln(stdout, "  --with-policy  Also create a team policy template.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files.")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for init", arg)
+		}
+	}
+
+	// Validate methodology if provided.
+	var meth domain.Methodology
+	if methodology != "" {
+		meth = domain.Methodology(methodology)
+		switch meth {
+		case domain.MethodologyTDD, domain.MethodologySDD, domain.MethodologyConventional:
+			// valid
+		default:
+			return fmt.Errorf("unknown methodology %q; use tdd, sdd, or conventional", methodology)
 		}
 	}
 
@@ -71,7 +90,7 @@ func RunInit(args []string, stdout io.Writer) error {
 	if projectExists == nil && !force {
 		fmt.Fprintf(stdout, "  exists  %s\n", relPath(projectDir, projectPath))
 	} else {
-		proj := buildSmartProjectConfig(meta, detectedAdapters)
+		proj := buildSmartProjectConfig(meta, detectedAdapters, meth)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
@@ -140,6 +159,10 @@ func RunInit(args []string, stdout io.Writer) error {
 		if adapterNames != "" {
 			fmt.Fprintf(stdout, "  Agents:   %s\n", adapterNames)
 		}
+		if meth != "" {
+			fmt.Fprintf(stdout, "  Methodology: %s\n", meth)
+			fmt.Fprintf(stdout, "  Team roles:  %d\n", len(domain.DefaultTeam(meth)))
+		}
 		fmt.Fprintln(stdout)
 	}
 
@@ -147,8 +170,9 @@ func RunInit(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// buildSmartProjectConfig creates a rich project.json from detected metadata and adapters.
-func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter) *domain.ProjectConfig {
+// buildSmartProjectConfig creates a rich project.json from detected metadata, adapters,
+// and an optional methodology selection.
+func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter, methodology domain.Methodology) *domain.ProjectConfig {
 	proj := &domain.ProjectConfig{
 		Version: 1,
 		Meta:    meta,
@@ -189,6 +213,12 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter)
 		if a.ID() == domain.AgentClaudeCode {
 			proj.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
 		}
+	}
+
+	// Apply methodology and generate team composition if specified.
+	if methodology != "" {
+		proj.Methodology = methodology
+		proj.Team = domain.DefaultTeam(methodology)
 	}
 
 	return proj
