@@ -16,11 +16,13 @@ import (
 func DetectProjectMeta(projectDir string) domain.ProjectMeta {
 	var meta domain.ProjectMeta
 
-	// Try Go project first, then Node.
+	// Try Go project first, then Node, then Python.
 	if detectGo(projectDir, &meta) {
 		// Go project detected.
+	} else if detectNode(projectDir, &meta) {
+		// Node project detected.
 	} else {
-		detectNode(projectDir, &meta)
+		detectPython(projectDir, &meta)
 	}
 
 	// Detect build/test/lint commands from Makefile or Taskfile.
@@ -239,4 +241,129 @@ func scanTaskfileTasks(f *os.File) map[string]bool {
 		}
 	}
 	return tasks
+}
+
+// detectPython checks for Python project indicators and populates meta.
+func detectPython(projectDir string, meta *domain.ProjectMeta) bool {
+	// Try pyproject.toml first.
+	if detectPyprojectToml(projectDir, meta) {
+		setPythonDefaults(projectDir, meta)
+		return true
+	}
+
+	// Then setup.py.
+	if _, err := os.Stat(filepath.Join(projectDir, "setup.py")); err == nil {
+		meta.Language = "Python"
+		setPythonDefaults(projectDir, meta)
+		return true
+	}
+
+	// Then requirements.txt.
+	if _, err := os.Stat(filepath.Join(projectDir, "requirements.txt")); err == nil {
+		meta.Language = "Python"
+		setPythonDefaults(projectDir, meta)
+		return true
+	}
+
+	return false
+}
+
+// detectPyprojectToml reads pyproject.toml for project name and framework hints.
+// Uses simple line scanning instead of a full TOML parser.
+func detectPyprojectToml(projectDir string, meta *domain.ProjectMeta) bool {
+	pyprojectPath := filepath.Join(projectDir, "pyproject.toml")
+	f, err := os.Open(pyprojectPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	meta.Language = "Python"
+
+	scanner := bufio.NewScanner(f)
+	inProject := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Track [project] section.
+		if line == "[project]" {
+			inProject = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inProject = false
+			continue
+		}
+
+		// Extract name from [project] section.
+		if inProject && strings.HasPrefix(line, "name") {
+			if idx := strings.Index(line, "="); idx >= 0 {
+				val := strings.TrimSpace(line[idx+1:])
+				val = strings.Trim(val, "\"'")
+				if val != "" {
+					meta.Name = val
+				}
+			}
+		}
+
+		// Detect frameworks from dependencies.
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "django") {
+			meta.Framework = "Django"
+		} else if strings.Contains(lower, "fastapi") {
+			meta.Framework = "FastAPI"
+		} else if strings.Contains(lower, "flask") {
+			meta.Framework = "Flask"
+		}
+	}
+
+	return true
+}
+
+// setPythonDefaults sets default commands for Python projects.
+func setPythonDefaults(projectDir string, meta *domain.ProjectMeta) {
+	if meta.TestCommand == "" {
+		// Use pytest if tests/ dir exists or pytest is likely configured.
+		if _, err := os.Stat(filepath.Join(projectDir, "tests")); err == nil {
+			meta.TestCommand = "pytest"
+		} else if _, err := os.Stat(filepath.Join(projectDir, "test")); err == nil {
+			meta.TestCommand = "pytest"
+		} else {
+			meta.TestCommand = "python -m unittest discover"
+		}
+	}
+
+	// Python typically doesn't have a build command.
+
+	if meta.LintCommand == "" {
+		// Check for ruff configuration.
+		if _, err := os.Stat(filepath.Join(projectDir, "ruff.toml")); err == nil {
+			meta.LintCommand = "ruff check ."
+			return
+		}
+		// Check pyproject.toml for [tool.ruff] section.
+		if pyprojectHasSection(projectDir, "[tool.ruff]") {
+			meta.LintCommand = "ruff check ."
+			return
+		}
+		// Default to ruff (most common modern Python linter).
+		meta.LintCommand = "ruff check ."
+	}
+}
+
+// pyprojectHasSection checks if pyproject.toml contains a specific section header.
+func pyprojectHasSection(projectDir, section string) bool {
+	f, err := os.Open(filepath.Join(projectDir, "pyproject.toml"))
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		if strings.TrimSpace(scanner.Text()) == section {
+			return true
+		}
+	}
+	return false
 }

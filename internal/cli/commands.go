@@ -12,6 +12,7 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
 	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
 	"github.com/PedroMosquera/agent-manager-pro/internal/config"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
@@ -21,17 +22,22 @@ import (
 )
 
 // RunInit creates .agent-manager/project.json and optionally .agent-manager/policy.json
-// in the current working directory.
+// in the current working directory. It detects adapters, selects language-specific
+// standards, and writes starter skill files.
 func RunInit(args []string, stdout io.Writer) error {
 	withPolicy := false
+	force := false
 	for _, arg := range args {
 		switch arg {
 		case "--with-policy":
 			withPolicy = true
+		case "--force":
+			force = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager init [--with-policy]")
+			fmt.Fprintln(stdout, "Usage: agent-manager init [--with-policy] [--force]")
 			fmt.Fprintln(stdout, "  Creates .agent-manager/project.json in the current directory.")
 			fmt.Fprintln(stdout, "  --with-policy  Also create a team policy template.")
+			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files.")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for init", arg)
@@ -43,23 +49,34 @@ func RunInit(args []string, stdout io.Writer) error {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
 
-	configDir := filepath.Join(projectDir, config.ProjectConfigDir)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "" // non-fatal, adapter detection will be limited
+	}
+
+	// Detect project metadata.
+	meta := DetectProjectMeta(projectDir)
+
+	// Detect installed adapters.
+	var detectedAdapters []domain.Adapter
+	if homeDir != "" {
+		detectedAdapters = DetectAdapters(homeDir)
+	}
 
 	// Create project config.
 	projectPath := config.ProjectConfigPath(projectDir)
-	if _, err := os.Stat(projectPath); err == nil {
+	_, projectExists := os.Stat(projectPath)
+	if projectExists == nil && !force {
 		fmt.Fprintf(stdout, "  exists  %s\n", relPath(projectDir, projectPath))
 	} else {
-		proj := domain.DefaultProjectConfig()
-		// Auto-detect project metadata.
-		meta := DetectProjectMeta(projectDir)
-		proj.Meta = meta
+		proj := buildSmartProjectConfig(meta, detectedAdapters)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
-		fmt.Fprintf(stdout, "  created %s\n", relPath(projectDir, projectPath))
-		if meta.Name != "" {
-			fmt.Fprintf(stdout, "  detected project: %s (%s)\n", meta.Name, meta.Language)
+		if projectExists == nil && force {
+			fmt.Fprintf(stdout, "  overwritten %s\n", relPath(projectDir, projectPath))
+		} else {
+			fmt.Fprintf(stdout, "  created %s\n", relPath(projectDir, projectPath))
 		}
 	}
 
@@ -78,8 +95,7 @@ func RunInit(args []string, stdout io.Writer) error {
 	}
 
 	// Create user config if it doesn't exist.
-	homeDir, err := os.UserHomeDir()
-	if err == nil {
+	if homeDir != "" {
 		userPath := config.UserConfigPath(homeDir)
 		if _, statErr := os.Stat(userPath); statErr != nil {
 			userCfg := domain.DefaultUserConfig()
@@ -89,9 +105,152 @@ func RunInit(args []string, stdout io.Writer) error {
 		}
 	}
 
-	_ = configDir
-	fmt.Fprintln(stdout, "\nDone. Review the generated files and commit them to your repository.")
+	// Write language-specific team standards.
+	standardsContent := selectStandards(meta.Language)
+	standardsPath := filepath.Join(projectDir, config.ProjectConfigDir, "templates", "team-standards.md")
+	writeInitFile(stdout, projectDir, standardsPath, standardsContent, force)
+
+	// Write starter skill files.
+	skillFiles := []struct {
+		name string
+		path string
+	}{
+		{"skills/code-review/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "code-review.md")},
+		{"skills/testing/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "testing.md")},
+		{"skills/pr-description/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "pr-description.md")},
+	}
+	for _, sf := range skillFiles {
+		content := assets.MustRead(sf.name)
+		writeInitFile(stdout, projectDir, sf.path, content, force)
+	}
+
+	// Print summary.
+	fmt.Fprintln(stdout)
+	if meta.Name != "" || meta.Language != "" {
+		fmt.Fprintln(stdout, "Detected:")
+		if meta.Language != "" {
+			fmt.Fprintf(stdout, "  Language: %s\n", meta.Language)
+		}
+		if meta.Name != "" {
+			fmt.Fprintf(stdout, "  Project:  %s\n", meta.Name)
+		}
+		adapterNames := adapterSummary(detectedAdapters)
+		if adapterNames != "" {
+			fmt.Fprintf(stdout, "  Agents:   %s\n", adapterNames)
+		}
+		fmt.Fprintln(stdout)
+	}
+
+	fmt.Fprintln(stdout, "Run 'agent-manager apply' to configure your environment.")
 	return nil
+}
+
+// buildSmartProjectConfig creates a rich project.json from detected metadata and adapters.
+func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter) *domain.ProjectConfig {
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Meta:    meta,
+		Adapters: map[string]domain.AdapterConfig{
+			string(domain.AgentOpenCode): {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentMemory): {Enabled: true},
+			"copilot":                      {Enabled: true},
+			string(domain.ComponentRules): {
+				Enabled: true,
+				Settings: map[string]interface{}{
+					"team_standards_file": "templates/team-standards.md",
+				},
+			},
+		},
+		Copilot: domain.CopilotConfig{
+			InstructionsTemplate: "standard",
+		},
+		Skills: map[string]domain.SkillDef{
+			"code-review": {
+				Description: "Structured code review",
+				ContentFile: "skills/code-review.md",
+			},
+			"testing": {
+				Description: "Test writing protocol",
+				ContentFile: "skills/testing.md",
+			},
+			"pr-description": {
+				Description: "PR description generation",
+				ContentFile: "skills/pr-description.md",
+			},
+		},
+	}
+
+	// Enable detected personal-lane adapters.
+	for _, a := range adapters {
+		if a.ID() == domain.AgentClaudeCode {
+			proj.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
+		}
+		if a.ID() == domain.AgentCodex {
+			proj.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
+		}
+	}
+
+	return proj
+}
+
+// selectStandards returns the content of the language-specific standards asset.
+func selectStandards(language string) string {
+	switch language {
+	case "Go":
+		return assets.MustRead("standards/go.md")
+	case "TypeScript", "TypeScript/JavaScript":
+		return assets.MustRead("standards/javascript.md")
+	case "Python":
+		return assets.MustRead("standards/python.md")
+	default:
+		return assets.MustRead("standards/generic.md")
+	}
+}
+
+// writeInitFile writes content to path, respecting the force flag.
+// Reports status to stdout.
+func writeInitFile(stdout io.Writer, projectDir, path, content string, force bool) {
+	rel := relPath(projectDir, path)
+	_, existsErr := os.Stat(path)
+	existed := existsErr == nil
+
+	if existed && !force {
+		fmt.Fprintf(stdout, "  exists  %s\n", rel)
+		return
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		fmt.Fprintf(stdout, "  error   %s: %v\n", rel, err)
+		return
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		fmt.Fprintf(stdout, "  error   %s: %v\n", rel, err)
+		return
+	}
+
+	if existed && force {
+		fmt.Fprintf(stdout, "  overwritten %s\n", rel)
+	} else {
+		fmt.Fprintf(stdout, "  created %s\n", rel)
+	}
+}
+
+// adapterSummary returns a comma-separated list of adapter names.
+func adapterSummary(adapters []domain.Adapter) string {
+	if len(adapters) == 0 {
+		return ""
+	}
+	names := ""
+	for i, a := range adapters {
+		if i > 0 {
+			names += ", "
+		}
+		names += string(a.ID())
+	}
+	return names
 }
 
 // relPath returns a relative path from base, falling back to abs on error.
