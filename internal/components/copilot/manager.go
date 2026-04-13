@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
 	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
@@ -174,51 +175,11 @@ func TemplateContentWithContext(cfg domain.CopilotConfig, projectDir string) str
 // standardTemplate renders project-aware copilot instructions using ProjectMeta.
 // When Meta fields are empty, the template omits those sections gracefully.
 func standardTemplate(meta domain.ProjectMeta) string {
-	const tmpl = `## Team Standards
-
-{{- if .Name}}
-
-### Project: {{.Name}}
-{{- end}}
-{{- if or .Language .Framework}}
-
-**Stack**:
-{{- if .Language}} {{.Language}}{{end}}
-{{- if .Framework}} / {{.Framework}}{{end}}
-{{- end}}
-
-### Verification Commands
-{{- if or .TestCommand .BuildCommand .LintCommand}}
-{{- if .TestCommand}}
-- Tests: ` + "`{{.TestCommand}}`" + `
-{{- end}}
-{{- if .BuildCommand}}
-- Build: ` + "`{{.BuildCommand}}`" + `
-{{- end}}
-{{- if .LintCommand}}
-- Lint: ` + "`{{.LintCommand}}`" + `
-{{- end}}
-{{- else}}
-- No verification commands configured — add them to project.json meta section.
-{{- end}}
-
-### Code Style
-- Follow existing patterns in the codebase
-- Write tests for new functionality
-- Use clear, descriptive naming
-
-### Commit Messages
-- Use conventional commit format (feat:, fix:, docs:, etc.)
-- Keep the first line under 72 characters
-
-### Architecture
-- Respect package boundaries and import rules
-- Keep domain logic free of infrastructure concerns
-- All mutating operations must support dry-run mode`
+	tmpl := assets.MustRead("copilot/standard.tmpl")
 
 	t, err := template.New("copilot").Parse(tmpl)
 	if err != nil {
-		// Should never happen with a hardcoded template; fall back to minimal.
+		// Should never happen with a tested embedded template; fall back to minimal.
 		return "## Team Standards\n\nManaged by agent-manager-pro."
 	}
 
