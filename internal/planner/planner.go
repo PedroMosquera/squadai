@@ -50,8 +50,8 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 	p.mcpInstaller = mcp.New(cfg.MCP)
 
 	// Create agents/skills/commands installers (lazy init per plan call).
-	p.agentsInstaller = agents.New(cfg.Agents, projectDir)
-	p.skillsInstaller = skills.New(cfg.Skills, projectDir)
+	p.agentsInstaller = agents.New(cfg.Agents, cfg, projectDir)
+	p.skillsInstaller = skills.New(cfg.Skills, cfg, projectDir)
 	p.commandsInstaller = commands.New(cfg.Commands)
 
 	// Collect component actions for each enabled adapter.

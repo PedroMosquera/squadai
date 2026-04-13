@@ -57,13 +57,13 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 	// Create agents installer from merged config (lazy init per verify call).
 	var agentsInstaller *agents.Installer
 	if agentsCfg, ok := cfg.Components[string(domain.ComponentAgents)]; ok && agentsCfg.Enabled {
-		agentsInstaller = agents.New(cfg.Agents, projectDir)
+		agentsInstaller = agents.New(cfg.Agents, cfg, projectDir)
 	}
 
 	// Create skills installer from merged config (lazy init per verify call).
 	var skillsInstaller *skills.Installer
 	if skillsCfg, ok := cfg.Components[string(domain.ComponentSkills)]; ok && skillsCfg.Enabled {
-		skillsInstaller = skills.New(cfg.Skills, projectDir)
+		skillsInstaller = skills.New(cfg.Skills, cfg, projectDir)
 	}
 
 	// Create commands installer from merged config (lazy init per verify call).
