@@ -91,7 +91,8 @@ func (a *Adapter) SettingsPath(homeDir string) string {
 // SupportsComponent reports whether Claude Code supports a given component.
 func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
-	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings:
+	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings,
+		domain.ComponentSkills, domain.ComponentMCP:
 		return true
 	default:
 		return false
@@ -113,9 +114,9 @@ func (a *Adapter) ProjectAgentsDir(_ string) string {
 	return ""
 }
 
-// ProjectSkillsDir returns empty string — Claude Code does not support project skills.
-func (a *Adapter) ProjectSkillsDir(_ string) string {
-	return ""
+// ProjectSkillsDir returns <projectDir>/.claude/skills.
+func (a *Adapter) ProjectSkillsDir(projectDir string) string {
+	return filepath.Join(projectDir, ".claude", "skills")
 }
 
 // ProjectCommandsDir returns empty string — Claude Code does not support project commands.
@@ -131,6 +132,12 @@ func (a *Adapter) ProjectSettingsPath(projectDir string) string {
 // ConfigDir returns the root config directory for Claude Code.
 func ConfigDir(homeDir string) string {
 	return filepath.Join(homeDir, ".claude")
+}
+
+// MCPDir returns the directory for per-server MCP configuration files.
+// Claude Code uses separate files per MCP server: ~/.claude/mcp/{name}.json
+func (a *Adapter) MCPDir(homeDir string) string {
+	return filepath.Join(ConfigDir(homeDir), "mcp")
 }
 
 // DelegationStrategy returns DelegationPromptBased — Claude Code uses Task tool delegation.

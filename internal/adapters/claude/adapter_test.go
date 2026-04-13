@@ -163,6 +163,7 @@ func TestProjectPaths(t *testing.T) {
 		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/CLAUDE.md"},
 		{"ProjectSettingsPath", a.ProjectSettingsPath(project), "/Users/test/myproject/.claude/settings.json"},
 		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/.claude/settings.json"},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), "/Users/test/myproject/.claude/skills"},
 	}
 
 	for _, tt := range tests {
@@ -179,9 +180,6 @@ func TestProjectPaths_EmptyForUnsupported(t *testing.T) {
 	if a.ProjectAgentsDir(project) != "" {
 		t.Error("ProjectAgentsDir should be empty for Claude")
 	}
-	if a.ProjectSkillsDir(project) != "" {
-		t.Error("ProjectSkillsDir should be empty for Claude")
-	}
 	if a.ProjectCommandsDir(project) != "" {
 		t.Error("ProjectCommandsDir should be empty for Claude")
 	}
@@ -196,13 +194,19 @@ func TestSupportsComponent_Memory(t *testing.T) {
 	}
 }
 
-func TestSupportsComponent_RulesAndSettings(t *testing.T) {
+func TestSupportsComponent_SupportedComponents(t *testing.T) {
 	a := New()
-	if !a.SupportsComponent(domain.ComponentRules) {
-		t.Error("Claude Code should support rules component")
+	components := []domain.ComponentID{
+		domain.ComponentMemory,
+		domain.ComponentRules,
+		domain.ComponentSettings,
+		domain.ComponentSkills,
+		domain.ComponentMCP,
 	}
-	if !a.SupportsComponent(domain.ComponentSettings) {
-		t.Error("Claude Code should support settings component")
+	for _, c := range components {
+		if !a.SupportsComponent(c) {
+			t.Errorf("Claude Code should support component %q", c)
+		}
 	}
 }
 
@@ -253,5 +257,13 @@ func TestAdapter_WorkflowsDir(t *testing.T) {
 	a := New()
 	if a.WorkflowsDir("/project") != "" {
 		t.Error("WorkflowsDir should be empty for Claude Code")
+	}
+}
+
+func TestAdapter_MCPDir(t *testing.T) {
+	a := New()
+	dir := a.MCPDir("/Users/test")
+	if dir != "/Users/test/.claude/mcp" {
+		t.Errorf("MCPDir = %q, want /Users/test/.claude/mcp", dir)
 	}
 }
