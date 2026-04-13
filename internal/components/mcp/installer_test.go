@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -160,20 +159,6 @@ func TestPlan_Claude_ReturnsNil(t *testing.T) {
 	}
 	if len(actions) != 0 {
 		t.Errorf("expected 0 actions for claude (mcp unsupported), got %d", len(actions))
-	}
-}
-
-func TestPlan_Codex_ReturnsNil(t *testing.T) {
-	project := t.TempDir()
-	adapter := codex.New()
-	inst := newTestInstaller()
-
-	actions, err := inst.Plan(adapter, t.TempDir(), project)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for codex (mcp unsupported), got %d", len(actions))
 	}
 }
 

@@ -70,9 +70,11 @@ func TestValidateUser_KnownAdaptersPass(t *testing.T) {
 		Version: 1,
 		Mode:    domain.ModePersonal,
 		Adapters: map[string]domain.AdapterConfig{
-			"opencode":    {Enabled: true},
-			"claude-code": {Enabled: false},
-			"codex":       {Enabled: false},
+			"opencode":       {Enabled: true},
+			"claude-code":    {Enabled: false},
+			"vscode-copilot": {Enabled: false},
+			"cursor":         {Enabled: false},
+			"windsurf":       {Enabled: false},
 		},
 		Components: map[string]domain.ComponentConfig{},
 	}
@@ -714,4 +716,167 @@ func assertContainsIssue(t *testing.T, issues []string, substr string) {
 		}
 	}
 	t.Errorf("expected issue containing %q, got: %v", substr, issues)
+}
+
+// ─── Methodology validation ─────────────────────────────────────────────────
+
+func TestValidateProject_ValidMethodology(t *testing.T) {
+	for _, m := range []domain.Methodology{domain.MethodologyTDD, domain.MethodologySDD, domain.MethodologyConventional} {
+		cfg := &domain.ProjectConfig{
+			Version:     1,
+			Components:  map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+			Methodology: m,
+		}
+		issues := ValidateProject(cfg)
+		if len(issues) != 0 {
+			t.Errorf("methodology %q should be valid, got: %v", m, issues)
+		}
+	}
+}
+
+func TestValidateProject_EmptyMethodology_NoIssue(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("empty methodology should be valid, got: %v", issues)
+	}
+}
+
+func TestValidateProject_UnknownMethodology(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:     1,
+		Components:  map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Methodology: "waterfall",
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `unknown methodology "waterfall"`)
+}
+
+// ─── Team role validation ───────────────────────────────────────────────────
+
+func TestValidateProject_ValidTeamRoles(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Team: map[string]domain.TeamRole{
+			"orchestrator": {Description: "TDD orchestrator", Mode: "subagent"},
+			"implementer":  {Description: "Implements code", Mode: "inline"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("valid team roles should pass, got: %v", issues)
+	}
+}
+
+func TestValidateProject_TeamRole_MissingMode(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Team: map[string]domain.TeamRole{
+			"reviewer": {Description: "Reviews code"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `team role "reviewer" must have a mode`)
+}
+
+func TestValidateProject_TeamRole_UnknownMode(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Team: map[string]domain.TeamRole{
+			"reviewer": {Description: "Reviews code", Mode: "autonomous"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `unknown mode "autonomous"`)
+}
+
+// ─── Plugin validation ──────────────────────────────────────────────────────
+
+func TestValidateProject_ValidPlugins(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Description:   "Cross-agent skills",
+				Enabled:       true,
+				InstallMethod: "claude_plugin",
+			},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("valid plugins should pass, got: %v", issues)
+	}
+}
+
+func TestValidateProject_Plugin_MissingInstallMethod(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Plugins: map[string]domain.PluginDef{
+			"bad-plugin": {Description: "Bad", Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `plugin "bad-plugin" must have an install_method`)
+}
+
+func TestValidateProject_Plugin_UnknownInstallMethod(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Plugins: map[string]domain.PluginDef{
+			"bad-plugin": {Description: "Bad", Enabled: true, InstallMethod: "magic"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `unknown install_method "magic"`)
+}
+
+func TestValidateProject_Plugin_ExcludesMethodology(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:     1,
+		Components:  map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Methodology: domain.MethodologyTDD,
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Description:         "Cross-agent skills",
+				Enabled:             true,
+				InstallMethod:       "claude_plugin",
+				ExcludesMethodology: "tdd",
+			},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `plugin "superpowers" is incompatible with methodology "tdd"`)
+}
+
+func TestValidateProject_Plugin_ExcludesMethodology_DisabledPlugin_NoIssue(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:     1,
+		Components:  map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Methodology: domain.MethodologyTDD,
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Description:         "Cross-agent skills",
+				Enabled:             false,
+				InstallMethod:       "claude_plugin",
+				ExcludesMethodology: "tdd",
+			},
+		},
+	}
+	issues := ValidateProject(cfg)
+	// Disabled plugin should not trigger methodology exclusion.
+	for _, issue := range issues {
+		if contains(issue, "incompatible") {
+			t.Errorf("disabled plugin should not trigger exclusion, got: %s", issue)
+		}
+	}
 }

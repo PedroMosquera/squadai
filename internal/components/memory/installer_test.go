@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
@@ -44,14 +43,6 @@ func TestTemplateForAdapter_Claude(t *testing.T) {
 	content := templateForAdapter(adapter)
 	if !strings.Contains(content, "CLAUDE.md") {
 		t.Error("Claude template should reference CLAUDE.md")
-	}
-}
-
-func TestTemplateForAdapter_Codex(t *testing.T) {
-	adapter := codex.New()
-	content := templateForAdapter(adapter)
-	if !strings.Contains(content, "Memory Protocol") {
-		t.Error("Codex template should contain Memory Protocol heading")
 	}
 }
 
@@ -93,19 +84,6 @@ func TestMemoryTargetPath_Claude_UsesProjectLevel(t *testing.T) {
 
 	target := memoryTargetPath(adapter, home, project)
 	expected := filepath.Join(project, "CLAUDE.md")
-	if target != expected {
-		t.Errorf("target = %q, want %q", target, expected)
-	}
-}
-
-func TestMemoryTargetPath_Codex_UsesGlobalLevel(t *testing.T) {
-	adapter := codex.New()
-	home := "/Users/test"
-	project := "/Users/test/myproject"
-
-	target := memoryTargetPath(adapter, home, project)
-	// Codex has no project-level rules file, falls back to global.
-	expected := adapter.SystemPromptFile(home)
 	if target != expected {
 		t.Errorf("target = %q, want %q", target, expected)
 	}
@@ -217,28 +195,6 @@ func TestPlan_OpenCode_OutdatedSection_ReturnsUpdate(t *testing.T) {
 	}
 	if actions[0].Action != domain.ActionUpdate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionUpdate)
-	}
-}
-
-// ─── Plan (Codex, global-level) ─────────────────────────────────────────────
-
-func TestPlan_Codex_UsesGlobalTarget(t *testing.T) {
-	home := t.TempDir()
-	project := t.TempDir()
-	adapter := codex.New()
-	inst := New()
-
-	actions, err := inst.Plan(adapter, home, project)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
-	}
-	// Codex target should be global ~/.codex/instructions.md.
-	expected := adapter.SystemPromptFile(home)
-	if actions[0].TargetPath != expected {
-		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
 	}
 }
 

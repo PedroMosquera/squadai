@@ -43,14 +43,10 @@ func TestDefaultUserConfig_HasClaudeCodeDisabled(t *testing.T) {
 	}
 }
 
-func TestDefaultUserConfig_HasCodexDisabled(t *testing.T) {
+func TestDefaultUserConfig_HasTwoAdapters(t *testing.T) {
 	cfg := DefaultUserConfig()
-	ac, ok := cfg.Adapters[string(AgentCodex)]
-	if !ok {
-		t.Fatal("codex adapter not found in defaults")
-	}
-	if ac.Enabled {
-		t.Error("codex should be disabled by default")
+	if len(cfg.Adapters) != 2 {
+		t.Errorf("Adapters count = %d, want 2 (opencode, claude-code)", len(cfg.Adapters))
 	}
 }
 
@@ -530,4 +526,157 @@ func stringContains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// ─── V2 domain type tests ──────────────────────────────────────────────────
+
+func TestAgentIDs_AllV2Defined(t *testing.T) {
+	ids := []AgentID{
+		AgentOpenCode,
+		AgentClaudeCode,
+		AgentVSCodeCopilot,
+		AgentCursor,
+		AgentWindsurf,
+	}
+	for _, id := range ids {
+		if id == "" {
+			t.Error("AgentID should not be empty")
+		}
+	}
+	if len(ids) != 5 {
+		t.Errorf("expected 5 agent IDs, got %d", len(ids))
+	}
+}
+
+func TestMethodology_AllDefined(t *testing.T) {
+	methodologies := []Methodology{
+		MethodologyTDD,
+		MethodologySDD,
+		MethodologyConventional,
+	}
+	for _, m := range methodologies {
+		if m == "" {
+			t.Error("Methodology should not be empty")
+		}
+	}
+	if len(methodologies) != 3 {
+		t.Errorf("expected 3 methodologies, got %d", len(methodologies))
+	}
+}
+
+func TestDelegationStrategy_AllDefined(t *testing.T) {
+	strategies := []DelegationStrategy{
+		DelegationNativeAgents,
+		DelegationPromptBased,
+		DelegationSoloAgent,
+	}
+	for _, s := range strategies {
+		if s == "" {
+			t.Error("DelegationStrategy should not be empty")
+		}
+	}
+	if len(strategies) != 3 {
+		t.Errorf("expected 3 delegation strategies, got %d", len(strategies))
+	}
+}
+
+func TestPluginDef_Fields(t *testing.T) {
+	pd := PluginDef{
+		Description:         "Cross-agent skills framework",
+		Enabled:             true,
+		SupportedAgents:     []string{"claude-code", "opencode", "cursor"},
+		InstallMethod:       "claude_plugin",
+		PluginID:            "superpowers@claude-plugins-official",
+		ExcludesMethodology: "tdd",
+	}
+	if pd.Description != "Cross-agent skills framework" {
+		t.Error("Description mismatch")
+	}
+	if !pd.Enabled {
+		t.Error("should be enabled")
+	}
+	if len(pd.SupportedAgents) != 3 {
+		t.Errorf("SupportedAgents count = %d, want 3", len(pd.SupportedAgents))
+	}
+	if pd.InstallMethod != "claude_plugin" {
+		t.Error("InstallMethod mismatch")
+	}
+	if pd.ExcludesMethodology != "tdd" {
+		t.Error("ExcludesMethodology mismatch")
+	}
+}
+
+func TestTeamRole_Fields(t *testing.T) {
+	tr := TeamRole{
+		Description: "TDD orchestrator",
+		Mode:        "subagent",
+		SkillRef:    "tdd/brainstorming",
+		DelegatesTo: []string{"planner", "implementer"},
+	}
+	if tr.Description != "TDD orchestrator" {
+		t.Error("Description mismatch")
+	}
+	if tr.Mode != "subagent" {
+		t.Error("Mode mismatch")
+	}
+	if tr.SkillRef != "tdd/brainstorming" {
+		t.Error("SkillRef mismatch")
+	}
+	if len(tr.DelegatesTo) != 2 {
+		t.Errorf("DelegatesTo count = %d, want 2", len(tr.DelegatesTo))
+	}
+}
+
+func TestPluginDef_JSONRoundTrip(t *testing.T) {
+	pd := PluginDef{
+		Description:     "Test plugin",
+		Enabled:         true,
+		SupportedAgents: []string{"opencode"},
+		InstallMethod:   "skill_files",
+	}
+
+	data, err := json.Marshal(pd)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded PluginDef
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Description != "Test plugin" {
+		t.Error("Description mismatch after round-trip")
+	}
+	if !decoded.Enabled {
+		t.Error("Enabled mismatch after round-trip")
+	}
+	if len(decoded.SupportedAgents) != 1 {
+		t.Error("SupportedAgents mismatch after round-trip")
+	}
+}
+
+func TestTeamRole_JSONRoundTrip(t *testing.T) {
+	tr := TeamRole{
+		Description: "Test role",
+		Mode:        "inline",
+		SkillRef:    "shared/testing",
+	}
+
+	data, err := json.Marshal(tr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded TeamRole
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Description != "Test role" {
+		t.Error("Description mismatch after round-trip")
+	}
+	if decoded.Mode != "inline" {
+		t.Error("Mode mismatch after round-trip")
+	}
 }

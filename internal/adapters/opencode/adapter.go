@@ -139,3 +139,28 @@ func (a *Adapter) CommandsDir(homeDir string) string {
 func ConfigDir(homeDir string) string {
 	return filepath.Join(homeDir, ".config", "opencode")
 }
+
+// DelegationStrategy returns DelegationNativeAgents — OpenCode supports native sub-agents.
+func (a *Adapter) DelegationStrategy() domain.DelegationStrategy {
+	return domain.DelegationNativeAgents
+}
+
+// SupportsSubAgents returns true — OpenCode supports named sub-agents.
+func (a *Adapter) SupportsSubAgents() bool {
+	return true
+}
+
+// SubAgentsDir returns ~/.config/opencode/agents.
+func (a *Adapter) SubAgentsDir(homeDir string) string {
+	return filepath.Join(ConfigDir(homeDir), "agents")
+}
+
+// SupportsWorkflows returns false — OpenCode does not support workflow files.
+func (a *Adapter) SupportsWorkflows() bool {
+	return false
+}
+
+// WorkflowsDir returns empty string — OpenCode does not support workflows.
+func (a *Adapter) WorkflowsDir(_ string) string {
+	return ""
+}

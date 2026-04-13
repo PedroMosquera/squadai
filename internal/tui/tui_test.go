@@ -32,6 +32,13 @@ func (m *mockAdapter) ProjectRulesFile(projectDir string) string   { return "" }
 func (m *mockAdapter) ProjectAgentsDir(projectDir string) string   { return "" }
 func (m *mockAdapter) ProjectSkillsDir(projectDir string) string   { return "" }
 func (m *mockAdapter) ProjectCommandsDir(projectDir string) string { return "" }
+func (m *mockAdapter) DelegationStrategy() domain.DelegationStrategy {
+	return domain.DelegationSoloAgent
+}
+func (m *mockAdapter) SupportsSubAgents() bool            { return false }
+func (m *mockAdapter) SubAgentsDir(homeDir string) string  { return "" }
+func (m *mockAdapter) SupportsWorkflows() bool             { return false }
+func (m *mockAdapter) WorkflowsDir(projectDir string) string { return "" }
 
 // ─── Intro Screen ───────────────────────────────────────────────────────────
 
@@ -57,7 +64,7 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 	adapters := []domain.Adapter{
 		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
 		&mockAdapter{id: domain.AgentClaudeCode, lane: domain.LanePersonal},
-		&mockAdapter{id: domain.AgentCodex, lane: domain.LanePersonal},
+		&mockAdapter{id: domain.AgentVSCodeCopilot, lane: domain.LanePersonal},
 	}
 	m := NewModel("1.0.0", domain.ModeHybrid, adapters, "/tmp/home")
 
@@ -68,8 +75,8 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 	if !strings.Contains(view, "claude-code (personal)") {
 		t.Error("should show claude-code")
 	}
-	if !strings.Contains(view, "codex (personal)") {
-		t.Error("should show codex")
+	if !strings.Contains(view, "vscode-copilot (personal)") {
+		t.Error("should show vscode-copilot")
 	}
 	if !strings.Contains(view, "Mode: hybrid") {
 		t.Error("should show hybrid mode")

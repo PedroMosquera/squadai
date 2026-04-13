@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
@@ -216,22 +215,6 @@ func TestPlan_Claude_TargetsProjectLevel(t *testing.T) {
 	expected := filepath.Join(project, "CLAUDE.md")
 	if actions[0].TargetPath != expected {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
-	}
-}
-
-// ─── Plan (Codex — unsupported) ─────────────────────────────────────────────
-
-func TestPlan_Codex_ReturnsNil(t *testing.T) {
-	project := t.TempDir()
-	adapter := codex.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
-
-	actions, err := inst.Plan(adapter, t.TempDir(), project)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for codex (rules unsupported), got %d", len(actions))
 	}
 }
 
@@ -506,20 +489,6 @@ func TestVerify_FailsWhenContentOutdated(t *testing.T) {
 	}
 	if !foundContentCheck {
 		t.Error("expected rules-content-current check in results")
-	}
-}
-
-func TestVerify_Codex_ReturnsNil(t *testing.T) {
-	project := t.TempDir()
-	adapter := codex.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
-
-	results, err := inst.Verify(adapter, t.TempDir(), project)
-	if err != nil {
-		t.Fatalf("Verify error: %v", err)
-	}
-	if len(results) != 0 {
-		t.Errorf("expected 0 results for codex (rules unsupported), got %d", len(results))
 	}
 }
 

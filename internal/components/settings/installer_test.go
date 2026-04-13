@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -175,24 +174,6 @@ func TestPlan_Claude_TargetsProjectSettings(t *testing.T) {
 	expected := filepath.Join(project, ".claude", "settings.json")
 	if actions[0].TargetPath != expected {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
-	}
-}
-
-// ─── Plan (Codex — unsupported) ─────────────────────────────────────────────
-
-func TestPlan_Codex_ReturnsNil(t *testing.T) {
-	project := t.TempDir()
-	adapter := codex.New()
-	inst := newTestInstaller("codex", map[string]interface{}{
-		"model": "some-model",
-	})
-
-	actions, err := inst.Plan(adapter, t.TempDir(), project)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for codex (settings unsupported), got %d", len(actions))
 	}
 }
 
@@ -500,22 +481,6 @@ func TestVerify_FailsWhenKeysOutdated(t *testing.T) {
 	}
 	if !foundKeysCheck {
 		t.Error("expected settings-keys-current check in results")
-	}
-}
-
-func TestVerify_Codex_ReturnsNil(t *testing.T) {
-	project := t.TempDir()
-	adapter := codex.New()
-	inst := newTestInstaller("codex", map[string]interface{}{
-		"model": "some-model",
-	})
-
-	results, err := inst.Verify(adapter, t.TempDir(), project)
-	if err != nil {
-		t.Fatalf("Verify error: %v", err)
-	}
-	if len(results) != 0 {
-		t.Errorf("expected 0 results for codex (settings unsupported), got %d", len(results))
 	}
 }
 

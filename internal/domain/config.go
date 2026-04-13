@@ -11,16 +11,19 @@ type UserConfig struct {
 
 // ProjectConfig represents .agent-manager/project.json.
 type ProjectConfig struct {
-	Version    int                        `json:"version"`
-	Adapters   map[string]AdapterConfig   `json:"adapters,omitempty"`
-	Components map[string]ComponentConfig `json:"components"`
-	Copilot    CopilotConfig              `json:"copilot"`
-	Rules      RulesConfig                `json:"rules,omitempty"`
-	Agents     map[string]AgentDef        `json:"agents,omitempty"`
-	Skills     map[string]SkillDef        `json:"skills,omitempty"`
-	Commands   map[string]CommandDef      `json:"commands,omitempty"`
-	MCP        map[string]MCPServerDef    `json:"mcp,omitempty"`
-	Meta       ProjectMeta                `json:"meta,omitempty"`
+	Version     int                        `json:"version"`
+	Adapters    map[string]AdapterConfig   `json:"adapters,omitempty"`
+	Components  map[string]ComponentConfig `json:"components"`
+	Copilot     CopilotConfig              `json:"copilot"`
+	Rules       RulesConfig                `json:"rules,omitempty"`
+	Agents      map[string]AgentDef        `json:"agents,omitempty"`
+	Skills      map[string]SkillDef        `json:"skills,omitempty"`
+	Commands    map[string]CommandDef      `json:"commands,omitempty"`
+	MCP         map[string]MCPServerDef    `json:"mcp,omitempty"`
+	Meta        ProjectMeta                `json:"meta,omitempty"`
+	Methodology Methodology                `json:"methodology,omitempty"`
+	Team        map[string]TeamRole        `json:"team,omitempty"`
+	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 }
 
 // PolicyConfig represents .agent-manager/policy.json.
@@ -39,6 +42,7 @@ type RequiredBlock struct {
 	Rules      RulesConfig                `json:"rules,omitempty"`
 	Agents     map[string]AgentDef        `json:"agents,omitempty"`
 	MCP        map[string]MCPServerDef    `json:"mcp,omitempty"`
+	Plugins    map[string]PluginDef       `json:"plugins,omitempty"`
 }
 
 // AdapterConfig is the per-adapter configuration in config files.
@@ -71,6 +75,24 @@ type RulesConfig struct {
 	TeamStandardsFile string `json:"team_standards_file,omitempty"`
 	// Instructions lists additional instruction file paths to reference.
 	Instructions []string `json:"instructions,omitempty"`
+}
+
+// PluginDef defines a third-party plugin that can be installed for supported agents.
+type PluginDef struct {
+	Description         string   `json:"description"`
+	Enabled             bool     `json:"enabled"`
+	SupportedAgents     []string `json:"supported_agents"`
+	InstallMethod       string   `json:"install_method"`                 // "claude_plugin" or "skill_files"
+	PluginID            string   `json:"plugin_id,omitempty"`            // e.g., "superpowers@claude-plugins-official"
+	ExcludesMethodology string   `json:"excludes_methodology,omitempty"` // blocked when this methodology is active
+}
+
+// TeamRole defines a role within a methodology team.
+type TeamRole struct {
+	Description string   `json:"description"`
+	Mode        string   `json:"mode"`                        // "subagent" or "inline"
+	SkillRef    string   `json:"skill_ref,omitempty"`         // e.g., "tdd/brainstorming"
+	DelegatesTo []string `json:"delegates_to,omitempty"`      // roles this role can delegate to
 }
 
 // AgentDef defines a custom agent for OpenCode's .opencode/agents/ directory.
@@ -126,17 +148,20 @@ type PathsConfig struct {
 // MergedConfig is the resolved configuration after applying precedence rules.
 // Policy locked fields are final. Project overrides user. User provides defaults.
 type MergedConfig struct {
-	Mode       OperationalMode            `json:"mode"`
-	Adapters   map[string]AdapterConfig   `json:"adapters"`
-	Components map[string]ComponentConfig `json:"components"`
-	Copilot    CopilotConfig              `json:"copilot"`
-	Rules      RulesConfig                `json:"rules,omitempty"`
-	Agents     map[string]AgentDef        `json:"agents,omitempty"`
-	Skills     map[string]SkillDef        `json:"skills,omitempty"`
-	Commands   map[string]CommandDef      `json:"commands,omitempty"`
-	MCP        map[string]MCPServerDef    `json:"mcp,omitempty"`
-	Meta       ProjectMeta                `json:"meta,omitempty"`
-	Paths      PathsConfig                `json:"paths"`
+	Mode        OperationalMode            `json:"mode"`
+	Adapters    map[string]AdapterConfig   `json:"adapters"`
+	Components  map[string]ComponentConfig `json:"components"`
+	Copilot     CopilotConfig              `json:"copilot"`
+	Rules       RulesConfig                `json:"rules,omitempty"`
+	Agents      map[string]AgentDef        `json:"agents,omitempty"`
+	Skills      map[string]SkillDef        `json:"skills,omitempty"`
+	Commands    map[string]CommandDef      `json:"commands,omitempty"`
+	MCP         map[string]MCPServerDef    `json:"mcp,omitempty"`
+	Meta        ProjectMeta                `json:"meta,omitempty"`
+	Paths       PathsConfig                `json:"paths"`
+	Methodology Methodology                `json:"methodology,omitempty"`
+	Team        map[string]TeamRole        `json:"team,omitempty"`
+	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 
 	// Violations is populated during merge when user/project values conflicted
 	// with locked policy fields. These are informational — the policy value wins.
@@ -151,7 +176,6 @@ func DefaultUserConfig() *UserConfig {
 		Adapters: map[string]AdapterConfig{
 			string(AgentOpenCode):   {Enabled: true},
 			string(AgentClaudeCode): {Enabled: false},
-			string(AgentCodex):      {Enabled: false},
 		},
 		Components: map[string]ComponentConfig{
 			string(ComponentMemory): {Enabled: true},

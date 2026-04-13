@@ -214,3 +214,41 @@ func TestSupportsComponent_Unknown(t *testing.T) {
 func TestAdapter_ImplementsInterface(t *testing.T) {
 	var _ domain.Adapter = (*Adapter)(nil)
 }
+
+// ─── V2 interface methods ───────────────────────────────────────────────────
+
+func TestAdapter_DelegationStrategy(t *testing.T) {
+	a := New()
+	if a.DelegationStrategy() != domain.DelegationNativeAgents {
+		t.Errorf("DelegationStrategy() = %q, want %q", a.DelegationStrategy(), domain.DelegationNativeAgents)
+	}
+}
+
+func TestAdapter_SupportsSubAgents(t *testing.T) {
+	a := New()
+	if !a.SupportsSubAgents() {
+		t.Error("OpenCode should support sub-agents")
+	}
+}
+
+func TestAdapter_SubAgentsDir(t *testing.T) {
+	a := New()
+	dir := a.SubAgentsDir("/Users/test")
+	if dir != "/Users/test/.config/opencode/agents" {
+		t.Errorf("SubAgentsDir = %q, want /Users/test/.config/opencode/agents", dir)
+	}
+}
+
+func TestAdapter_SupportsWorkflows(t *testing.T) {
+	a := New()
+	if a.SupportsWorkflows() {
+		t.Error("OpenCode should not support workflows")
+	}
+}
+
+func TestAdapter_WorkflowsDir(t *testing.T) {
+	a := New()
+	if a.WorkflowsDir("/project") != "" {
+		t.Error("WorkflowsDir should be empty for OpenCode")
+	}
+}

@@ -63,6 +63,9 @@ func ValidateProject(cfg *domain.ProjectConfig) []string {
 	issues = append(issues, validateSkillDefs(cfg.Skills)...)
 	issues = append(issues, validateCommandDefs(cfg.Commands)...)
 	issues = append(issues, validateMCPDefs(cfg.MCP)...)
+	issues = append(issues, validateMethodology(cfg.Methodology)...)
+	issues = append(issues, validateTeamRoles(cfg.Team)...)
+	issues = append(issues, validatePluginDefs(cfg.Plugins, cfg.Methodology)...)
 
 	return issues
 }
@@ -156,6 +159,13 @@ func hasRequiredValue(cfg *domain.PolicyConfig, field string) bool {
 		_, exists := cfg.Required.MCP[parts[1]]
 		return exists
 
+	case "plugins":
+		if len(parts) < 2 {
+			return false
+		}
+		_, exists := cfg.Required.Plugins[parts[1]]
+		return exists
+
 	default:
 		return false
 	}
@@ -234,10 +244,65 @@ func validateMCPDefs(mcpServers map[string]domain.MCPServerDef) []string {
 	return issues
 }
 
+// validateMethodology checks that methodology is a known value or empty.
+func validateMethodology(m domain.Methodology) []string {
+	if m == "" {
+		return nil
+	}
+	switch m {
+	case domain.MethodologyTDD, domain.MethodologySDD, domain.MethodologyConventional:
+		return nil
+	default:
+		return []string{fmt.Sprintf("unknown methodology %q (expected: tdd, sdd, conventional)", m)}
+	}
+}
+
+// validateTeamRoles checks that team role definitions have valid fields.
+func validateTeamRoles(team map[string]domain.TeamRole) []string {
+	var issues []string
+	for name, role := range team {
+		if role.Mode == "" {
+			issues = append(issues, fmt.Sprintf("team role %q must have a mode", name))
+		} else {
+			switch role.Mode {
+			case "subagent", "inline":
+				// valid
+			default:
+				issues = append(issues, fmt.Sprintf("team role %q has unknown mode %q (expected: subagent, inline)", name, role.Mode))
+			}
+		}
+	}
+	return issues
+}
+
+// validatePluginDefs checks that plugin definitions have valid fields and
+// that no plugin's excludes_methodology matches the current methodology.
+func validatePluginDefs(plugins map[string]domain.PluginDef, methodology domain.Methodology) []string {
+	var issues []string
+	for name, def := range plugins {
+		if def.InstallMethod == "" {
+			issues = append(issues, fmt.Sprintf("plugin %q must have an install_method", name))
+		} else {
+			switch def.InstallMethod {
+			case "claude_plugin", "skill_files":
+				// valid
+			default:
+				issues = append(issues, fmt.Sprintf("plugin %q has unknown install_method %q (expected: claude_plugin, skill_files)", name, def.InstallMethod))
+			}
+		}
+		if def.ExcludesMethodology != "" && def.Enabled && methodology != "" && string(methodology) == def.ExcludesMethodology {
+			issues = append(issues, fmt.Sprintf("plugin %q is incompatible with methodology %q", name, methodology))
+		}
+	}
+	return issues
+}
+
 var knownAdapters = map[string]struct{}{
-	string(domain.AgentOpenCode):   {},
-	string(domain.AgentClaudeCode): {},
-	string(domain.AgentCodex):      {},
+	string(domain.AgentOpenCode):      {},
+	string(domain.AgentClaudeCode):    {},
+	string(domain.AgentVSCodeCopilot): {},
+	string(domain.AgentCursor):        {},
+	string(domain.AgentWindsurf):      {},
 }
 
 var knownComponents = map[string]struct{}{

@@ -4,9 +4,29 @@ package domain
 type AgentID string
 
 const (
-	AgentOpenCode  AgentID = "opencode"
-	AgentClaudeCode AgentID = "claude-code"
-	AgentCodex     AgentID = "codex"
+	AgentOpenCode      AgentID = "opencode"
+	AgentClaudeCode    AgentID = "claude-code"
+	AgentVSCodeCopilot AgentID = "vscode-copilot"
+	AgentCursor        AgentID = "cursor"
+	AgentWindsurf      AgentID = "windsurf"
+)
+
+// Methodology identifies a development methodology preset.
+type Methodology string
+
+const (
+	MethodologyTDD          Methodology = "tdd"
+	MethodologySDD          Methodology = "sdd"
+	MethodologyConventional Methodology = "conventional"
+)
+
+// DelegationStrategy describes how an agent handles sub-agent delegation.
+type DelegationStrategy string
+
+const (
+	DelegationNativeAgents DelegationStrategy = "native" // OpenCode, Cursor
+	DelegationPromptBased  DelegationStrategy = "prompt" // Claude Code
+	DelegationSoloAgent    DelegationStrategy = "solo"   // VS Code, Windsurf
 )
 
 // AdapterLane classifies whether an adapter is team-required or personal-optional.

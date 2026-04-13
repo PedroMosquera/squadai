@@ -14,7 +14,6 @@ func TestAllMemoryFilesReadable(t *testing.T) {
 	}{
 		{"memory/opencode.md", "AGENTS.md"},
 		{"memory/claude.md", "CLAUDE.md"},
-		{"memory/codex.md", "Memory Protocol"},
 		{"memory/generic.md", "persistent memory tools"},
 	}
 

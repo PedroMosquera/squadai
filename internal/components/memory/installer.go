@@ -203,8 +203,6 @@ func templateForAgentID(agentID domain.AgentID) string {
 		return openCodeMemoryTemplate()
 	case domain.AgentClaudeCode:
 		return claudeCodeMemoryTemplate()
-	case domain.AgentCodex:
-		return codexMemoryTemplate()
 	default:
 		return genericMemoryTemplate()
 	}
@@ -228,10 +226,6 @@ func openCodeMemoryTemplate() string {
 
 func claudeCodeMemoryTemplate() string {
 	return assets.MustRead("memory/claude.md")
-}
-
-func codexMemoryTemplate() string {
-	return assets.MustRead("memory/codex.md")
 }
 
 func genericMemoryTemplate() string {

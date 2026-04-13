@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/codex"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
 	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
@@ -519,7 +518,7 @@ func strContains(s, sub string) bool {
 // ─── Milestone D: Personal Lane Gate Tests ──────────────────────────────────
 
 // TestPersonalLane_TeamModeUnaffected verifies that enabling personal adapters
-// (Claude Code, Codex) in user config does not change team-baseline behavior.
+// (Claude Code) in user config does not change team-baseline behavior.
 // This is the Milestone D acceptance gate.
 func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 	home := t.TempDir()
@@ -528,7 +527,6 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 	// Create user config with personal adapters enabled.
 	userCfg := domain.DefaultUserConfig()
 	userCfg.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
-	userCfg.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
 	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
 		t.Fatalf("write user config: %v", err)
 	}
@@ -574,8 +572,7 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 
 	// Plan with OpenCode + personal adapters (hybrid scenario).
 	claudeAdapter := claude.New()
-	codexAdapter := codex.New()
-	allAdapters := []domain.Adapter{ocAdapter, claudeAdapter, codexAdapter}
+	allAdapters := []domain.Adapter{ocAdapter, claudeAdapter}
 
 	hybridActions, err := p.Plan(merged, allAdapters, home, project)
 	if err != nil {
@@ -646,12 +643,6 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 		t.Errorf("claude memory file missing: %s", claudeMemoryPath)
 	}
 
-	// Codex targets global ~/.codex/instructions.md.
-	codexPrompt := codexAdapter.SystemPromptFile(home)
-	if _, err := os.Stat(codexPrompt); err != nil {
-		t.Errorf("codex memory prompt file missing: %s", codexPrompt)
-	}
-
 	// Run verifier — all checks should pass.
 	v := verify.New()
 	vReport, err := v.Verify(merged, allAdapters, home, project)
@@ -717,7 +708,6 @@ func TestPersonalLane_SecondApplyIdempotent(t *testing.T) {
 
 	userCfg := domain.DefaultUserConfig()
 	userCfg.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
-	userCfg.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
 	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
 		t.Fatal(err)
 	}
@@ -733,8 +723,7 @@ func TestPersonalLane_SecondApplyIdempotent(t *testing.T) {
 
 	ocAdapter := opencode.New()
 	claudeAdapter := claude.New()
-	codexAdapter := codex.New()
-	adapters := []domain.Adapter{ocAdapter, claudeAdapter, codexAdapter}
+	adapters := []domain.Adapter{ocAdapter, claudeAdapter}
 
 	p := planner.New()
 
