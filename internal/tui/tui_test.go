@@ -376,8 +376,8 @@ func TestInitMethodology_SelectTDD(t *testing.T) {
 	if model.methodology != domain.MethodologyTDD {
 		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologyTDD)
 	}
-	if model.screen != screenMenu {
-		t.Errorf("screen = %d, want screenMenu (%d)", model.screen, screenMenu)
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
 	}
 }
 
@@ -392,8 +392,8 @@ func TestInitMethodology_SelectSDD(t *testing.T) {
 	if model.methodology != domain.MethodologySDD {
 		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologySDD)
 	}
-	if model.screen != screenMenu {
-		t.Errorf("screen = %d, want screenMenu (%d)", model.screen, screenMenu)
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
 	}
 }
 
@@ -408,8 +408,8 @@ func TestInitMethodology_SelectConventional(t *testing.T) {
 	if model.methodology != domain.MethodologyConventional {
 		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologyConventional)
 	}
-	if model.screen != screenMenu {
-		t.Errorf("screen = %d, want screenMenu (%d)", model.screen, screenMenu)
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
 	}
 }
 
@@ -458,5 +458,106 @@ func TestTeamStatus_EscReturnsToMenu(t *testing.T) {
 
 	if model.screen != screenMenu {
 		t.Errorf("screen = %d, want screenMenu (%d) after esc", model.screen, screenMenu)
+	}
+}
+
+// ─── Init MCP Screen ──────────────────────────────────────────────────────────
+
+func TestInitMethodology_SelectGoesToMCP(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+	m.initCursor = 0 // TDD
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d) after methodology select", model.screen, screenInitMCP)
+	}
+}
+
+func TestInitMCP_ToggleContext7(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = map[string]bool{"context7": true}
+	m.initCursor = 0
+
+	// Space toggles context7 off.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := updated.(Model)
+
+	if model.mcpSelections["context7"] {
+		t.Error("context7 should be toggled off after space")
+	}
+}
+
+func TestInitMCP_EnterGoesToPlugins(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = map[string]bool{"context7": true}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitPlugins {
+		t.Errorf("screen = %d, want screenInitPlugins (%d) after enter", model.screen, screenInitPlugins)
+	}
+}
+
+func TestInitMCP_EscGoesToMethodology(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = map[string]bool{}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitMethodology {
+		t.Errorf("screen = %d, want screenInitMethodology (%d) after esc", model.screen, screenInitMethodology)
+	}
+}
+
+// ─── Init Plugins Screen ──────────────────────────────────────────────────────
+
+func TestInitPlugins_EnterGoesToSummary(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPlugins
+	m.pluginSelections = make(map[string]bool)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitSummary {
+		t.Errorf("screen = %d, want screenInitSummary (%d) after enter", model.screen, screenInitSummary)
+	}
+}
+
+func TestInitPlugins_EscGoesToMCP(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPlugins
+	m.pluginSelections = make(map[string]bool)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d) after esc", model.screen, screenInitMCP)
+	}
+}
+
+// ─── Init Summary Screen ──────────────────────────────────────────────────────
+
+func TestInitSummary_EscGoesToPlugins(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitSummary
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = map[string]bool{"context7": true}
+	m.pluginSelections = make(map[string]bool)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitPlugins {
+		t.Errorf("screen = %d, want screenInitPlugins (%d) after esc", model.screen, screenInitPlugins)
 	}
 }

@@ -389,3 +389,114 @@ func TestRunInit_MethodologySummaryPrinted(t *testing.T) {
 		t.Errorf("output should contain 'Team roles:', got:\n%s", out)
 	}
 }
+
+// ─── RunInit MCP integration ─────────────────────────────────────────────────
+
+func TestRunInit_MCPWrittenToProjectJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=tdd"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	if _, ok := proj.MCP["context7"]; !ok {
+		t.Errorf("project.json MCP should contain 'context7', got: %v", proj.MCP)
+	}
+}
+
+func TestRunInit_MCPContext7EnabledByDefault(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=tdd"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	c7, ok := proj.MCP["context7"]
+	if !ok {
+		t.Fatal("context7 not found in project.json MCP")
+	}
+	if !c7.Enabled {
+		t.Error("context7 should be Enabled by default")
+	}
+}
+
+func TestRunInit_MCPSummaryPrinted(t *testing.T) {
+	dir := t.TempDir()
+	// Create a go.mod so we get project metadata (triggers the summary block).
+	goMod := "module github.com/example/test\n\ngo 1.24\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=tdd"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "MCP servers: context7") {
+		t.Errorf("output should contain 'MCP servers: context7', got:\n%s", out)
+	}
+}
+
+// ─── buildSmartProjectConfig MCP ─────────────────────────────────────────────
+
+func TestBuildSmartProjectConfig_HasDefaultMCP(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "")
+
+	if len(proj.MCP) == 0 {
+		t.Error("buildSmartProjectConfig should always include default MCP servers")
+	}
+	if _, ok := proj.MCP["context7"]; !ok {
+		t.Errorf("MCP should contain 'context7', got: %v", proj.MCP)
+	}
+}
+
+func TestBuildSmartProjectConfig_MCPAndMethodology(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD)
+
+	if proj.Methodology != domain.MethodologyTDD {
+		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyTDD)
+	}
+	if len(proj.Team) == 0 {
+		t.Error("Team should be populated for TDD methodology")
+	}
+	if _, ok := proj.MCP["context7"]; !ok {
+		t.Errorf("MCP should contain 'context7' even with methodology set, got: %v", proj.MCP)
+	}
+}
