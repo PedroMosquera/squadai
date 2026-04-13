@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
@@ -163,6 +164,15 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "  Methodology: %s\n", meth)
 			fmt.Fprintf(stdout, "  Team roles:  %d\n", len(domain.DefaultTeam(meth)))
 		}
+		mcpServers := DefaultMCPServers()
+		if len(mcpServers) > 0 {
+			mcpNames := make([]string, 0, len(mcpServers))
+			for name := range mcpServers {
+				mcpNames = append(mcpNames, name)
+			}
+			sort.Strings(mcpNames)
+			fmt.Fprintf(stdout, "  MCP servers: %s\n", strings.Join(mcpNames, ", "))
+		}
 		fmt.Fprintln(stdout)
 	}
 
@@ -220,6 +230,9 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 		proj.Methodology = methodology
 		proj.Team = domain.DefaultTeam(methodology)
 	}
+
+	// Always include recommended MCP servers.
+	proj.MCP = DefaultMCPServers()
 
 	return proj
 }

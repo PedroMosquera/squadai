@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,6 +23,9 @@ const (
 	screenResult
 	screenInitMethodology
 	screenTeamStatus
+	screenInitMCP
+	screenInitPlugins
+	screenInitSummary
 )
 
 // menuItem is a selectable action.
@@ -55,8 +59,10 @@ type Model struct {
 	quitting bool
 
 	// Init wizard state.
-	methodology domain.Methodology
-	initCursor  int
+	methodology      domain.Methodology
+	initCursor       int
+	mcpSelections    map[string]bool
+	pluginSelections map[string]bool
 }
 
 // NewModel creates a TUI model with the given state.
@@ -177,7 +183,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.methodology = methodologies[m.initCursor]
-			m.screen = screenMenu // Commit 5 will wire to MCP screen
+			// Initialize MCP selections with Context7 pre-selected
+			m.mcpSelections = map[string]bool{"context7": true}
+			m.initCursor = 0
+			m.screen = screenInitMCP
 			return m, nil
 		case "esc":
 			m.screen = screenMenu
@@ -188,6 +197,78 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "esc", "enter", "q":
 			m.screen = screenMenu
+			return m, nil
+		}
+
+	case screenInitMCP:
+		mcpServers := cli.DefaultMCPServers()
+		mcpNames := sortedKeys(mcpServers)
+		switch key {
+		case "up", "k":
+			if m.initCursor > 0 {
+				m.initCursor--
+			}
+		case "down", "j":
+			if m.initCursor < len(mcpNames)-1 {
+				m.initCursor++
+			}
+		case " ":
+			if len(mcpNames) > 0 && m.mcpSelections != nil {
+				name := mcpNames[m.initCursor]
+				m.mcpSelections[name] = !m.mcpSelections[name]
+			}
+		case "enter":
+			m.pluginSelections = make(map[string]bool)
+			m.initCursor = 0
+			m.screen = screenInitPlugins
+			return m, nil
+		case "esc":
+			m.screen = screenInitMethodology
+			return m, nil
+		}
+
+	case screenInitPlugins:
+		filtered := cli.FilterPlugins(cli.AvailablePlugins(), m.adapters, m.methodology)
+		pluginNames := sortedKeys(filtered)
+		switch key {
+		case "up", "k":
+			if m.initCursor > 0 {
+				m.initCursor--
+			}
+		case "down", "j":
+			if m.initCursor < len(pluginNames)-1 {
+				m.initCursor++
+			}
+		case " ":
+			if len(pluginNames) > 0 && m.pluginSelections != nil {
+				name := pluginNames[m.initCursor]
+				m.pluginSelections[name] = !m.pluginSelections[name]
+			}
+		case "enter":
+			m.initCursor = 0
+			m.screen = screenInitSummary
+			return m, nil
+		case "esc":
+			m.screen = screenInitMCP
+			return m, nil
+		}
+
+	case screenInitSummary:
+		switch key {
+		case "enter":
+			m.screen = screenRunning
+			m.output = ""
+			m.err = nil
+			// TODO(v2-session4): Pass mcpSelections and pluginSelections to RunInit
+			// once CLI flags for MCP/plugin configuration are implemented.
+			args := []string{"--methodology=" + string(m.methodology)}
+			return m, func() tea.Msg {
+				var buf bytes.Buffer
+				err := cli.RunInit(args, &buf)
+				return commandResult{output: buf.String(), err: err}
+			}
+		case "esc":
+			m.screen = screenInitPlugins
 			return m, nil
 		}
 	}
@@ -234,6 +315,12 @@ func (m Model) View() string {
 		return m.viewInitMethodology()
 	case screenTeamStatus:
 		return m.viewTeamStatus()
+	case screenInitMCP:
+		return m.viewInitMCP()
+	case screenInitPlugins:
+		return m.viewInitPlugins()
+	case screenInitSummary:
+		return m.viewInitSummary()
 	}
 	return ""
 }
@@ -330,11 +417,109 @@ func (m Model) viewTeamStatus() string {
 	} else {
 		fmt.Fprintf(&b, "Methodology: %s\n\n", m.methodology)
 		team := domain.DefaultTeam(m.methodology)
-		for name, role := range team {
+		names := sortedKeys(team)
+		for _, name := range names {
+			role := team[name]
 			fmt.Fprintf(&b, "  %-14s %s\n", name+":", role.Description)
 		}
 	}
 	b.WriteString("\nPress any key to return to menu.")
+	return b.String()
+}
+
+// sortedKeys returns the sorted keys of any map[string]V.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// viewInitMCP renders the MCP server configuration screen.
+func (m Model) viewInitMCP() string {
+	var b strings.Builder
+	b.WriteString("MCP Server Configuration\n\n")
+	mcpServers := cli.DefaultMCPServers()
+	names := sortedKeys(mcpServers)
+	for i, name := range names {
+		cursor := "  "
+		if i == m.initCursor {
+			cursor = "> "
+		}
+		checked := "[ ]"
+		if m.mcpSelections != nil && m.mcpSelections[name] {
+			checked = "[x]"
+		}
+		server := mcpServers[name]
+		fmt.Fprintf(&b, "%s%s %s\n", cursor, checked, name)
+		fmt.Fprintf(&b, "      Type: %s\n\n", server.Type)
+	}
+	b.WriteString("\n↑/↓: navigate  space: toggle  enter: next  esc: back")
+	return b.String()
+}
+
+// viewInitPlugins renders the plugin selection screen.
+func (m Model) viewInitPlugins() string {
+	var b strings.Builder
+	b.WriteString("Plugin Selection\n\n")
+	filtered := cli.FilterPlugins(cli.AvailablePlugins(), m.adapters, m.methodology)
+	names := sortedKeys(filtered)
+	if len(names) == 0 {
+		b.WriteString("No plugins available for current configuration.\n")
+	} else {
+		for i, name := range names {
+			cursor := "  "
+			if i == m.initCursor {
+				cursor = "> "
+			}
+			checked := "[ ]"
+			if m.pluginSelections != nil && m.pluginSelections[name] {
+				checked = "[x]"
+			}
+			plugin := filtered[name]
+			fmt.Fprintf(&b, "%s%s %s\n", cursor, checked, name)
+			fmt.Fprintf(&b, "      %s\n\n", plugin.Description)
+		}
+	}
+	if m.methodology == domain.MethodologyTDD {
+		b.WriteString("Note: Superpowers plugin is not available with TDD methodology.\n\n")
+	}
+	b.WriteString("↑/↓: navigate  space: toggle  enter: next  esc: back")
+	return b.String()
+}
+
+// viewInitSummary renders the init summary confirmation screen.
+func (m Model) viewInitSummary() string {
+	var b strings.Builder
+	b.WriteString("Init Summary\n\n")
+	fmt.Fprintf(&b, "Methodology: %s\n", m.methodology)
+	team := domain.DefaultTeam(m.methodology)
+	fmt.Fprintf(&b, "Team roles:  %d\n\n", len(team))
+
+	b.WriteString("MCP Servers:\n")
+	mcpNames := sortedKeys(m.mcpSelections)
+	for _, name := range mcpNames {
+		if m.mcpSelections[name] {
+			fmt.Fprintf(&b, "  ✓ %s\n", name)
+		}
+	}
+
+	b.WriteString("\nPlugins:\n")
+	hasPlugins := false
+	pluginNames := sortedKeys(m.pluginSelections)
+	for _, name := range pluginNames {
+		if m.pluginSelections[name] {
+			fmt.Fprintf(&b, "  ✓ %s\n", name)
+			hasPlugins = true
+		}
+	}
+	if !hasPlugins {
+		b.WriteString("  (none)\n")
+	}
+
+	b.WriteString("\nPress enter to confirm  esc: back")
 	return b.String()
 }
 

@@ -1,6 +1,7 @@
 package assets
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -90,6 +91,22 @@ func TestAllSkillFilesReadable(t *testing.T) {
 				t.Errorf("%s: expected YAML frontmatter markers (---)", path)
 			}
 		})
+	}
+}
+
+// ─── MCP asset files ─────────────────────────────────────────────────────────
+
+func TestMCPAssetReadable(t *testing.T) {
+	content := MustRead("mcp/context7.json")
+	if len(content) == 0 {
+		t.Error("mcp/context7.json should return non-empty content")
+	}
+}
+
+func TestMCPAssetValidJSON(t *testing.T) {
+	content := MustRead("mcp/context7.json")
+	if !json.Valid([]byte(content)) {
+		t.Errorf("mcp/context7.json should be valid JSON, got: %s", content)
 	}
 }
 
