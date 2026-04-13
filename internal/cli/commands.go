@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/cursor"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/vscode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
 	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
 	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
 	"github.com/PedroMosquera/agent-manager-pro/internal/config"
@@ -869,8 +872,8 @@ func collectAllTargetPaths(actions []domain.PlannedAction) []string {
 }
 
 // DetectAdapters returns all registered adapters that are installed or have config.
-// OpenCode (team lane) is always included. Personal-lane adapters (Claude Code)
-// are included only when detected on the system.
+// OpenCode (team lane) is always included. Personal-lane adapters (Claude Code,
+// VS Code Copilot, Cursor, Windsurf) are included only when detected on the system.
 func DetectAdapters(homeDir string) []domain.Adapter {
 	ctx := context.Background()
 	var adapters []domain.Adapter
@@ -883,6 +886,21 @@ func DetectAdapters(homeDir string) []domain.Adapter {
 	cc := claude.New()
 	if installed, configFound, err := cc.Detect(ctx, homeDir); err == nil && (installed || configFound) {
 		adapters = append(adapters, cc)
+	}
+
+	vs := vscode.New()
+	if installed, configFound, err := vs.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, vs)
+	}
+
+	cu := cursor.New()
+	if installed, configFound, err := cu.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, cu)
+	}
+
+	ws := windsurf.New()
+	if installed, configFound, err := ws.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, ws)
 	}
 
 	return adapters
