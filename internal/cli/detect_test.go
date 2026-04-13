@@ -261,3 +261,80 @@ go 1.24
 		t.Errorf("Name = %q, want %q", meta.Name, "dual-project")
 	}
 }
+
+// ─── Python project detection ──────────────────────────────────────────────
+
+func TestDetectPython_PyprojectToml(t *testing.T) {
+	dir := t.TempDir()
+
+	pyproject := `[project]
+name = "my-flask-app"
+version = "1.0.0"
+dependencies = [
+    "flask>=3.0",
+    "sqlalchemy",
+]
+`
+	if err := os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "tests"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.Language != "Python" {
+		t.Errorf("Language = %q, want %q", meta.Language, "Python")
+	}
+	if meta.Name != "my-flask-app" {
+		t.Errorf("Name = %q, want %q", meta.Name, "my-flask-app")
+	}
+	if meta.Framework != "Flask" {
+		t.Errorf("Framework = %q, want %q", meta.Framework, "Flask")
+	}
+	if meta.TestCommand != "pytest" {
+		t.Errorf("TestCommand = %q, want %q", meta.TestCommand, "pytest")
+	}
+	if meta.LintCommand != "ruff check ." {
+		t.Errorf("LintCommand = %q, want %q", meta.LintCommand, "ruff check .")
+	}
+}
+
+func TestDetectPython_RequirementsTxt(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(dir, "requirements.txt"), []byte("flask==3.0.0\nrequests\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.Language != "Python" {
+		t.Errorf("Language = %q, want %q", meta.Language, "Python")
+	}
+}
+
+func TestDetectPython_NotPresent(t *testing.T) {
+	dir := t.TempDir()
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.Language == "Python" {
+		t.Error("should not detect Python in empty directory")
+	}
+}
+
+func TestDetectPython_SetupPy(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(dir, "setup.py"), []byte("from setuptools import setup\nsetup(name='legacy')"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.Language != "Python" {
+		t.Errorf("Language = %q, want %q", meta.Language, "Python")
+	}
+}
