@@ -87,14 +87,79 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	}
 }
 
-func TestPlan_Claude_ReturnsNil(t *testing.T) {
+func TestPlan_Claude_NewSkills_ReturnsCreate(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := New(testSkills(), project)
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionCreate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
+	}
+	expected := filepath.Join(project, ".claude", "skills", "deploy", "SKILL.md")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+}
+
+func TestPlan_Claude_UpToDate_ReturnsSkip(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	skillDefs := testSkills()
+	inst := New(skillDefs, project)
+
+	targetPath := filepath.Join(project, ".claude", "skills", "deploy", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := renderSkill("deploy", skillDefs["deploy"])
+	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if actions[0].Action != domain.ActionSkip {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionSkip)
+	}
+}
+
+func TestApply_Claude_CreatesSkillFile(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
 	inst := New(testSkills(), project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for claude, got %d", len(actions))
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	data, _ := os.ReadFile(actions[0].TargetPath)
+	if !strings.Contains(string(data), "description: Docker deployment") {
+		t.Error("should contain skill description")
+	}
+}
+
+func TestVerify_Claude_AllPass_AfterApply(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := New(testSkills(), project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	results, _ := inst.Verify(adapter, t.TempDir(), project)
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("check %q failed: %s", r.Check, r.Message)
+		}
 	}
 }
 

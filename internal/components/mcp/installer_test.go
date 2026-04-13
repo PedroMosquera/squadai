@@ -47,7 +47,7 @@ func TestNew_NilConfig(t *testing.T) {
 	}
 }
 
-// ─── Plan (OpenCode) ────────────────────────────────────────────────────────
+// ─── Plan (OpenCode — MergeIntoSettings) ────────────────────────────────────
 
 func TestPlan_OpenCode_NewFile_ReturnsCreate(t *testing.T) {
 	project := t.TempDir()
@@ -146,19 +146,106 @@ func TestPlan_OpenCode_MissingMCPKey_ReturnsUpdate(t *testing.T) {
 	}
 }
 
-// ─── Plan (unsupported adapters) ────────────────────────────────────────────
+// ─── Plan (Claude Code — SeparateMCPFiles) ──────────────────────────────────
 
-func TestPlan_Claude_ReturnsNil(t *testing.T) {
+func TestPlan_Claude_SeparateFiles_ReturnsCreate(t *testing.T) {
+	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
 	inst := newTestInstaller()
 
-	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	actions, err := inst.Plan(adapter, home, project)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for claude (mcp unsupported), got %d", len(actions))
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action (one server), got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionCreate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
+	}
+	// Should target ~/.claude/mcp/context7.json
+	expected := filepath.Join(home, ".claude", "mcp", "context7.json")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+}
+
+func TestPlan_Claude_SeparateFiles_UpToDate_ReturnsSkip(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := newTestInstaller()
+
+	// Write existing file matching expected content.
+	mcpDir := filepath.Join(home, ".claude", "mcp")
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	expected := serverToJSON(domain.MCPServerDef{
+		Type: "remote",
+		URL:  "https://mcp.context7.com/mcp",
+	})
+	if err := os.WriteFile(filepath.Join(mcpDir, "context7.json"), expected, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := inst.Plan(adapter, home, project)
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionSkip {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionSkip)
+	}
+}
+
+func TestPlan_Claude_SeparateFiles_Outdated_ReturnsUpdate(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := newTestInstaller()
+
+	// Write existing file with wrong content.
+	mcpDir := filepath.Join(home, ".claude", "mcp")
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mcpDir, "context7.json"), []byte(`{"type":"remote","url":"https://old.com"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := inst.Plan(adapter, home, project)
+	if actions[0].Action != domain.ActionUpdate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionUpdate)
+	}
+}
+
+func TestPlan_Claude_MultipleServers_SeparateFiles(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := New(map[string]domain.MCPServerDef{
+		"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+		"sentry":   {Type: "remote", URL: "https://mcp.sentry.dev", Enabled: true},
+	})
+
+	actions, err := inst.Plan(adapter, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions (one per server), got %d", len(actions))
+	}
+
+	// Both should be Create actions targeting separate files.
+	for _, a := range actions {
+		if a.Action != domain.ActionCreate {
+			t.Errorf("Action = %q, want %q", a.Action, domain.ActionCreate)
+		}
+		dir := filepath.Dir(a.TargetPath)
+		if filepath.Base(dir) != "mcp" {
+			t.Errorf("file should be in mcp/ dir, got %s", dir)
+		}
 	}
 }
 
@@ -178,7 +265,7 @@ func TestPlan_NoServers_ReturnsNil(t *testing.T) {
 	}
 }
 
-// ─── Apply ──────────────────────────────────────────────────────────────────
+// ─── Apply (OpenCode — MergeIntoSettings) ───────────────────────────────────
 
 func TestApply_OpenCode_CreatesFileWithMCPServers(t *testing.T) {
 	project := t.TempDir()
@@ -381,7 +468,66 @@ func TestApply_UpdatesOutdatedMCP(t *testing.T) {
 	}
 }
 
-// ─── Verify ─────────────────────────────────────────────────────────────────
+// ─── Apply (Claude Code — SeparateMCPFiles) ─────────────────────────────────
+
+func TestApply_Claude_SeparateFile_CreatesFile(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, home, project)
+	if len(actions) == 0 {
+		t.Fatal("expected at least 1 action")
+	}
+
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	data, err := os.ReadFile(actions[0].TargetPath)
+	if err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+
+	var doc map[string]interface{}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if doc["type"] != "remote" {
+		t.Errorf("type = %v, want remote", doc["type"])
+	}
+	if doc["url"] != "https://mcp.context7.com/mcp" {
+		t.Errorf("url = %v, want https://mcp.context7.com/mcp", doc["url"])
+	}
+}
+
+func TestApply_Claude_SeparateFile_Idempotent(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := newTestInstaller()
+
+	// First apply.
+	actions, _ := inst.Plan(adapter, home, project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(actions[0].TargetPath)
+
+	// Second plan — should be Skip.
+	actions2, _ := inst.Plan(adapter, home, project)
+	if actions2[0].Action != domain.ActionSkip {
+		t.Fatalf("second plan should be Skip, got %q", actions2[0].Action)
+	}
+
+	second, _ := os.ReadFile(actions[0].TargetPath)
+	if string(first) != string(second) {
+		t.Error("content should not change")
+	}
+}
+
+// ─── Verify (OpenCode — MergeIntoSettings) ──────────────────────────────────
 
 func TestVerify_OpenCode_AllPass_AfterApply(t *testing.T) {
 	project := t.TempDir()
@@ -455,20 +601,6 @@ func TestVerify_FailsWhenMCPOutdated(t *testing.T) {
 	}
 }
 
-func TestVerify_Claude_ReturnsNil(t *testing.T) {
-	project := t.TempDir()
-	adapter := claude.New()
-	inst := newTestInstaller()
-
-	results, err := inst.Verify(adapter, t.TempDir(), project)
-	if err != nil {
-		t.Fatalf("Verify error: %v", err)
-	}
-	if len(results) != 0 {
-		t.Errorf("expected 0 results for claude (mcp unsupported), got %d", len(results))
-	}
-}
-
 func TestVerify_NoServers_ReturnsNil(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
@@ -480,6 +612,50 @@ func TestVerify_NoServers_ReturnsNil(t *testing.T) {
 	}
 	if len(results) != 0 {
 		t.Errorf("expected 0 results for empty servers, got %d", len(results))
+	}
+}
+
+// ─── Verify (Claude Code — SeparateMCPFiles) ────────────────────────────────
+
+func TestVerify_Claude_SeparateFiles_AllPass(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, home, project)
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	results, err := inst.Verify(adapter, home, project)
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("check %q failed: %s", r.Check, r.Message)
+		}
+	}
+	if len(results) != 2 {
+		t.Errorf("expected 2 verify checks, got %d", len(results))
+	}
+}
+
+func TestVerify_Claude_SeparateFiles_FailsWhenMissing(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := newTestInstaller()
+
+	results, _ := inst.Verify(adapter, home, project)
+	if len(results) == 0 {
+		t.Fatal("expected verify results")
+	}
+	if results[0].Passed {
+		t.Error("should fail when MCP file missing")
 	}
 }
 
