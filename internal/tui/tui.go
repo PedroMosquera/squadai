@@ -13,6 +13,9 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
+// Ensure badgeDisabledStyle is used (it renders unchecked checkboxes).
+var _ = badgeDisabledStyle
+
 // screen tracks which screen is active.
 type screen int
 
@@ -328,102 +331,187 @@ func (m Model) View() string {
 func (m Model) viewIntro() string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("agent-manager %s\n", m.version))
-	b.WriteString("Team-consistent AI setup with safe local customization.\n\n")
-	b.WriteString(fmt.Sprintf("Mode: %s\n", m.mode))
+	// Header panel: version + mode
+	var hdr strings.Builder
+	hdr.WriteString(fmt.Sprintf("agent-manager %s\n", m.version))
+	hdr.WriteString("Team-consistent AI setup with safe local customization.\n")
+	hdr.WriteString(fmt.Sprintf("Mode: %s", m.mode))
+	b.WriteString(panelStyle.Render(hdr.String()))
+	b.WriteString("\n\n")
 
-	b.WriteString("Adapters:\n")
+	// Adapter list panel
+	b.WriteString(headingStyle.Render("Detected Agents"))
+	b.WriteString("\n")
+	var adapterContent strings.Builder
 	if len(m.adapters) == 0 {
-		b.WriteString("  (none detected)\n")
+		adapterContent.WriteString("  (none detected)")
 	} else {
 		for _, a := range m.adapters {
+			id := string(a.ID())
 			lane := string(a.Lane())
-			b.WriteString(fmt.Sprintf("  %s (%s)\n", a.ID(), lane))
+			strategy := string(a.DelegationStrategy())
+			adapterContent.WriteString(fmt.Sprintf("  %-16s %-10s %s\n", id, "("+lane+")", strategy))
 		}
 	}
+	b.WriteString(panelStyle.Render(strings.TrimRight(adapterContent.String(), "\n")))
+	b.WriteString("\n\n")
 
-	b.WriteString("\nPress any key to continue.")
+	b.WriteString(mutedStyle.Render("Press any key to continue."))
 	return b.String()
 }
 
 func (m Model) viewMenu() string {
-	var b strings.Builder
-
-	b.WriteString(fmt.Sprintf("agent-manager %s\n\n", m.version))
+	var menuContent strings.Builder
+	menuContent.WriteString(headingStyle.Render("agent-manager "+m.version) + "\n\n")
 
 	for i, item := range menuItems {
-		cursor := "  "
 		if i == m.cursor {
-			cursor = "> "
+			menuContent.WriteString(activeStyle.Render("> "+item.label) + "\n")
+		} else {
+			menuContent.WriteString("  " + item.label + "\n")
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, item.label))
 	}
 
-	b.WriteString("\nUse arrow keys to navigate, enter to select, q to quit.")
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(menuContent.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate  enter: select  q: quit"))
 	return b.String()
 }
 
 func (m Model) viewRunning() string {
-	return "Running...\n"
+	return mutedStyle.Render("Running...") + "\n"
 }
 
 func (m Model) viewResult() string {
-	var b strings.Builder
+	var resultContent strings.Builder
 
 	if m.output != "" {
-		b.WriteString(m.output)
+		resultContent.WriteString(m.output)
 		if !strings.HasSuffix(m.output, "\n") {
-			b.WriteString("\n")
+			resultContent.WriteString("\n")
 		}
 	}
 	if m.err != nil {
-		b.WriteString(fmt.Sprintf("\nError: %v\n", m.err))
+		resultContent.WriteString("\n")
+		resultContent.WriteString(errorStyle.Render("Error: " + m.err.Error()))
+		resultContent.WriteString("\n")
+	} else if m.output != "" {
+		resultContent.WriteString(successStyle.Render("Done."))
+		resultContent.WriteString("\n")
 	}
 
-	b.WriteString("\nPress any key to return to menu.")
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(resultContent.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("Press any key to return to menu."))
 	return b.String()
 }
 
 // viewInitMethodology renders the methodology selection screen.
 func (m Model) viewInitMethodology() string {
-	var b strings.Builder
-	b.WriteString("Select Methodology\n\n")
 	methodologies := []struct {
 		value domain.Methodology
 		label string
 		desc  string
 	}{
-		{domain.MethodologyTDD, "TDD (Test-Driven Development)", "6 roles: red-green-refactor workflow"},
-		{domain.MethodologySDD, "SDD (Spec-Driven Development)", "8 roles: specification-first workflow"},
-		{domain.MethodologyConventional, "Conventional", "4 roles: standard development workflow"},
+		{domain.MethodologyTDD, "TDD", "Test-Driven Development"},
+		{domain.MethodologySDD, "SDD", "Spec-Driven Development"},
+		{domain.MethodologyConventional, "Conventional", "Standard development workflow"},
 	}
+
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Select Development Methodology") + "\n\n")
+
 	for i, m2 := range methodologies {
-		cursor := "  "
+		// Build the role pipeline line from DefaultTeam
+		team := domain.DefaultTeam(m2.value)
+		roleNames := sortedKeys(team)
+
 		if i == m.initCursor {
-			cursor = "> "
+			content.WriteString(activeStyle.Render("> "+m2.label+" — "+m2.desc) + "\n")
+		} else {
+			content.WriteString("  " + m2.label + " — " + m2.desc + "\n")
 		}
-		fmt.Fprintf(&b, "%s%s\n    %s\n\n", cursor, m2.label, m2.desc)
+		if len(roleNames) > 0 {
+			content.WriteString(mutedStyle.Render("    "+strings.Join(roleNames, " → ")) + "\n")
+		}
+		content.WriteString("\n")
 	}
-	b.WriteString("\n↑/↓: navigate  enter: select  esc: back")
+
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate  enter: select  esc: back"))
 	return b.String()
 }
 
 // viewTeamStatus renders the team status screen showing the configured team composition.
 func (m Model) viewTeamStatus() string {
-	var b strings.Builder
-	b.WriteString("Team Status\n\n")
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Team Status") + "\n\n")
+
 	if m.methodology == "" {
-		b.WriteString("No methodology selected.\nRun Init to configure your team.\n")
+		content.WriteString("No methodology selected.\nRun Init to configure your team.\n")
 	} else {
-		fmt.Fprintf(&b, "Methodology: %s\n\n", m.methodology)
+		content.WriteString("Methodology: ")
+		content.WriteString(methodologyBadgeStyle.Render(string(m.methodology)))
+		content.WriteString("\n\n")
+
+		content.WriteString(headingStyle.Render("Team Roles") + "\n")
 		team := domain.DefaultTeam(m.methodology)
 		names := sortedKeys(team)
 		for _, name := range names {
 			role := team[name]
-			fmt.Fprintf(&b, "  %-14s %s\n", name+":", role.Description)
+			content.WriteString(fmt.Sprintf("  %-14s %s\n", name+":", role.Description))
+		}
+
+		// MCP Servers section
+		content.WriteString("\n")
+		content.WriteString(headingStyle.Render("MCP Servers") + "\n")
+		if len(m.mcpSelections) == 0 {
+			content.WriteString(mutedStyle.Render("  (not configured)") + "\n")
+		} else {
+			for _, name := range sortedKeys(m.mcpSelections) {
+				if m.mcpSelections[name] {
+					content.WriteString("  " + badgeActiveStyle.Render("●") + " " + name + "  " + badgeActiveStyle.Render("active") + "\n")
+				}
+			}
+			allInactive := true
+			for _, v := range m.mcpSelections {
+				if v {
+					allInactive = false
+					break
+				}
+			}
+			if allInactive {
+				content.WriteString(mutedStyle.Render("  (not configured)") + "\n")
+			}
+		}
+
+		// Plugins section
+		content.WriteString("\n")
+		content.WriteString(headingStyle.Render("Plugins") + "\n")
+		if len(m.pluginSelections) == 0 {
+			content.WriteString(mutedStyle.Render("  (none enabled)") + "\n")
+		} else {
+			hasEnabled := false
+			for _, name := range sortedKeys(m.pluginSelections) {
+				if m.pluginSelections[name] {
+					content.WriteString("  " + badgeActiveStyle.Render(name) + "\n")
+					hasEnabled = true
+				}
+			}
+			if !hasEnabled {
+				content.WriteString(mutedStyle.Render("  (none enabled)") + "\n")
+			}
 		}
 	}
-	b.WriteString("\nPress any key to return to menu.")
+
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("Press any key to return to menu."))
 	return b.String()
 }
 
@@ -439,87 +527,150 @@ func sortedKeys[V any](m map[string]V) []string {
 
 // viewInitMCP renders the MCP server configuration screen.
 func (m Model) viewInitMCP() string {
-	var b strings.Builder
-	b.WriteString("MCP Server Configuration\n\n")
 	mcpServers := cli.DefaultMCPServers()
 	names := sortedKeys(mcpServers)
+
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("MCP Servers") + "\n\n")
+
 	for i, name := range names {
-		cursor := "  "
-		if i == m.initCursor {
-			cursor = "> "
-		}
-		checked := "[ ]"
-		if m.mcpSelections != nil && m.mcpSelections[name] {
-			checked = "[x]"
-		}
 		server := mcpServers[name]
-		fmt.Fprintf(&b, "%s%s %s\n", cursor, checked, name)
-		fmt.Fprintf(&b, "      Type: %s\n\n", server.Type)
+		var checked, checkedStr string
+		if m.mcpSelections != nil && m.mcpSelections[name] {
+			checked = badgeActiveStyle.Render("[x]")
+			checkedStr = "[x]"
+		} else {
+			checked = badgeDisabledStyle.Render("[ ]")
+			checkedStr = "[ ]"
+		}
+		_ = checkedStr
+
+		var nameStr string
+		if i == m.initCursor {
+			nameStr = activeStyle.Render(name)
+		} else {
+			nameStr = name
+		}
+
+		content.WriteString(fmt.Sprintf("  %s %s\n", checked, nameStr))
+		if len(server.Command) > 0 {
+			content.WriteString(mutedStyle.Render("      "+strings.Join(server.Command, " ")) + "\n")
+		}
+		content.WriteString("\n")
 	}
-	b.WriteString("\n↑/↓: navigate  space: toggle  enter: next  esc: back")
+
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate  space: toggle  enter: next  esc: back"))
 	return b.String()
 }
 
 // viewInitPlugins renders the plugin selection screen.
 func (m Model) viewInitPlugins() string {
-	var b strings.Builder
-	b.WriteString("Plugin Selection\n\n")
 	filtered := cli.FilterPlugins(cli.AvailablePlugins(), m.adapters, m.methodology)
 	names := sortedKeys(filtered)
+
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Optional Plugins") + "\n\n")
+
 	if len(names) == 0 {
-		b.WriteString("No plugins available for current configuration.\n")
+		content.WriteString("No plugins available for current configuration.\n")
 	} else {
 		for i, name := range names {
-			cursor := "  "
-			if i == m.initCursor {
-				cursor = "> "
-			}
-			checked := "[ ]"
-			if m.pluginSelections != nil && m.pluginSelections[name] {
-				checked = "[x]"
-			}
 			plugin := filtered[name]
-			fmt.Fprintf(&b, "%s%s %s\n", cursor, checked, name)
-			fmt.Fprintf(&b, "      %s\n\n", plugin.Description)
+			var checked string
+			if m.pluginSelections != nil && m.pluginSelections[name] {
+				checked = badgeActiveStyle.Render("[x]")
+			} else {
+				checked = badgeDisabledStyle.Render("[ ]")
+			}
+
+			var nameStr string
+			if i == m.initCursor {
+				nameStr = activeStyle.Render(name)
+			} else {
+				nameStr = name
+			}
+
+			content.WriteString(fmt.Sprintf("  %s %s\n", checked, nameStr))
+			content.WriteString(fmt.Sprintf("      %s\n", plugin.Description))
+			if len(plugin.SupportedAgents) > 0 {
+				content.WriteString(mutedStyle.Render("      Supports: "+strings.Join(plugin.SupportedAgents, ", ")) + "\n")
+			}
+			content.WriteString("\n")
 		}
 	}
+
 	if m.methodology == domain.MethodologyTDD {
-		b.WriteString("Note: Superpowers plugin is not available with TDD methodology.\n\n")
+		content.WriteString(errorStyle.Render("⚠ Superpowers plugin is not available with TDD methodology.") + "\n\n")
 	}
-	b.WriteString("↑/↓: navigate  space: toggle  enter: next  esc: back")
+
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate  space: toggle  enter: next  esc: back"))
 	return b.String()
 }
 
 // viewInitSummary renders the init summary confirmation screen.
 func (m Model) viewInitSummary() string {
-	var b strings.Builder
-	b.WriteString("Init Summary\n\n")
-	fmt.Fprintf(&b, "Methodology: %s\n", m.methodology)
-	team := domain.DefaultTeam(m.methodology)
-	fmt.Fprintf(&b, "Team roles:  %d\n\n", len(team))
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Setup Summary") + "\n\n")
 
-	b.WriteString("MCP Servers:\n")
+	content.WriteString(headingStyle.Render("Methodology") + ": ")
+	content.WriteString(methodologyBadgeStyle.Render(string(m.methodology)) + "\n")
+
+	team := domain.DefaultTeam(m.methodology)
+	content.WriteString(headingStyle.Render("Team") + fmt.Sprintf(": %d roles\n\n", len(team)))
+
+	content.WriteString(headingStyle.Render("MCP") + ":\n")
 	mcpNames := sortedKeys(m.mcpSelections)
+	hasMCP := false
 	for _, name := range mcpNames {
 		if m.mcpSelections[name] {
-			fmt.Fprintf(&b, "  ✓ %s\n", name)
+			content.WriteString(fmt.Sprintf("  ✓ %s\n", name))
+			hasMCP = true
 		}
 	}
+	if !hasMCP {
+		content.WriteString(mutedStyle.Render("  (none)") + "\n")
+	}
 
-	b.WriteString("\nPlugins:\n")
+	content.WriteString("\n")
+	content.WriteString(headingStyle.Render("Plugins") + ":\n")
 	hasPlugins := false
 	pluginNames := sortedKeys(m.pluginSelections)
 	for _, name := range pluginNames {
 		if m.pluginSelections[name] {
-			fmt.Fprintf(&b, "  ✓ %s\n", name)
+			content.WriteString(fmt.Sprintf("  ✓ %s\n", name))
 			hasPlugins = true
 		}
 	}
 	if !hasPlugins {
-		b.WriteString("  (none)\n")
+		content.WriteString(mutedStyle.Render("  (none)") + "\n")
 	}
 
-	b.WriteString("\nPress enter to confirm  esc: back")
+	content.WriteString("\n")
+	content.WriteString(headingStyle.Render("Agents") + ":\n")
+	if len(m.adapters) == 0 {
+		content.WriteString(mutedStyle.Render("  (none detected)") + "\n")
+	} else {
+		for _, a := range m.adapters {
+			content.WriteString(fmt.Sprintf("  %s\n", a.ID()))
+		}
+	}
+
+	content.WriteString("\n")
+	content.WriteString("This will create:\n")
+	content.WriteString(mutedStyle.Render("  .agent-manager/project.json") + "\n")
+	content.WriteString(mutedStyle.Render("  Agent-specific config files (e.g., AGENTS.md, CLAUDE.md)") + "\n")
+	content.WriteString(mutedStyle.Render("  .agent-manager/skills/ directory") + "\n")
+
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("enter: confirm  esc: go back"))
 	return b.String()
 }
 

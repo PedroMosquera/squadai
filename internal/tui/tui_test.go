@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -55,8 +56,12 @@ func TestIntroScreen_ShowsVersionAndMode(t *testing.T) {
 	if !strings.Contains(view, "Mode: team") {
 		t.Error("intro should show mode")
 	}
-	if !strings.Contains(view, "opencode (team)") {
-		t.Error("intro should show detected adapter")
+	// New format: "  opencode          (team)     solo"
+	if !strings.Contains(view, "opencode") {
+		t.Error("intro should show detected adapter ID")
+	}
+	if !strings.Contains(view, "(team)") {
+		t.Error("intro should show adapter lane")
 	}
 }
 
@@ -69,13 +74,14 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeHybrid, adapters, "/tmp/home")
 
 	view := m.View()
-	if !strings.Contains(view, "opencode (team)") {
+	// New format shows adapter ID, lane in parens, and delegation strategy
+	if !strings.Contains(view, "opencode") {
 		t.Error("should show opencode")
 	}
-	if !strings.Contains(view, "claude-code (personal)") {
+	if !strings.Contains(view, "claude-code") {
 		t.Error("should show claude-code")
 	}
-	if !strings.Contains(view, "vscode-copilot (personal)") {
+	if !strings.Contains(view, "vscode-copilot") {
 		t.Error("should show vscode-copilot")
 	}
 	if !strings.Contains(view, "Mode: hybrid") {
@@ -559,5 +565,344 @@ func TestInitSummary_EscGoesToPlugins(t *testing.T) {
 
 	if model.screen != screenInitPlugins {
 		t.Errorf("screen = %d, want screenInitPlugins (%d) after esc", model.screen, screenInitPlugins)
+	}
+}
+
+// ─── Style Tests ──────────────────────────────────────────────────────────────
+
+func TestStyles_AllDefined(t *testing.T) {
+	// Verify all 9 style variables can render without panicking.
+	// In no-TTY test environments lipgloss passes text through unchanged,
+	// so we just check each style renders the input text.
+	inputs := []struct {
+		name  string
+		style lipgloss.Style
+	}{
+		{"panelStyle", panelStyle},
+		{"headingStyle", headingStyle},
+		{"activeStyle", activeStyle},
+		{"mutedStyle", mutedStyle},
+		{"badgeActiveStyle", badgeActiveStyle},
+		{"badgeDisabledStyle", badgeDisabledStyle},
+		{"methodologyBadgeStyle", methodologyBadgeStyle},
+		{"errorStyle", errorStyle},
+		{"successStyle", successStyle},
+	}
+
+	for _, s := range inputs {
+		out := s.style.Render("test")
+		if !strings.Contains(out, "test") {
+			t.Errorf("style %s: Render(\"test\") = %q, expected it to contain \"test\"", s.name, out)
+		}
+	}
+}
+
+// ─── Intro Screen New Tests ───────────────────────────────────────────────────
+
+func TestIntroScreen_ShowsDelegationStrategy(t *testing.T) {
+	adapters := []domain.Adapter{
+		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
+	}
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+
+	view := m.View()
+	// Mock adapter returns DelegationSoloAgent = "solo"
+	if !strings.Contains(view, "solo") {
+		t.Errorf("intro should show delegation strategy 'solo', got:\n%s", view)
+	}
+}
+
+// ─── Menu Tests ───────────────────────────────────────────────────────────────
+
+func TestMenu_AllItemsPresent(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	view := m.View()
+	expectedLabels := []string{
+		"Init / Setup",
+		"Plan (dry-run)",
+		"Apply",
+		"Sync",
+		"Team Status",
+		"Verify",
+		"Restore backup",
+		"Quit",
+	}
+	for _, label := range expectedLabels {
+		if !strings.Contains(view, label) {
+			t.Errorf("menu should contain %q, got:\n%s", label, view)
+		}
+	}
+}
+
+// ─── Methodology Screen Tests ─────────────────────────────────────────────────
+
+func TestInitMethodology_ShowsTeamRoles(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+	m.initCursor = 0 // TDD selected
+
+	view := m.View()
+	// TDD team has: orchestrator, brainstormer, planner, implementer, reviewer, debugger
+	if !strings.Contains(view, "brainstormer") {
+		t.Errorf("methodology screen should show TDD team roles including 'brainstormer', got:\n%s", view)
+	}
+}
+
+// ─── MCP Screen Tests ──────────────────────────────────────────────────────────
+
+func TestInitMCP_ShowsCommandHint(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = map[string]bool{"context7": true}
+
+	view := m.View()
+	// DefaultMCPServers() context7 command is: npx -y @upstash/context7-mcp@latest
+	if !strings.Contains(view, "npx") {
+		t.Errorf("MCP screen should show command hint with 'npx', got:\n%s", view)
+	}
+}
+
+// ─── Plugins Screen Tests ─────────────────────────────────────────────────────
+
+func TestInitPlugins_ShowsSupportedAgents(t *testing.T) {
+	adapters := []domain.Adapter{
+		&mockAdapter{id: domain.AgentClaudeCode, lane: domain.LanePersonal},
+	}
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+	m.screen = screenInitPlugins
+	m.methodology = domain.MethodologySDD
+	m.pluginSelections = make(map[string]bool)
+
+	view := m.View()
+	if !strings.Contains(view, "Supports:") {
+		t.Errorf("plugins screen should show 'Supports:' for agents, got:\n%s", view)
+	}
+}
+
+func TestInitPlugins_TDDBlockMessage(t *testing.T) {
+	adapters := []domain.Adapter{
+		&mockAdapter{id: domain.AgentClaudeCode, lane: domain.LanePersonal},
+	}
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+	m.screen = screenInitPlugins
+	m.methodology = domain.MethodologyTDD
+	m.pluginSelections = make(map[string]bool)
+
+	view := m.View()
+	// With TDD, superpowers is blocked — should show warning
+	if !strings.Contains(view, "Superpowers") {
+		t.Errorf("plugins screen with TDD should show Superpowers blocking message, got:\n%s", view)
+	}
+	if !strings.Contains(view, "TDD") {
+		t.Errorf("plugins screen with TDD should mention TDD, got:\n%s", view)
+	}
+}
+
+// ─── Summary Screen Tests ──────────────────────────────────────────────────────
+
+func TestInitSummary_ShowsAgentList(t *testing.T) {
+	adapters := []domain.Adapter{
+		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
+	}
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+	m.screen = screenInitSummary
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = map[string]bool{"context7": true}
+	m.pluginSelections = make(map[string]bool)
+
+	view := m.View()
+	if !strings.Contains(view, "opencode") {
+		t.Errorf("summary should show adapter name 'opencode', got:\n%s", view)
+	}
+}
+
+func TestInitSummary_ShowsWillCreate(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitSummary
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = map[string]bool{"context7": true}
+	m.pluginSelections = make(map[string]bool)
+
+	view := m.View()
+	if !strings.Contains(view, "This will create") {
+		t.Errorf("summary should show 'This will create', got:\n%s", view)
+	}
+	if !strings.Contains(view, ".agent-manager/project.json") {
+		t.Errorf("summary should show '.agent-manager/project.json', got:\n%s", view)
+	}
+}
+
+func TestInitSummary_MCPNoneWhenEmpty(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitSummary
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = map[string]bool{} // empty
+	m.pluginSelections = make(map[string]bool)
+
+	view := m.View()
+	if !strings.Contains(view, "(none)") {
+		t.Errorf("summary with empty MCP selections should show '(none)', got:\n%s", view)
+	}
+}
+
+// ─── Team Status New Tests ─────────────────────────────────────────────────────
+
+func TestTeamStatus_ShowsMCPSection(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenTeamStatus
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = map[string]bool{"context7": true}
+
+	view := m.View()
+	if !strings.Contains(view, "MCP Servers") {
+		t.Errorf("team status should show 'MCP Servers' heading, got:\n%s", view)
+	}
+}
+
+func TestTeamStatus_ShowsPluginsSection(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenTeamStatus
+	m.methodology = domain.MethodologyTDD
+
+	view := m.View()
+	if !strings.Contains(view, "Plugins") {
+		t.Errorf("team status should show 'Plugins' heading, got:\n%s", view)
+	}
+}
+
+func TestTeamStatus_MCPActiveWhenSelected(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenTeamStatus
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = map[string]bool{"context7": true}
+
+	view := m.View()
+	if !strings.Contains(view, "context7") {
+		t.Errorf("team status with context7 selected should show 'context7', got:\n%s", view)
+	}
+}
+
+func TestTeamStatus_NotConfiguredWhenNil(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenTeamStatus
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = nil // nil selections
+
+	view := m.View()
+	if !strings.Contains(view, "not configured") {
+		t.Errorf("team status with nil mcpSelections should show 'not configured', got:\n%s", view)
+	}
+}
+
+// ─── Result Screen New Tests ──────────────────────────────────────────────────
+
+func TestViewResult_ShowsErrorMessage(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenResult
+	m.err = fmt.Errorf("deployment failed: connection refused")
+
+	view := m.View()
+	if !strings.Contains(view, "deployment failed") {
+		t.Errorf("result screen should show error message, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Error:") {
+		t.Errorf("result screen should show 'Error:' prefix, got:\n%s", view)
+	}
+}
+
+func TestViewResult_ShowsSuccessMessage(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenResult
+	m.output = "All 5 components applied successfully."
+	m.err = nil
+
+	view := m.View()
+	if !strings.Contains(view, "All 5 components applied successfully.") {
+		t.Errorf("result screen should show output, got:\n%s", view)
+	}
+}
+
+// ─── Back Navigation Test ──────────────────────────────────────────────────────
+
+func TestInitWizard_BackNavigation_FullRound(t *testing.T) {
+	// Start at summary, navigate back through each screen to menu.
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitSummary
+	m.methodology = domain.MethodologyTDD
+	m.mcpSelections = map[string]bool{"context7": true}
+	m.pluginSelections = make(map[string]bool)
+
+	// Esc from summary → plugins
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+	if model.screen != screenInitPlugins {
+		t.Errorf("esc from summary: screen = %d, want screenInitPlugins (%d)", model.screen, screenInitPlugins)
+	}
+
+	// Esc from plugins → MCP
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
+	if model.screen != screenInitMCP {
+		t.Errorf("esc from plugins: screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
+	}
+
+	// Esc from MCP → methodology
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
+	if model.screen != screenInitMethodology {
+		t.Errorf("esc from MCP: screen = %d, want screenInitMethodology (%d)", model.screen, screenInitMethodology)
+	}
+
+	// Esc from methodology → menu
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
+	if model.screen != screenMenu {
+		t.Errorf("esc from methodology: screen = %d, want screenMenu (%d)", model.screen, screenMenu)
+	}
+}
+
+// ─── Wizard Flow Tests ────────────────────────────────────────────────────────
+
+func TestInitWizard_MCPPreSelectedContext7(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMethodology
+	m.initCursor = 0 // TDD
+
+	// Select TDD — should pre-select context7
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitMCP {
+		t.Errorf("after methodology select: screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
+	}
+	if model.mcpSelections == nil {
+		t.Fatal("mcpSelections should be initialized after methodology selection")
+	}
+	if !model.mcpSelections["context7"] {
+		t.Error("context7 should be pre-selected after methodology selection")
+	}
+}
+
+func TestSortedKeys_DeterministicOrder(t *testing.T) {
+	m := map[string]bool{
+		"zebra":   true,
+		"alpha":   false,
+		"mango":   true,
+		"banana":  false,
+		"context": true,
+	}
+
+	keys := sortedKeys(m)
+	expected := []string{"alpha", "banana", "context", "mango", "zebra"}
+
+	if len(keys) != len(expected) {
+		t.Fatalf("sortedKeys: len = %d, want %d", len(keys), len(expected))
+	}
+	for i, k := range keys {
+		if k != expected[i] {
+			t.Errorf("sortedKeys[%d] = %q, want %q", i, k, expected[i])
+		}
 	}
 }
