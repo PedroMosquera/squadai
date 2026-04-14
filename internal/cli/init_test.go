@@ -752,3 +752,153 @@ func TestBuildSmartProjectConfig_FindSkillsInSkillsMap(t *testing.T) {
 		t.Error("find-skills should be in the Skills map")
 	}
 }
+
+// ─── RunInit --json ───────────────────────────────────────────────────────────
+
+func TestRunInit_JSONOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--json"}, &buf); err != nil {
+		t.Fatalf("RunInit --json error: %v", err)
+	}
+
+	var result struct {
+		ProjectDir    string          `json:"project_dir"`
+		Methodology   string          `json:"methodology"`
+		Adapters      []string        `json:"adapters"`
+		Components    map[string]bool `json:"components"`
+		SkillsWritten []string        `json:"skills_written"`
+		MCPServers    []string        `json:"mcp_servers"`
+		Plugins       []string        `json:"plugins"`
+		PolicyCreated bool            `json:"policy_created"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	}
+
+	if result.ProjectDir == "" {
+		t.Error("project_dir field should not be empty")
+	}
+	if result.Adapters == nil {
+		t.Error("adapters field should be an array (not null)")
+	}
+	if result.Components == nil {
+		t.Error("components field should be an object (not null)")
+	}
+	if result.SkillsWritten == nil {
+		t.Error("skills_written field should be an array (not null)")
+	}
+	if len(result.SkillsWritten) == 0 {
+		t.Error("skills_written should contain at least one entry")
+	}
+	if result.MCPServers == nil {
+		t.Error("mcp_servers field should be an array (not null)")
+	}
+	if result.Plugins == nil {
+		t.Error("plugins field should be an array (not null)")
+	}
+}
+
+func TestRunInit_JSONOutput_NoHumanText(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--json"}, &buf); err != nil {
+		t.Fatalf("RunInit --json error: %v", err)
+	}
+
+	out := buf.String()
+	// Human-readable output lines start with "  created", "  exists", or the
+	// "Run 'agent-manager apply'" prompt — none of these should appear in JSON mode.
+	for _, forbidden := range []string{"  created", "  exists", "  overwritten", "Run 'agent-manager"} {
+		if strings.Contains(out, forbidden) {
+			t.Errorf("--json should suppress human-readable output %q, got:\n%s", forbidden, out)
+		}
+	}
+	// Entire output must parse as a single JSON object.
+	var result map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, out)
+	}
+}
+
+func TestRunInit_JSONOutput_WithMethodology(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--json", "--methodology=tdd"}, &buf); err != nil {
+		t.Fatalf("RunInit --json --methodology=tdd error: %v", err)
+	}
+
+	var result struct {
+		Methodology string          `json:"methodology"`
+		Components  map[string]bool `json:"components"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	}
+
+	if result.Methodology != "tdd" {
+		t.Errorf("methodology = %q, want %q", result.Methodology, "tdd")
+	}
+	if !result.Components[string(domain.ComponentAgents)] {
+		t.Error("components[agents] should be true with --methodology=tdd")
+	}
+	if !result.Components[string(domain.ComponentCommands)] {
+		t.Error("components[commands] should be true with --methodology=tdd")
+	}
+}
+
+func TestRunInit_JSONOutput_PolicyCreatedFalseWithoutFlag(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--json"}, &buf); err != nil {
+		t.Fatalf("RunInit --json error: %v", err)
+	}
+
+	var result struct {
+		PolicyCreated bool `json:"policy_created"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	}
+	if result.PolicyCreated {
+		t.Error("policy_created should be false when --with-policy is not set")
+	}
+}
+
+func TestRunInit_JSONOutput_PolicyCreatedTrueWithFlag(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--json", "--with-policy"}, &buf); err != nil {
+		t.Fatalf("RunInit --json --with-policy error: %v", err)
+	}
+
+	var result struct {
+		PolicyCreated bool `json:"policy_created"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	}
+	if !result.PolicyCreated {
+		t.Error("policy_created should be true when --with-policy is set")
+	}
+}

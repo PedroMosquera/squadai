@@ -2,11 +2,256 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/PedroMosquera/agent-manager-pro/internal/config"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
+
+// ─── Help text coverage ──────────────────────────────────────────────────────
+
+func TestRunPlan_HelpText(t *testing.T) {
+	tests := []struct {
+		flag string
+	}{
+		{"--help"},
+		{"-h"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.flag, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := RunPlan([]string{tc.flag}, &buf); err != nil {
+				t.Fatalf("help should not error: %v", err)
+			}
+			out := buf.String()
+			for _, want := range []string{
+				"Usage: agent-manager plan",
+				"--dry-run",
+				"--json",
+				"read-only",
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("plan help missing %q, got:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestRunApply_HelpText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunApply([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Usage: agent-manager apply",
+		"--dry-run",
+		"--json",
+		"backed up automatically",
+		"rolled back",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("apply help missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunSync_HelpText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunSync([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Usage: agent-manager sync",
+		"--dry-run",
+		"--json",
+		"idempoten",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("sync help missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunSync_HelpDoesNotDelegatToApplyHelp(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunSync([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "Usage: agent-manager apply") {
+		t.Error("sync --help should show sync usage, not apply usage")
+	}
+}
+
+func TestRunVerify_HelpText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunVerify([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Usage: agent-manager verify",
+		"--json",
+		"PASS",
+		"FAIL",
+		"WARN",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("verify help missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunValidatePolicy_HelpText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunValidatePolicy([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Usage: agent-manager validate-policy",
+		"policy.json",
+		"--json",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("validate-policy help missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+// ─── RunValidatePolicy --json ────────────────────────────────────────────────
+
+func TestRunValidatePolicy_JSONOutput_ValidPolicy(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Write a valid policy file.
+	pol := domain.DefaultPolicyConfig()
+	policyPath := filepath.Join(dir, config.ProjectConfigDir, "policy.json")
+	if err := os.MkdirAll(filepath.Dir(policyPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(policyPath, pol); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	var buf bytes.Buffer
+	err := RunValidatePolicy([]string{"--json"}, &buf)
+	if err != nil {
+		t.Fatalf("RunValidatePolicy --json on valid policy should not error: %v", err)
+	}
+
+	var result struct {
+		Valid      bool     `json:"valid"`
+		Violations []string `json:"violations"`
+		PolicyPath string   `json:"policy_path"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	}
+	if !result.Valid {
+		t.Errorf("valid field = false, want true")
+	}
+	if result.Violations == nil {
+		t.Error("violations field should be an array (not null)")
+	}
+	if len(result.Violations) != 0 {
+		t.Errorf("violations = %v, want empty", result.Violations)
+	}
+	if result.PolicyPath == "" {
+		t.Error("policy_path field should not be empty")
+	}
+}
+
+func TestRunValidatePolicy_JSONOutput_NoHumanText(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	pol := domain.DefaultPolicyConfig()
+	policyPath := filepath.Join(dir, config.ProjectConfigDir, "policy.json")
+	if err := os.MkdirAll(filepath.Dir(policyPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(policyPath, pol); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	var buf bytes.Buffer
+	_ = RunValidatePolicy([]string{"--json"}, &buf)
+
+	out := buf.String()
+	if strings.Contains(out, "Policy is valid") {
+		t.Errorf("--json should suppress human-readable output, got: %s", out)
+	}
+	// The output must parse as JSON.
+	var result map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, out)
+	}
+}
+
+func TestRunBackupCreate_HelpText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunBackupCreate([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Usage: agent-manager backup create",
+		"--json",
+		"snapshot",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("backup create help missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunBackupList_HelpText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunBackupList([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Usage: agent-manager backup list",
+		"--json",
+		"restore",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("backup list help missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunRestore_HelpText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunRestore([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Usage: agent-manager restore",
+		"--dry-run",
+		"--json",
+		"backup-id",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("restore help missing %q, got:\n%s", want, out)
+		}
+	}
+}
 
 // ─── printVerifyResult ──────────────────────────────────────────────────────
 
