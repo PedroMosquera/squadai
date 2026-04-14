@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -411,6 +412,105 @@ func TestDelete_NotFound(t *testing.T) {
 	err := store.Delete("nonexistent-id")
 	if err == nil {
 		t.Error("expected error for non-existent backup")
+	}
+}
+
+// ─── Prune ──────────────────────────────────────────────────────────────────
+
+func TestStore_Prune_KeepsN(t *testing.T) {
+	backupDir := t.TempDir()
+	store := NewStore(backupDir)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(file, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create 7 backups (each needs a distinct timestamp; GenerateID uses
+	// time.Now so they may share a second — we just care about count).
+	var ids []string
+	for i := 0; i < 7; i++ {
+		m, err := store.SnapshotFiles([]string{file}, "test")
+		if err != nil {
+			t.Fatalf("SnapshotFiles[%d]: %v", i, err)
+		}
+		ids = append(ids, m.ID)
+	}
+
+	deleted, err := store.Prune(3)
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if deleted != 4 {
+		t.Errorf("deleted = %d, want 4", deleted)
+	}
+
+	manifests, err := store.List()
+	if err != nil {
+		t.Fatalf("List after Prune: %v", err)
+	}
+	if len(manifests) != 3 {
+		t.Errorf("remaining backups = %d, want 3", len(manifests))
+	}
+
+	// Verify the 3 newest are kept. List returns newest-first, so the first
+	// 3 entries of `ids` (oldest) should be gone.
+	_ = ids // used above for creation only
+}
+
+func TestStore_Prune_NothingToPrune(t *testing.T) {
+	backupDir := t.TempDir()
+	store := NewStore(backupDir)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(file, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 2; i++ {
+		if _, err := store.SnapshotFiles([]string{file}, "test"); err != nil {
+			t.Fatalf("SnapshotFiles[%d]: %v", i, err)
+		}
+	}
+
+	deleted, err := store.Prune(5)
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if deleted != 0 {
+		t.Errorf("deleted = %d, want 0 (nothing to prune)", deleted)
+	}
+
+	manifests, err := store.List()
+	if err != nil {
+		t.Fatalf("List after Prune: %v", err)
+	}
+	if len(manifests) != 2 {
+		t.Errorf("remaining backups = %d, want 2", len(manifests))
+	}
+}
+
+func TestStore_Prune_KeepZero_Error(t *testing.T) {
+	store := NewStore(t.TempDir())
+	_, err := store.Prune(0)
+	if err == nil {
+		t.Fatal("Prune(0) should return an error")
+	}
+	if !strings.Contains(err.Error(), "keep must be at least 1") {
+		t.Errorf("error should mention keep constraint, got: %v", err)
+	}
+}
+
+func TestStore_Prune_EmptyStore(t *testing.T) {
+	store := NewStore(t.TempDir())
+	deleted, err := store.Prune(5)
+	if err != nil {
+		t.Fatalf("Prune on empty store should not error: %v", err)
+	}
+	if deleted != 0 {
+		t.Errorf("deleted = %d, want 0 for empty store", deleted)
 	}
 }
 

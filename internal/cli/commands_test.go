@@ -1346,3 +1346,177 @@ func TestRunRemove_StripPreservesUserContent(t *testing.T) {
 		t.Errorf("mixed file content changed unexpectedly:\ngot:  %q\nwant: %q", string(data), mixed)
 	}
 }
+
+// ─── P3-C: RunInit gitignore suggestion ──────────────────────────────────────
+
+func TestRunInit_WritesGitignoreSuggestion(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{}, &buf); err != nil {
+		t.Fatalf("RunInit should not error: %v", err)
+	}
+
+	suggestionPath := filepath.Join(dir, config.ProjectConfigDir, ".gitignore-suggestion")
+	if _, err := os.Stat(suggestionPath); os.IsNotExist(err) {
+		t.Errorf(".gitignore-suggestion should be created at %s", suggestionPath)
+	}
+}
+
+func TestRunInit_GitignoreSuggestion_ContainsBackups(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{}, &buf); err != nil {
+		t.Fatalf("RunInit should not error: %v", err)
+	}
+
+	suggestionPath := filepath.Join(dir, config.ProjectConfigDir, ".gitignore-suggestion")
+	content, err := os.ReadFile(suggestionPath)
+	if err != nil {
+		t.Fatalf("read .gitignore-suggestion: %v", err)
+	}
+
+	if !strings.Contains(string(content), "backups/") {
+		t.Errorf(".gitignore-suggestion should mention 'backups/', got:\n%s", string(content))
+	}
+}
+
+func TestRunInit_GitignoreSuggestion_MentionsCommittable(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{}, &buf); err != nil {
+		t.Fatalf("RunInit should not error: %v", err)
+	}
+
+	suggestionPath := filepath.Join(dir, config.ProjectConfigDir, ".gitignore-suggestion")
+	content, err := os.ReadFile(suggestionPath)
+	if err != nil {
+		t.Fatalf("read .gitignore-suggestion: %v", err)
+	}
+
+	if !strings.Contains(string(content), "project.json") {
+		t.Errorf(".gitignore-suggestion should mention 'project.json' as committable, got:\n%s", string(content))
+	}
+}
+
+// ─── P3-D: RunBackupPrune ────────────────────────────────────────────────────
+
+func TestRunBackupPrune_Help(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := RunBackupPrune([]string{flag}, &buf); err != nil {
+				t.Fatalf("help should not error: %v", err)
+			}
+			out := buf.String()
+			for _, want := range []string{
+				"Usage: agent-manager backup prune",
+				"--keep=N",
+				"--json",
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("backup prune help missing %q, got:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestRunBackupPrune_Default(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Write a project.json so loadAndMerge can resolve the project dir.
+	proj := domain.DefaultProjectConfig()
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	// RunBackupPrune with no --keep flag uses the default of 10.
+	// We verify the command completes without error regardless of how many
+	// real backups exist on the developer's machine.
+	var buf bytes.Buffer
+	if err := RunBackupPrune([]string{}, &buf); err != nil {
+		t.Fatalf("RunBackupPrune should not error: %v", err)
+	}
+	// Output should be either "Nothing to prune" or "Pruned N backups".
+	out := buf.String()
+	if !strings.Contains(out, "Nothing to prune") && !strings.Contains(out, "Pruned") {
+		t.Errorf("unexpected output from RunBackupPrune: %s", out)
+	}
+}
+
+func TestRunBackupPrune_JSON(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Write a project.json.
+	proj := domain.DefaultProjectConfig()
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunBackupPrune([]string{"--keep=5", "--json"}, &buf); err != nil {
+		t.Fatalf("RunBackupPrune --json should not error: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	}
+	if _, ok := result["deleted"]; !ok {
+		t.Error("JSON output should have 'deleted' field")
+	}
+	if _, ok := result["kept"]; !ok {
+		t.Error("JSON output should have 'kept' field")
+	}
+}

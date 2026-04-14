@@ -405,6 +405,104 @@ func TestExecute_WithBackup_AllSucceed(t *testing.T) {
 	}
 }
 
+// ─── ActionDelete ─────────────────────────────────────────────────────────────
+
+// TestExecute_ActionDelete_RemovesFile verifies that an ActionDelete action
+// removes the target file from disk.
+func TestExecute_ActionDelete_RemovesFile(t *testing.T) {
+	project := t.TempDir()
+
+	// Create a file that the delete action should remove.
+	target := filepath.Join(project, "stale-file.md")
+	if err := os.WriteFile(target, []byte("stale content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	actions := []domain.PlannedAction{
+		{
+			ID:          "opencode-stale-cleanup",
+			Agent:       domain.AgentOpenCode,
+			Action:      domain.ActionDelete,
+			TargetPath:  target,
+			Description: "remove stale file for disabled adapter",
+		},
+	}
+
+	exec := New(
+		map[domain.ComponentID]domain.ComponentInstaller{},
+		copilot.New(),
+		project,
+		domain.CopilotConfig{},
+		nil,
+	)
+
+	report, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if !report.Success {
+		t.Fatalf("expected success, got failure: %v", report.Steps[0].Error)
+	}
+
+	if len(report.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(report.Steps))
+	}
+
+	if report.Steps[0].Status != domain.StepSuccess {
+		t.Errorf("step status = %q, want success", report.Steps[0].Status)
+	}
+
+	// Verify the file was actually removed.
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Errorf("expected file %q to be removed, but it still exists", target)
+	}
+}
+
+// TestExecute_ActionDelete_NonexistentFile_NoError verifies that an ActionDelete
+// action on a file that doesn't exist succeeds (idempotent).
+func TestExecute_ActionDelete_NonexistentFile_NoError(t *testing.T) {
+	project := t.TempDir()
+
+	// Target path does NOT exist on disk.
+	target := filepath.Join(project, "nonexistent-file.md")
+
+	actions := []domain.PlannedAction{
+		{
+			ID:          "opencode-stale-cleanup",
+			Agent:       domain.AgentOpenCode,
+			Action:      domain.ActionDelete,
+			TargetPath:  target,
+			Description: "remove stale file (idempotent)",
+		},
+	}
+
+	exec := New(
+		map[domain.ComponentID]domain.ComponentInstaller{},
+		copilot.New(),
+		project,
+		domain.CopilotConfig{},
+		nil,
+	)
+
+	report, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if !report.Success {
+		t.Errorf("expected success for delete of nonexistent file, got failure: %v", report.Steps[0].Error)
+	}
+
+	if len(report.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(report.Steps))
+	}
+
+	if report.Steps[0].Status != domain.StepSuccess {
+		t.Errorf("step status = %q, want success", report.Steps[0].Status)
+	}
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func fullConfig() *domain.MergedConfig {

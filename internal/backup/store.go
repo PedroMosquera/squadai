@@ -161,6 +161,30 @@ func (s *Store) List() ([]Manifest, error) {
 	return manifests, nil
 }
 
+// Prune removes all but the most recent `keep` backups.
+// Returns the number of deleted backups.
+// Returns an error if keep < 1.
+func (s *Store) Prune(keep int) (int, error) {
+	if keep < 1 {
+		return 0, fmt.Errorf("keep must be at least 1, got %d", keep)
+	}
+	manifests, err := s.List()
+	if err != nil {
+		return 0, err
+	}
+	if len(manifests) <= keep {
+		return 0, nil
+	}
+	deleted := 0
+	for _, m := range manifests[keep:] {
+		if err := s.Delete(m.ID); err != nil {
+			return deleted, fmt.Errorf("failed to delete backup %s: %w", m.ID, err)
+		}
+		deleted++
+	}
+	return deleted, nil
+}
+
 // Delete removes a backup and all its files.
 func (s *Store) Delete(id string) error {
 	dir := filepath.Join(s.baseDir, id)
