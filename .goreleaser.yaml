@@ -53,7 +53,7 @@ brews:
       owner: PedroMosquera
       name: homebrew-tap
       # HOMEBREW_TAP_TOKEN secret must be set in GitHub Actions for publishing.
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     name: agent-manager
     homepage: "https://github.com/PedroMosquera/agent-manager-pro"
     description: "CLI tool that standardizes AI coding agent environments across a team"

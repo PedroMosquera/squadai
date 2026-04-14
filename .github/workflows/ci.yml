@@ -89,3 +89,25 @@ jobs:
           }
           EOF
           ./agent-manager validate-policy
+
+  smoke-test:
+    name: Smoke Test (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Make smoke script executable
+        run: chmod +x scripts/smoke-test.sh
+
+      - name: Run smoke tests
+        run: bash scripts/smoke-test.sh
