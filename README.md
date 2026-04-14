@@ -168,6 +168,10 @@ Backups can be listed with `agent-manager backup list` and restored with `agent-
 
 macOS only (darwin/arm64 and darwin/amd64). Linux and Windows support is planned for a future release.
 
+## Roadmap
+
+V2 architecture is complete — 5 agents, 9 components, 3 methodologies. See the [V2.1 Follow-up Roadmap](.x9k4v/ROADMAP-V2.1.md) for the activation, documentation, and distribution work in progress.
+
 ## License
 
 MIT

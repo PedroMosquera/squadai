@@ -32,9 +32,19 @@ func RunInit(args []string, stdout io.Writer) error {
 	withPolicy := false
 	force := false
 	var methodology string
+	var mcpFlag string
+	var pluginsFlag string
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "--methodology=") {
 			methodology = strings.TrimPrefix(arg, "--methodology=")
+			continue
+		}
+		if strings.HasPrefix(arg, "--mcp=") {
+			mcpFlag = strings.TrimPrefix(arg, "--mcp=")
+			continue
+		}
+		if strings.HasPrefix(arg, "--plugins=") {
+			pluginsFlag = strings.TrimPrefix(arg, "--plugins=")
 			continue
 		}
 		switch arg {
@@ -43,14 +53,38 @@ func RunInit(args []string, stdout io.Writer) error {
 		case "--force":
 			force = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--with-policy] [--force]")
+			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]")
 			fmt.Fprintln(stdout, "  Creates .agent-manager/project.json in the current directory.")
 			fmt.Fprintln(stdout, "  --methodology  Set the development methodology (tdd, sdd, conventional).")
+			fmt.Fprintln(stdout, "  --mcp          Comma-separated list of MCP server IDs to enable.")
+			fmt.Fprintln(stdout, "  --plugins      Comma-separated list of plugin IDs to enable.")
 			fmt.Fprintln(stdout, "  --with-policy  Also create a team policy template.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files.")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for init", arg)
+		}
+	}
+
+	// Parse MCP selections from flag.
+	var mcpSelections []string
+	if mcpFlag != "" {
+		for _, s := range strings.Split(mcpFlag, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				mcpSelections = append(mcpSelections, s)
+			}
+		}
+	}
+
+	// Parse plugin selections from flag.
+	var pluginSelections []string
+	if pluginsFlag != "" {
+		for _, s := range strings.Split(pluginsFlag, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				pluginSelections = append(pluginSelections, s)
+			}
 		}
 	}
 
@@ -91,7 +125,7 @@ func RunInit(args []string, stdout io.Writer) error {
 	if projectExists == nil && !force {
 		fmt.Fprintf(stdout, "  exists  %s\n", relPath(projectDir, projectPath))
 	} else {
-		proj := buildSmartProjectConfig(meta, detectedAdapters, meth)
+		proj := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
@@ -140,6 +174,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		{"skills/shared/code-review/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "code-review.md")},
 		{"skills/shared/testing/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "testing.md")},
 		{"skills/shared/pr-description/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "pr-description.md")},
+		{"skills/shared/find-skills/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "find-skills.md")},
 	}
 	for _, sf := range skillFiles {
 		content := assets.MustRead(sf.name)
@@ -181,8 +216,10 @@ func RunInit(args []string, stdout io.Writer) error {
 }
 
 // buildSmartProjectConfig creates a rich project.json from detected metadata, adapters,
-// and an optional methodology selection.
-func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter, methodology domain.Methodology) *domain.ProjectConfig {
+// an optional methodology selection, optional MCP server selections, and optional plugin selections.
+// mcpSelections is a list of MCP server IDs to enable (nil/empty = all defaults).
+// pluginSelections is a list of plugin IDs to enable (nil/empty = none).
+func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter, methodology domain.Methodology, mcpSelections []string, pluginSelections []string) *domain.ProjectConfig {
 	proj := &domain.ProjectConfig{
 		Version: 1,
 		Meta:    meta,
@@ -198,6 +235,9 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 					"team_standards_file": "templates/team-standards.md",
 				},
 			},
+			string(domain.ComponentSettings):  {Enabled: true},
+			string(domain.ComponentSkills):    {Enabled: true},
+			string(domain.ComponentWorkflows): {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{
 			InstructionsTemplate: "standard",
@@ -215,24 +255,69 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 				Description: "PR description generation",
 				ContentFile: "skills/pr-description.md",
 			},
+			"find-skills": {
+				Description: "Find and load available skills",
+				ContentFile: "skills/find-skills.md",
+			},
 		},
 	}
 
-	// Enable detected personal-lane adapters.
+	// Enable ALL detected personal-lane adapters.
 	for _, a := range adapters {
-		if a.ID() == domain.AgentClaudeCode {
-			proj.Adapters[string(domain.AgentClaudeCode)] = domain.AdapterConfig{Enabled: true}
-		}
+		proj.Adapters[string(a.ID())] = domain.AdapterConfig{Enabled: true}
 	}
 
 	// Apply methodology and generate team composition if specified.
 	if methodology != "" {
 		proj.Methodology = methodology
 		proj.Team = domain.DefaultTeam(methodology)
+		// Enable agent and command components when methodology is active.
+		proj.Components[string(domain.ComponentAgents)] = domain.ComponentConfig{Enabled: true}
+		proj.Components[string(domain.ComponentCommands)] = domain.ComponentConfig{Enabled: true}
 	}
 
-	// Always include recommended MCP servers.
-	proj.MCP = DefaultMCPServers()
+	// Always include recommended MCP servers; filter to selections if provided.
+	allMCP := DefaultMCPServers()
+	if len(mcpSelections) > 0 {
+		filtered := make(map[string]domain.MCPServerDef, len(mcpSelections))
+		selSet := make(map[string]bool, len(mcpSelections))
+		for _, s := range mcpSelections {
+			selSet[s] = true
+		}
+		for name, def := range allMCP {
+			if selSet[name] {
+				filtered[name] = def
+			}
+		}
+		proj.MCP = filtered
+	} else {
+		proj.MCP = allMCP
+	}
+	// Enable MCP component when servers are configured.
+	if len(proj.MCP) > 0 {
+		proj.Components[string(domain.ComponentMCP)] = domain.ComponentConfig{Enabled: true}
+	}
+
+	// Apply plugin selections if provided.
+	if len(pluginSelections) > 0 {
+		allPlugins := AvailablePlugins()
+		selSet := make(map[string]bool, len(pluginSelections))
+		for _, s := range pluginSelections {
+			selSet[s] = true
+		}
+		selected := make(map[string]domain.PluginDef)
+		for name, def := range allPlugins {
+			if selSet[name] {
+				d := def
+				d.Enabled = true
+				selected[name] = d
+			}
+		}
+		if len(selected) > 0 {
+			proj.Plugins = selected
+			proj.Components[string(domain.ComponentPlugins)] = domain.ComponentConfig{Enabled: true}
+		}
+	}
 
 	return proj
 }
