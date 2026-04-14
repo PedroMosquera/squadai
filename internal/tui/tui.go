@@ -30,6 +30,7 @@ const (
 	screenTeamStatus
 	screenInitMCP
 	screenInitPlugins
+	screenInitModelTier
 	screenInitSummary
 	screenSkillBrowser
 	screenInitApplyPrompt // "Apply now?" prompt after successful init
@@ -117,6 +118,7 @@ type Model struct {
 	initCursor       int
 	mcpSelections    map[string]bool
 	pluginSelections map[string]bool
+	modelTier        domain.ModelTier
 
 	// Skill browser state.
 	skillCat         skillCatalog
@@ -132,11 +134,12 @@ type Model struct {
 // NewModel creates a TUI model with the given state.
 func NewModel(version string, mode domain.OperationalMode, adapters []domain.Adapter, homeDir string) Model {
 	return Model{
-		version:  version,
-		mode:     mode,
-		adapters: adapters,
-		homeDir:  homeDir,
-		screen:   screenIntro,
+		version:   version,
+		mode:      mode,
+		adapters:  adapters,
+		homeDir:   homeDir,
+		screen:    screenIntro,
+		modelTier: domain.ModelTierBalanced,
 	}
 }
 
@@ -330,10 +333,36 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.initCursor = 0
-			m.screen = screenInitSummary
+			m.screen = screenInitModelTier
 			return m, nil
 		case "esc":
 			m.screen = screenInitMCP
+			return m, nil
+		}
+
+	case screenInitModelTier:
+		tiers := []domain.ModelTier{
+			domain.ModelTierBalanced,
+			domain.ModelTierPerformance,
+			domain.ModelTierStarter,
+			domain.ModelTierManual,
+		}
+		switch key {
+		case "up", "k":
+			if m.initCursor > 0 {
+				m.initCursor--
+			}
+		case "down", "j":
+			if m.initCursor < len(tiers)-1 {
+				m.initCursor++
+			}
+		case "enter":
+			m.modelTier = tiers[m.initCursor]
+			m.initCursor = 0
+			m.screen = screenInitSummary
+			return m, nil
+		case "esc":
+			m.screen = screenInitPlugins
 			return m, nil
 		}
 
@@ -345,6 +374,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.initJustCompleted = true
 			args := []string{"--methodology=" + string(m.methodology)}
+			// Add model tier if not default (always pass it through).
+			args = append(args, "--model-tier="+string(m.modelTier))
 			// Add MCP selections.
 			var mcpKeys []string
 			for k, selected := range m.mcpSelections {
@@ -373,7 +404,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return commandResult{output: buf.String(), err: err}
 			}
 		case "esc":
-			m.screen = screenInitPlugins
+			m.screen = screenInitModelTier
 			return m, nil
 		}
 
@@ -493,6 +524,8 @@ func (m Model) View() string {
 		return m.viewInitMCP()
 	case screenInitPlugins:
 		return m.viewInitPlugins()
+	case screenInitModelTier:
+		return m.viewInitModelTier()
 	case screenInitSummary:
 		return m.viewInitSummary()
 	case screenSkillBrowser:
@@ -786,6 +819,64 @@ func (m Model) viewInitPlugins() string {
 	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("↑/↓: navigate  space: toggle  enter: next  esc: back"))
+	return b.String()
+}
+
+// viewInitModelTier renders the model tier selection screen.
+func (m Model) viewInitModelTier() string {
+	tiers := []struct {
+		value      domain.ModelTier
+		label      string
+		desc       string
+		detailLine string
+	}{
+		{
+			domain.ModelTierBalanced,
+			"Balanced",
+			"Best cost/quality ratio (recommended)",
+			"Sonnet 4 for complex tasks, fast models for simple ones",
+		},
+		{
+			domain.ModelTierPerformance,
+			"Performance",
+			"Always flagship models — maximum quality, higher cost",
+			"Sonnet 4.5 / GPT-4.1 for everything",
+		},
+		{
+			domain.ModelTierStarter,
+			"Starter",
+			"Capable models at lowest cost — great for learning",
+			"Haiku 3.5 / GPT-4.1-mini for everything",
+		},
+		{
+			domain.ModelTierManual,
+			"Manual",
+			"Configure models yourself — no defaults applied",
+			"",
+		},
+	}
+
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Model Configuration") + "\n\n")
+	content.WriteString("Choose a model tier for your AI agents:\n\n")
+
+	for i, tier := range tiers {
+		if i == m.initCursor {
+			content.WriteString(activeStyle.Render("> "+tier.label) + "  ")
+			content.WriteString(activeStyle.Render(tier.desc) + "\n")
+		} else {
+			content.WriteString("  " + tier.label + "  " + tier.desc + "\n")
+		}
+		if tier.detailLine != "" {
+			content.WriteString(mutedStyle.Render("    "+tier.detailLine) + "\n")
+		}
+		content.WriteString("\n")
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate   enter: select   esc: back"))
 	return b.String()
 }
 

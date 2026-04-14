@@ -647,7 +647,7 @@ func TestSettingsComponentConditionalEnable_NoSettings_NotEnabled(t *testing.T) 
 	meta := domain.ProjectMeta{Language: "Go"}
 	// Pass adapters with no Settings maps — the default adapters in
 	// buildSmartProjectConfig also have no settings.
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	if _, ok := proj.Components[string(domain.ComponentSettings)]; ok {
 		t.Error("ComponentSettings should NOT be enabled when no adapter has Settings populated")
@@ -764,7 +764,7 @@ func TestDefaultCommandsForMethodology_CommandsHaveDescriptions(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_CommandsPopulated(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil, domain.ModelTierBalanced)
 
 	if proj.Commands == nil {
 		t.Fatal("proj.Commands should not be nil when methodology is set")
@@ -780,7 +780,7 @@ func TestBuildSmartProjectConfig_WithMethodology_CommandsPopulated(t *testing.T)
 
 func TestBuildSmartProjectConfig_WithoutMethodology_CommandsEmpty(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	if len(proj.Commands) != 0 {
 		t.Errorf("proj.Commands should be empty when no methodology set, got %d entries", len(proj.Commands))

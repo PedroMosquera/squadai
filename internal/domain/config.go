@@ -22,6 +22,7 @@ type ProjectConfig struct {
 	MCP         map[string]MCPServerDef    `json:"mcp,omitempty"`
 	Meta        ProjectMeta                `json:"meta,omitempty"`
 	Methodology Methodology                `json:"methodology,omitempty"`
+	ModelTier   ModelTier                  `json:"model_tier,omitempty"`
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 }
