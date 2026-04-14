@@ -955,7 +955,7 @@ func Run(version string) error {
 	adapters := cli.DetectAdapters(homeDir)
 
 	model := NewModel(version, merged.Mode, adapters, homeDir)
-	p := tea.NewProgram(model)
+	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = p.Run()
 	return err
 }
