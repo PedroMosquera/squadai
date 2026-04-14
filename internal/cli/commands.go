@@ -2201,11 +2201,17 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: agent-manager diff [flags]")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Show what apply would change as unified diffs.")
+			fmt.Fprintln(stdout, "Preview what 'apply' would change without modifying any files.")
+			fmt.Fprintln(stdout, "Shows a unified diff for each file that would be created, modified, or deleted.")
+			fmt.Fprintln(stdout, "This is the \"terraform plan\" equivalent — run it before apply to review changes.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --json    Output as JSON")
-			fmt.Fprintln(stdout, "  -h        Show this help")
+			fmt.Fprintln(stdout, "  --json        Output planned actions as JSON (for scripting and CI)")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager diff                  Show what would change")
+			fmt.Fprintln(stdout, "  agent-manager diff --json           Machine-readable diff output")
+			fmt.Fprintln(stdout, "  agent-manager init && agent-manager diff    Preview after fresh init")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for diff", arg)
