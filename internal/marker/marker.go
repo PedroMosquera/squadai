@@ -96,3 +96,51 @@ func HasSection(document, sectionID string) bool {
 	return strings.Contains(document, OpenTag(sectionID)) &&
 		strings.Contains(document, CloseTag(sectionID))
 }
+
+// StripAll removes all agent-manager marker blocks from document.
+// Returns the stripped content and true if any blocks were found.
+// Returns the original content and false if no blocks were found.
+func StripAll(document string) (string, bool) {
+	openPrefix := fmt.Sprintf("<!-- %s:", prefix)
+
+	// Discover all section IDs by scanning for open tags.
+	// We collect unique IDs so we don't double-strip.
+	seen := make(map[string]struct{})
+	var sectionIDs []string
+
+	search := document
+	for {
+		idx := strings.Index(search, openPrefix)
+		if idx < 0 {
+			break
+		}
+		// Advance past the prefix to find the end of the tag: " -->"
+		rest := search[idx+len(openPrefix):]
+		end := strings.Index(rest, " -->")
+		if end < 0 {
+			break
+		}
+		id := rest[:end]
+		// Skip close tags (they start with "/").
+		if !strings.HasPrefix(id, "/") {
+			if _, exists := seen[id]; !exists {
+				seen[id] = struct{}{}
+				sectionIDs = append(sectionIDs, id)
+			}
+		}
+		// Advance search past this tag.
+		search = rest[end+len(" -->"):]
+	}
+
+	if len(sectionIDs) == 0 {
+		return document, false
+	}
+
+	// Strip each discovered section by injecting empty content.
+	result := document
+	for _, id := range sectionIDs {
+		result = InjectSection(result, id, "")
+	}
+
+	return result, true
+}
