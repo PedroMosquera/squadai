@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
@@ -133,15 +134,24 @@ func TestPaths(t *testing.T) {
 	a := New()
 	home := "/Users/test"
 
+	// ConfigDir differs by OS; compute the expected base so the test is
+	// portable between macOS CI runners and Linux CI runners.
+	var wantConfigDir string
+	if runtime.GOOS == "linux" {
+		wantConfigDir = "/Users/test/.config/Code/User"
+	} else {
+		wantConfigDir = "/Users/test/Library/Application Support/Code/User"
+	}
+
 	tests := []struct {
 		name string
 		got  string
 		want string
 	}{
-		{"GlobalConfigDir", a.GlobalConfigDir(home), "/Users/test/Library/Application Support/Code/User"},
-		{"SystemPromptFile", a.SystemPromptFile(home), "/Users/test/Library/Application Support/Code/User/.instructions.md"},
+		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
+		{"SystemPromptFile", a.SystemPromptFile(home), wantConfigDir + "/.instructions.md"},
 		{"SkillsDir", a.SkillsDir(home), "/Users/test/.copilot/skills"},
-		{"SettingsPath", a.SettingsPath(home), "/Users/test/Library/Application Support/Code/User/settings.json"},
+		{"SettingsPath", a.SettingsPath(home), wantConfigDir + "/settings.json"},
 	}
 
 	for _, tt := range tests {

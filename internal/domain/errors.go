@@ -30,8 +30,8 @@ var (
 
 // PolicyViolationError provides detail about which field violated policy.
 type PolicyViolationError struct {
-	Field       string
-	PolicyValue string
+	Field          string
+	PolicyValue    string
 	AttemptedValue string
 }
 
@@ -46,7 +46,7 @@ func (e *PolicyViolationError) Unwrap() error {
 
 // ValidationError collects multiple validation failures.
 type ValidationError struct {
-	Source string   // e.g., "config.json", "policy.json"
+	Source string // e.g., "config.json", "policy.json"
 	Issues []string
 }
 
