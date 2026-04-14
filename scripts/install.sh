@@ -4,6 +4,13 @@
 #
 # Requirements: curl
 # Supports: darwin/arm64, darwin/amd64, linux/arm64, linux/amd64
+#
+# Windows users: This POSIX shell script does not run on Windows natively.
+# Install on Windows via one of the following methods:
+#   1. go install: go install github.com/PedroMosquera/agent-manager-pro/cmd/agent-manager@latest
+#   2. Download the .zip release asset for windows/amd64 or windows/arm64 from:
+#      https://github.com/PedroMosquera/agent-manager-pro/releases/latest
+#      and add the extracted agent-manager.exe to a directory on your PATH.
 
 set -e
 

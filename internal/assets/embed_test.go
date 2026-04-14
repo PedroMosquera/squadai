@@ -468,3 +468,151 @@ func TestReadNonexistent(t *testing.T) {
 		t.Errorf("expected empty string for nonexistent file, got %q", content)
 	}
 }
+
+// ─── Skill catalog ─────────────────────────────────────────────────────────
+
+func TestSkillCatalog_Readable(t *testing.T) {
+	content, err := Read("skills/catalog.json")
+	if err != nil {
+		t.Fatalf("skills/catalog.json: Read returned error: %v", err)
+	}
+	if len(content) == 0 {
+		t.Error("skills/catalog.json: expected non-empty content")
+	}
+}
+
+func TestSkillCatalog_ValidJSON(t *testing.T) {
+	content, err := Read("skills/catalog.json")
+	if err != nil {
+		t.Fatalf("skills/catalog.json: Read returned error: %v", err)
+	}
+	if !json.Valid([]byte(content)) {
+		t.Errorf("skills/catalog.json: not valid JSON, got:\n%s", content)
+	}
+}
+
+func TestSkillCatalog_HasCategories(t *testing.T) {
+	content := MustRead("skills/catalog.json")
+	var cat struct {
+		Categories []struct {
+			Name   string `json:"name"`
+			Skills []struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				Source      string `json:"source"`
+			} `json:"skills"`
+		} `json:"categories"`
+	}
+	if err := json.Unmarshal([]byte(content), &cat); err != nil {
+		t.Fatalf("skills/catalog.json: unmarshal error: %v", err)
+	}
+	if len(cat.Categories) == 0 {
+		t.Error("skills/catalog.json: expected at least one category")
+	}
+}
+
+func TestSkillCatalog_EachCategoryHasName(t *testing.T) {
+	content := MustRead("skills/catalog.json")
+	var cat struct {
+		Categories []struct {
+			Name string `json:"name"`
+		} `json:"categories"`
+	}
+	if err := json.Unmarshal([]byte(content), &cat); err != nil {
+		t.Fatalf("skills/catalog.json: unmarshal error: %v", err)
+	}
+	for i, c := range cat.Categories {
+		if c.Name == "" {
+			t.Errorf("skills/catalog.json: category[%d] has empty name", i)
+		}
+	}
+}
+
+func TestSkillCatalog_EachSkillHasNameAndDescription(t *testing.T) {
+	content := MustRead("skills/catalog.json")
+	var cat struct {
+		Categories []struct {
+			Name   string `json:"name"`
+			Skills []struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+			} `json:"skills"`
+		} `json:"categories"`
+	}
+	if err := json.Unmarshal([]byte(content), &cat); err != nil {
+		t.Fatalf("skills/catalog.json: unmarshal error: %v", err)
+	}
+	for _, c := range cat.Categories {
+		for j, s := range c.Skills {
+			if s.Name == "" {
+				t.Errorf("skills/catalog.json: category %q skill[%d] has empty name", c.Name, j)
+			}
+			if s.Description == "" {
+				t.Errorf("skills/catalog.json: category %q skill %q has empty description", c.Name, s.Name)
+			}
+		}
+	}
+}
+
+func TestSkillCatalog_HasInstallCommand(t *testing.T) {
+	content := MustRead("skills/catalog.json")
+	var cat struct {
+		InstallCommand string `json:"install_command"`
+	}
+	if err := json.Unmarshal([]byte(content), &cat); err != nil {
+		t.Fatalf("skills/catalog.json: unmarshal error: %v", err)
+	}
+	if cat.InstallCommand == "" {
+		t.Error("skills/catalog.json: expected non-empty install_command")
+	}
+}
+
+func TestSkillCatalog_HasSearchCommand(t *testing.T) {
+	content := MustRead("skills/catalog.json")
+	var cat struct {
+		SearchCommand string `json:"search_command"`
+	}
+	if err := json.Unmarshal([]byte(content), &cat); err != nil {
+		t.Fatalf("skills/catalog.json: unmarshal error: %v", err)
+	}
+	if cat.SearchCommand == "" {
+		t.Error("skills/catalog.json: expected non-empty search_command")
+	}
+}
+
+func TestSkillCatalog_HasBrowseURL(t *testing.T) {
+	content := MustRead("skills/catalog.json")
+	var cat struct {
+		BrowseURL string `json:"browse_url"`
+	}
+	if err := json.Unmarshal([]byte(content), &cat); err != nil {
+		t.Fatalf("skills/catalog.json: unmarshal error: %v", err)
+	}
+	if cat.BrowseURL == "" {
+		t.Error("skills/catalog.json: expected non-empty browse_url")
+	}
+	if !strings.Contains(cat.BrowseURL, "skills.sh") {
+		t.Errorf("skills/catalog.json: browse_url should mention 'skills.sh', got %q", cat.BrowseURL)
+	}
+}
+
+func TestSkillCatalog_AtLeastTwentySkillsTotal(t *testing.T) {
+	content := MustRead("skills/catalog.json")
+	var cat struct {
+		Categories []struct {
+			Skills []struct {
+				Name string `json:"name"`
+			} `json:"skills"`
+		} `json:"categories"`
+	}
+	if err := json.Unmarshal([]byte(content), &cat); err != nil {
+		t.Fatalf("skills/catalog.json: unmarshal error: %v", err)
+	}
+	total := 0
+	for _, c := range cat.Categories {
+		total += len(c.Skills)
+	}
+	if total < 20 {
+		t.Errorf("skills/catalog.json: expected at least 20 skills total, got %d", total)
+	}
+}

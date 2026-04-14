@@ -52,6 +52,7 @@ func TestRunApply_HelpText(t *testing.T) {
 		"Usage: agent-manager apply",
 		"--dry-run",
 		"--json",
+		"--force",
 		"backed up automatically",
 		"rolled back",
 	} {
@@ -71,6 +72,7 @@ func TestRunSync_HelpText(t *testing.T) {
 		"Usage: agent-manager sync",
 		"--dry-run",
 		"--json",
+		"--force",
 		"idempoten",
 	} {
 		if !strings.Contains(out, want) {
@@ -523,5 +525,117 @@ func TestPrintVerifySummary_Empty(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("summary %q missing %q", got, want)
 		}
+	}
+}
+
+// ─── Apply/Sync guard: no project.json ──────────────────────────────────────
+
+func TestRunApply_NoProjectJSON_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	err = RunApply([]string{}, &buf)
+	if err == nil {
+		t.Fatal("RunApply should return an error when project.json is missing")
+	}
+	if !strings.Contains(err.Error(), "no project.json found") {
+		t.Errorf("error should mention missing project.json, got: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Error: No project.json found in current directory.") {
+		t.Errorf("output should contain error message, got: %s", out)
+	}
+	if !strings.Contains(out, "agent-manager init") {
+		t.Errorf("output should suggest running init, got: %s", out)
+	}
+	if !strings.Contains(out, "--force") {
+		t.Errorf("output should mention --force flag, got: %s", out)
+	}
+}
+
+func TestRunApply_NoProjectJSON_ForceFlag_Proceeds(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	err = RunApply([]string{"--force"}, &buf)
+	// The guard is passed; any subsequent error is NOT about the missing project.json.
+	// We allow a non-nil error here (e.g., from the planner or pipeline) as long as
+	// it is not about the missing project.json guard.
+	if err != nil && strings.Contains(err.Error(), "no project.json found") {
+		t.Errorf("--force should bypass the project.json guard, got: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "Error: No project.json found in current directory.") {
+		t.Errorf("--force should suppress the missing project.json error message, got: %s", out)
+	}
+	if !strings.Contains(out, "Warning: No project.json found. Running with default config (--force).") {
+		t.Errorf("--force should print a warning, got: %s", out)
+	}
+}
+
+func TestRunSync_NoProjectJSON_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	err = RunSync([]string{}, &buf)
+	if err == nil {
+		t.Fatal("RunSync should return an error when project.json is missing")
+	}
+	if !strings.Contains(err.Error(), "no project.json found") {
+		t.Errorf("error should mention missing project.json, got: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Error: No project.json found in current directory.") {
+		t.Errorf("output should contain error message, got: %s", out)
+	}
+}
+
+func TestRunSync_NoProjectJSON_ForceFlag_Proceeds(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	err = RunSync([]string{"--force"}, &buf)
+	// The guard is passed; any subsequent error is NOT about the missing project.json.
+	if err != nil && strings.Contains(err.Error(), "no project.json found") {
+		t.Errorf("--force should bypass the project.json guard, got: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "Error: No project.json found in current directory.") {
+		t.Errorf("--force should suppress the missing project.json error message, got: %s", out)
+	}
+	if !strings.Contains(out, "Warning: No project.json found. Running with default config (--force).") {
+		t.Errorf("--force should print a warning, got: %s", out)
 	}
 }

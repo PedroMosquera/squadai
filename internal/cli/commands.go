@@ -206,7 +206,11 @@ func RunInit(args []string, stdout io.Writer) error {
 	}
 
 	// Write language-specific team standards.
-	standardsContent := selectStandards(meta.Language)
+	// When multiple languages are detected, compose standards for all of them.
+	standardsContent := selectMultiStandards(meta.Languages)
+	if len(meta.Languages) == 0 {
+		standardsContent = selectStandards(meta.Language)
+	}
 	standardsPath := filepath.Join(projectDir, config.ProjectConfigDir, "templates", "team-standards.md")
 	writeInitFile(humanOut, projectDir, standardsPath, standardsContent, force)
 
@@ -422,9 +426,42 @@ func selectStandards(language string) string {
 		return assets.MustRead("standards/javascript.md")
 	case "Python":
 		return assets.MustRead("standards/python.md")
+	case "Rust":
+		return assets.MustRead("standards/rust.md")
+	case "Java", "Kotlin":
+		return assets.MustRead("standards/java.md")
+	case "Ruby":
+		return assets.MustRead("standards/ruby.md")
+	case "C#":
+		return assets.MustRead("standards/csharp.md")
+	case "PHP":
+		return assets.MustRead("standards/php.md")
+	case "Swift":
+		return assets.MustRead("standards/swift.md")
 	default:
 		return assets.MustRead("standards/generic.md")
 	}
+}
+
+// selectMultiStandards composes standards for all detected languages.
+// When multiple languages are detected each section is prefixed with a
+// "## {Language} Standards" heading and the sections are joined with a
+// horizontal rule separator. When only one language is detected the output
+// is identical to selectStandards(). When languages is empty the generic
+// standards are returned.
+func selectMultiStandards(languages []string) string {
+	if len(languages) == 0 {
+		return assets.MustRead("standards/generic.md")
+	}
+	if len(languages) == 1 {
+		return selectStandards(languages[0])
+	}
+	var parts []string
+	for _, lang := range languages {
+		content := selectStandards(lang)
+		parts = append(parts, "## "+lang+" Standards\n\n"+content)
+	}
+	return strings.Join(parts, "\n\n---\n\n")
 }
 
 // writeInitFile writes content to path, respecting the force flag.
@@ -649,14 +686,17 @@ func RunPlan(args []string, stdout io.Writer) error {
 func RunApply(args []string, stdout io.Writer) error {
 	dryRun := false
 	jsonOut := false
+	force := false
 	for _, arg := range args {
 		switch arg {
 		case "--dry-run":
 			dryRun = true
 		case "--json":
 			jsonOut = true
+		case "--force":
+			force = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager apply [--dry-run] [--json]")
+			fmt.Fprintln(stdout, "Usage: agent-manager apply [--dry-run] [--json] [--force]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -669,11 +709,13 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --dry-run  Preview the actions that would be executed without writing any files.")
 			fmt.Fprintln(stdout, "  --json     Output the execution report as JSON (includes backup ID and step results).")
+			fmt.Fprintln(stdout, "  --force    Apply with default config even when no project.json is found.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  agent-manager apply")
 			fmt.Fprintln(stdout, "  agent-manager apply --dry-run")
 			fmt.Fprintln(stdout, "  agent-manager apply --json")
+			fmt.Fprintln(stdout, "  agent-manager apply --force")
 			return nil
 		}
 	}
@@ -686,6 +728,17 @@ func RunApply(args []string, stdout io.Writer) error {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	// Guard: require project.json to exist unless --force is given.
+	projectConfigPath := config.ProjectConfigPath(projectDir)
+	if _, statErr := os.Stat(projectConfigPath); os.IsNotExist(statErr) {
+		if !force {
+			fmt.Fprintln(stdout, "Error: No project.json found in current directory.")
+			fmt.Fprintln(stdout, "Run 'agent-manager init' to create one, or use --force to apply with defaults.")
+			return fmt.Errorf("no project.json found in current directory")
+		}
+		fmt.Fprintln(stdout, "Warning: No project.json found. Running with default config (--force).")
 	}
 
 	merged, err := loadAndMerge(homeDir, projectDir)
@@ -787,7 +840,7 @@ func RunSync(args []string, stdout io.Writer) error {
 	// Intercept help before delegating to apply.
 	for _, arg := range args {
 		if arg == "-h" || arg == "--help" {
-			fmt.Fprintln(stdout, "Usage: agent-manager sync [--dry-run] [--json]")
+			fmt.Fprintln(stdout, "Usage: agent-manager sync [--dry-run] [--json] [--force]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Idempotent reconciliation: plan and apply in one step. Identical to apply but")
 			fmt.Fprintln(stdout, "emphasizes idempotency — running sync multiple times produces the same result.")
@@ -797,10 +850,12 @@ func RunSync(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --dry-run  Preview the actions that would be executed without writing any files.")
 			fmt.Fprintln(stdout, "  --json     Output the execution report as JSON.")
+			fmt.Fprintln(stdout, "  --force    Sync with default config even when no project.json is found.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  agent-manager sync")
 			fmt.Fprintln(stdout, "  agent-manager sync --dry-run")
+			fmt.Fprintln(stdout, "  agent-manager sync --force")
 			return nil
 		}
 	}

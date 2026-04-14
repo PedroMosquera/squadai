@@ -134,7 +134,7 @@ func TestSelectStandards_Python(t *testing.T) {
 }
 
 func TestSelectStandards_Unknown(t *testing.T) {
-	content := selectStandards("Rust")
+	content := selectStandards("Haskell")
 	if !strings.Contains(content, "Code Quality") {
 		t.Error("unknown language should get generic standards")
 	}
@@ -900,5 +900,99 @@ func TestRunInit_JSONOutput_PolicyCreatedTrueWithFlag(t *testing.T) {
 	}
 	if !result.PolicyCreated {
 		t.Error("policy_created should be true when --with-policy is set")
+	}
+}
+
+// ─── selectMultiStandards ────────────────────────────────────────────────────
+
+func TestSelectMultiStandards_SingleLanguage_IdenticalToSelectStandards(t *testing.T) {
+	single := selectMultiStandards([]string{"Go"})
+	direct := selectStandards("Go")
+	if single != direct {
+		t.Error("selectMultiStandards with a single language should return the same content as selectStandards")
+	}
+}
+
+func TestSelectMultiStandards_EmptyLanguages_ReturnsGeneric(t *testing.T) {
+	content := selectMultiStandards([]string{})
+	if !strings.Contains(content, "Code Quality") {
+		t.Error("empty languages should return generic standards (contains 'Code Quality')")
+	}
+}
+
+func TestSelectMultiStandards_TwoLanguages_ContainsBothSections(t *testing.T) {
+	content := selectMultiStandards([]string{"Go", "Python"})
+
+	if !strings.Contains(content, "## Go Standards") {
+		t.Error("multi-standards for Go+Python should contain '## Go Standards' heading")
+	}
+	if !strings.Contains(content, "## Python Standards") {
+		t.Error("multi-standards for Go+Python should contain '## Python Standards' heading")
+	}
+	if !strings.Contains(content, "---") {
+		t.Error("multi-standards for Go+Python should contain a '---' separator between sections")
+	}
+	// Both standard bodies should be present too.
+	if !strings.Contains(content, "gofmt") {
+		t.Error("multi-standards should contain Go body (mentions 'gofmt')")
+	}
+	if !strings.Contains(content, "Type Hints") {
+		t.Error("multi-standards should contain Python body (mentions 'Type Hints')")
+	}
+}
+
+func TestSelectMultiStandards_ThreeLanguages_AllSectionsPresent(t *testing.T) {
+	content := selectMultiStandards([]string{"Go", "TypeScript/JavaScript", "Rust"})
+
+	for _, lang := range []string{"Go", "TypeScript/JavaScript", "Rust"} {
+		heading := "## " + lang + " Standards"
+		if !strings.Contains(content, heading) {
+			t.Errorf("multi-standards should contain heading %q", heading)
+		}
+	}
+}
+
+// ─── Init writes multi-language standards for monorepos ───────────────────────
+
+func TestInit_WritesMultiStandards_GoNodeMonorepo(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a Go+Node monorepo.
+	goMod := "module github.com/example/mono\n\ngo 1.24\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+	pkg := map[string]interface{}{
+		"name":    "frontend",
+		"scripts": map[string]string{"test": "jest"},
+	}
+	pkgData, _ := json.Marshal(pkg)
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), pkgData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+	if len(meta.Languages) < 2 {
+		t.Fatalf("expected monorepo to detect ≥2 languages, got %v", meta.Languages)
+	}
+
+	standardsContent := selectMultiStandards(meta.Languages)
+
+	standardsPath := filepath.Join(dir, config.ProjectConfigDir, "templates", "team-standards.md")
+	var buf bytes.Buffer
+	writeInitFile(&buf, dir, standardsPath, standardsContent, false)
+
+	data, err := os.ReadFile(standardsPath)
+	if err != nil {
+		t.Fatalf("standards file not created: %v", err)
+	}
+	content := string(data)
+
+	// Both language sections must appear in the combined file.
+	if !strings.Contains(content, "## Go Standards") {
+		t.Error("monorepo standards should contain '## Go Standards' section")
+	}
+	if !strings.Contains(content, "## TypeScript/JavaScript Standards") {
+		t.Error("monorepo standards should contain '## TypeScript/JavaScript Standards' section")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -151,6 +152,14 @@ func (a *Adapter) WorkflowsDir(projectDir string) string {
 }
 
 // ConfigDir returns the root config directory for Windsurf.
+// On Windows it is %APPDATA%\Windsurf\User (falling back to homeDir\AppData\Roaming\Windsurf\User).
+// On all other platforms it is ~/.codeium/windsurf.
 func ConfigDir(homeDir string) string {
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Windsurf", "User")
+		}
+		return filepath.Join(homeDir, "AppData", "Roaming", "Windsurf", "User")
+	}
 	return filepath.Join(homeDir, ".codeium", "windsurf")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
@@ -133,17 +134,21 @@ func TestPaths(t *testing.T) {
 	a := New()
 	home := "/Users/test"
 
+	// All OpenCode paths are home-relative with no OS branching;
+	// use filepath.Join so separators are correct on every CI platform.
+	wantConfigDir := filepath.Join(home, ".config", "opencode")
+
 	tests := []struct {
 		name string
 		got  string
 		want string
 	}{
-		{"GlobalConfigDir", a.GlobalConfigDir(home), "/Users/test/.config/opencode"},
-		{"SystemPromptFile", a.SystemPromptFile(home), "/Users/test/.config/opencode/AGENTS.md"},
-		{"SkillsDir", a.SkillsDir(home), "/Users/test/.config/opencode/skills"},
-		{"SettingsPath", a.SettingsPath(home), "/Users/test/.config/opencode/opencode.json"},
-		{"AgentsDir", a.AgentsDir(home), "/Users/test/.config/opencode/agents"},
-		{"CommandsDir", a.CommandsDir(home), "/Users/test/.config/opencode/commands"},
+		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
+		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, "AGENTS.md")},
+		{"SkillsDir", a.SkillsDir(home), filepath.Join(wantConfigDir, "skills")},
+		{"SettingsPath", a.SettingsPath(home), filepath.Join(wantConfigDir, "opencode.json")},
+		{"AgentsDir", a.AgentsDir(home), filepath.Join(wantConfigDir, "agents")},
+		{"CommandsDir", a.CommandsDir(home), filepath.Join(wantConfigDir, "commands")},
 	}
 
 	for _, tt := range tests {
@@ -162,11 +167,11 @@ func TestProjectPaths(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/opencode.json"},
-		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/AGENTS.md"},
-		{"ProjectAgentsDir", a.ProjectAgentsDir(project), "/Users/test/myproject/.opencode/agents"},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), "/Users/test/myproject/.opencode/skills"},
-		{"ProjectCommandsDir", a.ProjectCommandsDir(project), "/Users/test/myproject/.opencode/commands"},
+		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, "opencode.json")},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, "AGENTS.md")},
+		{"ProjectAgentsDir", a.ProjectAgentsDir(project), filepath.Join(project, ".opencode", "agents")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".opencode", "skills")},
+		{"ProjectCommandsDir", a.ProjectCommandsDir(project), filepath.Join(project, ".opencode", "commands")},
 	}
 
 	for _, tt := range tests {
@@ -233,9 +238,10 @@ func TestAdapter_SupportsSubAgents(t *testing.T) {
 
 func TestAdapter_SubAgentsDir(t *testing.T) {
 	a := New()
-	dir := a.SubAgentsDir("/Users/test")
-	if dir != "/Users/test/.config/opencode/agents" {
-		t.Errorf("SubAgentsDir = %q, want /Users/test/.config/opencode/agents", dir)
+	home := "/Users/test"
+	want := filepath.Join(home, ".config", "opencode", "agents")
+	if got := a.SubAgentsDir(home); got != want {
+		t.Errorf("SubAgentsDir = %q, want %q", got, want)
 	}
 }
 
