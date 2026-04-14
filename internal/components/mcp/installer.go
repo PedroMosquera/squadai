@@ -583,6 +583,75 @@ func (i *Installer) verifySeparateFiles(_ domain.Adapter, mcpDir string) ([]doma
 	return results, nil
 }
 
+// RenderContent returns the content that Apply would write for the given action,
+// without performing the write. Used by the diff renderer.
+func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
+	if strings.HasPrefix(action.Description, "mcp:configfile:") {
+		return i.renderMCPConfigFileContent(action)
+	}
+	if i.isSeparateFileAction(action) {
+		return i.renderSeparateFileContent(action)
+	}
+	return i.renderMergedConfigContent(action)
+}
+
+// renderMergedConfigContent computes what applyMergedConfig would write.
+func (i *Installer) renderMergedConfigContent(action domain.PlannedAction) ([]byte, error) {
+	existing, err := readJSONFile(action.TargetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read target: %w", err)
+	}
+	if existing == nil {
+		existing = make(map[string]interface{})
+	}
+	mcpMap := make(map[string]interface{})
+	for name, def := range i.servers {
+		mcpMap[name] = serverToMap(def)
+	}
+	existing[mcpKey] = mcpMap
+	updateManagedKeys(existing, mcpKey)
+	data, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal config: %w", err)
+	}
+	data = append(data, '\n')
+	return data, nil
+}
+
+// renderSeparateFileContent computes what applySeparateFile would write.
+func (i *Installer) renderSeparateFileContent(action domain.PlannedAction) ([]byte, error) {
+	baseName := filepath.Base(action.TargetPath)
+	name := strings.TrimSuffix(baseName, ".json")
+	def, ok := i.servers[name]
+	if !ok {
+		return nil, fmt.Errorf("MCP server %q not found in config", name)
+	}
+	return serverToJSON(def), nil
+}
+
+// renderMCPConfigFileContent computes what applyMCPConfigFile would write.
+func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]byte, error) {
+	existing, err := readJSONFile(action.TargetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read MCP config: %w", err)
+	}
+	if existing == nil {
+		existing = make(map[string]interface{})
+	}
+	serversMap := make(map[string]interface{})
+	for name, def := range i.servers {
+		serversMap[name] = serverToMap(def)
+	}
+	existing[mcpServersKey] = serversMap
+	updateManagedKeys(existing, mcpServersKey)
+	data, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal MCP config: %w", err)
+	}
+	data = append(data, '\n')
+	return data, nil
+}
+
 // serverToMap converts an MCPServerDef to a generic map for JSON output.
 // Only non-zero fields are included.
 func serverToMap(def domain.MCPServerDef) map[string]interface{} {

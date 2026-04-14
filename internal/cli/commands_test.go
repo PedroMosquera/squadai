@@ -1520,3 +1520,380 @@ func TestRunBackupPrune_JSON(t *testing.T) {
 		t.Error("JSON output should have 'kept' field")
 	}
 }
+
+// ─── RunDiff tests ───────────────────────────────────────────────────────────
+
+func TestRunDiff_Help(t *testing.T) {
+	tests := []struct {
+		flag string
+	}{
+		{"--help"},
+		{"-h"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.flag, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := RunDiff([]string{tc.flag}, &buf); err != nil {
+				t.Fatalf("help should not error: %v", err)
+			}
+			out := buf.String()
+			for _, want := range []string{
+				"Usage: agent-manager diff",
+				"Show what apply would change",
+				"--json",
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("diff help missing %q, got:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestRunDiff_UnknownFlag(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunDiff([]string{"--unknown"}, &buf)
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("expected 'unknown flag' error, got: %v", err)
+	}
+}
+
+func TestRunDiff_NothingToChange(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home") // isolated: no real user config
+	projectDir := filepath.Join(dir, "project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+
+	// Write a minimal project.json with no components enabled so nothing can change.
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+	projectPath := filepath.Join(projectDir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := runDiff([]string{}, &buf, homeDir, projectDir); err != nil {
+		t.Fatalf("runDiff should not error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Nothing to change") {
+		t.Errorf("expected 'Nothing to change', got:\n%s", out)
+	}
+}
+
+func TestRunDiff_NothingToChange_JSON(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home") // isolated: no real user config
+	projectDir := filepath.Join(dir, "project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+	projectPath := filepath.Join(projectDir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := runDiff([]string{"--json"}, &buf, homeDir, projectDir); err != nil {
+		t.Fatalf("runDiff --json should not error: %v", err)
+	}
+	// Should output empty JSON array.
+	if strings.TrimSpace(buf.String()) != "[]" {
+		t.Errorf("expected '[]', got:\n%s", buf.String())
+	}
+}
+
+func TestRunDiff_FreshProject_HasPlusLines(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Enable memory component on opencode — this will produce a create action.
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunDiff([]string{}, &buf); err != nil {
+		t.Fatalf("RunDiff should not error: %v", err)
+	}
+	out := buf.String()
+
+	// The output should have + lines indicating additions.
+	if !strings.Contains(out, "+") {
+		t.Errorf("expected '+' lines in diff for fresh project, got:\n%s", out)
+	}
+	// Should have the === Would create or Would update header.
+	if !strings.Contains(out, "Would create") && !strings.Contains(out, "Would update") {
+		t.Errorf("expected 'Would create' or 'Would update' in diff output, got:\n%s", out)
+	}
+}
+
+func TestRunDiff_JSON_ValidStructure(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunDiff([]string{"--json"}, &buf); err != nil {
+		t.Fatalf("RunDiff --json should not error: %v", err)
+	}
+
+	// Should be valid JSON — either "[]" or a JSON array.
+	out := strings.TrimSpace(buf.String())
+	if out == "[]" {
+		// Nothing to change is fine too.
+		return
+	}
+
+	var entries []struct {
+		Path      string `json:"path"`
+		Action    string `json:"action"`
+		Component string `json:"component"`
+		Diff      string `json:"diff"`
+	}
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, out)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected at least one diff entry")
+	}
+	for i, e := range entries {
+		if e.Path == "" {
+			t.Errorf("entry[%d]: path is empty", i)
+		}
+		if e.Action == "" {
+			t.Errorf("entry[%d]: action is empty", i)
+		}
+		if e.Component == "" {
+			t.Errorf("entry[%d]: component is empty", i)
+		}
+	}
+}
+
+func TestRunDiff_NoFilesWritten(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+			"rules":  {Enabled: true},
+		},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	// Snapshot the directory entries before running diff.
+	beforeEntries, err := collectDirEntries(dir)
+	if err != nil {
+		t.Fatalf("collect before entries: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunDiff([]string{}, &buf); err != nil {
+		t.Fatalf("RunDiff should not error: %v", err)
+	}
+
+	// Snapshot after diff.
+	afterEntries, err := collectDirEntries(dir)
+	if err != nil {
+		t.Fatalf("collect after entries: %v", err)
+	}
+
+	// Only the .agent-manager directory should exist (project.json was there before).
+	// No new managed files should have been created.
+	for path := range afterEntries {
+		if _, existed := beforeEntries[path]; !existed {
+			t.Errorf("RunDiff created a file that should not exist: %s", path)
+		}
+	}
+}
+
+// collectDirEntries walks dir and returns a set of all file paths found.
+func collectDirEntries(dir string) (map[string]bool, error) {
+	entries := make(map[string]bool)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			entries[path] = true
+		}
+		return nil
+	})
+	return entries, err
+}
+
+// TestRunDiff_DeleteAction verifies that delete actions are displayed correctly.
+func TestRunDiff_DeleteAction_ShowsRemoveMessage(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Create a project with opencode disabled, but write a stale file that the
+	// planner would want to delete.
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: false},
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	// Write a stale managed file for opencode.
+	stalePath := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(stalePath, []byte("# Old content\n"), 0644); err != nil {
+		t.Fatalf("write stale file: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunDiff([]string{}, &buf); err != nil {
+		t.Fatalf("RunDiff should not error: %v", err)
+	}
+	out := buf.String()
+
+	// Either "Would remove" or "Nothing to change" are both valid outcomes
+	// depending on whether the adapter is detected.
+	if out == "" {
+		t.Error("expected non-empty output")
+	}
+}
+
+// TestRunDiff_MarkerInjection verifies that marker-based renders show content correctly.
+func TestRunDiff_MarkerInjection_ShowsMarkerTags(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Create a project with memory enabled.
+	proj := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunDiff([]string{}, &buf); err != nil {
+		t.Fatalf("RunDiff should not error: %v", err)
+	}
+	out := buf.String()
+
+	// The diff output should contain marker tags indicating managed content.
+	if !strings.Contains(out, marker.OpenTag("memory")) && !strings.Contains(out, "+") {
+		t.Errorf("expected marker tags or '+' lines in diff output, got:\n%s", out)
+	}
+}

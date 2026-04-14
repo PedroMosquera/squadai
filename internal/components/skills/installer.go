@@ -403,6 +403,29 @@ func renderSkill(name string, def domain.SkillDef) string {
 	return b.String()
 }
 
+// RenderContent returns the content that Apply would write for the given action,
+// without performing the write. Used by the diff renderer.
+func (i *Installer) RenderContent(action domain.PlannedAction) (string, error) {
+	if strings.HasPrefix(action.Description, "skill:embedded:") {
+		relative := strings.TrimPrefix(action.Description, "skill:embedded:")
+		assetPath := "skills/" + relative + "/SKILL.md"
+		content, err := assets.Read(assetPath)
+		if err != nil {
+			return "", fmt.Errorf("read embedded skill %s: %w", assetPath, err)
+		}
+		return content, nil
+	}
+
+	// Custom skill: extract name from path.
+	dir := filepath.Dir(action.TargetPath)
+	name := filepath.Base(dir)
+	def, ok := i.skills[name]
+	if !ok {
+		return "", fmt.Errorf("skill %q not found in config", name)
+	}
+	return renderSkill(name, def), nil
+}
+
 func sortedKeys(m map[string]domain.SkillDef) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

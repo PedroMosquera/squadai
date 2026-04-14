@@ -25,7 +25,8 @@ type langDetector struct {
 // meta.Languages lists every detected language; it has at least one entry
 // when any language is found.
 func DetectProjectMeta(projectDir string) domain.ProjectMeta {
-	// Priority order: Go, Node, Python, Rust, Java/Kotlin, Ruby, C#, PHP, Swift.
+	// Priority order: Go, Node, Python, Rust, Java/Kotlin, Ruby, C#, PHP, Swift,
+	// then C/C++, Dart, Elixir, Scala (lowest priority to preserve existing behaviour).
 	detectors := []langDetector{
 		{"Go", detectGo},
 		{"TypeScript/JavaScript", detectNode},
@@ -36,6 +37,10 @@ func DetectProjectMeta(projectDir string) domain.ProjectMeta {
 		{"C#", detectCSharp},
 		{"PHP", detectPHP},
 		{"Swift", detectSwift},
+		{"C/C++", detectCpp},
+		{"Dart", detectDart},
+		{"Elixir", detectElixir},
+		{"Scala", detectScala},
 	}
 
 	var primaryMeta domain.ProjectMeta
@@ -603,6 +608,93 @@ func detectPHP(projectDir string, meta *domain.ProjectMeta) bool {
 		meta.LintCommand = "./vendor/bin/phpcs"
 	}
 
+	return true
+}
+
+// detectCpp checks for CMakeLists.txt and populates meta for C/C++ projects.
+func detectCpp(projectDir string, meta *domain.ProjectMeta) bool {
+	if _, err := os.Stat(filepath.Join(projectDir, "CMakeLists.txt")); err != nil {
+		return false
+	}
+	meta.Language = "C/C++"
+	if meta.TestCommand == "" {
+		meta.TestCommand = "cmake --build build && ctest --test-dir build"
+	}
+	if meta.BuildCommand == "" {
+		meta.BuildCommand = "cmake -B build && cmake --build build"
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "clang-tidy"
+	}
+	return true
+}
+
+// detectDart checks for pubspec.yaml and distinguishes Flutter from pure Dart projects.
+func detectDart(projectDir string, meta *domain.ProjectMeta) bool {
+	if _, err := os.Stat(filepath.Join(projectDir, "pubspec.yaml")); err != nil {
+		return false
+	}
+	meta.Language = "Dart"
+
+	// Detect Flutter vs pure Dart via the presence of lib/main.dart.
+	isFlutter := false
+	if _, err := os.Stat(filepath.Join(projectDir, "lib", "main.dart")); err == nil {
+		isFlutter = true
+	}
+
+	if meta.TestCommand == "" {
+		if isFlutter {
+			meta.TestCommand = "flutter test"
+		} else {
+			meta.TestCommand = "dart test"
+		}
+	}
+	if meta.BuildCommand == "" {
+		if isFlutter {
+			meta.BuildCommand = "flutter build"
+		} else {
+			meta.BuildCommand = "dart compile exe"
+		}
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "dart analyze"
+	}
+	return true
+}
+
+// detectElixir checks for mix.exs and populates meta for Elixir/OTP projects.
+func detectElixir(projectDir string, meta *domain.ProjectMeta) bool {
+	if _, err := os.Stat(filepath.Join(projectDir, "mix.exs")); err != nil {
+		return false
+	}
+	meta.Language = "Elixir"
+	if meta.TestCommand == "" {
+		meta.TestCommand = "mix test"
+	}
+	if meta.BuildCommand == "" {
+		meta.BuildCommand = "mix compile"
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "mix credo"
+	}
+	return true
+}
+
+// detectScala checks for build.sbt and populates meta for Scala projects.
+func detectScala(projectDir string, meta *domain.ProjectMeta) bool {
+	if _, err := os.Stat(filepath.Join(projectDir, "build.sbt")); err != nil {
+		return false
+	}
+	meta.Language = "Scala"
+	if meta.TestCommand == "" {
+		meta.TestCommand = "sbt test"
+	}
+	if meta.BuildCommand == "" {
+		meta.BuildCommand = "sbt compile"
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "sbt scalafmtCheck"
+	}
 	return true
 }
 

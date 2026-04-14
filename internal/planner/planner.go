@@ -15,6 +15,7 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/skills"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/workflows"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
 )
 
 // Planner computes the full action plan from merged config and detected adapters.
@@ -277,4 +278,262 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 // CopilotManager returns the copilot manager for the executor.
 func (p *Planner) CopilotManager() *copilot.Manager {
 	return p.copilotManager
+}
+
+// RenderAction returns the old and new content for a planned action.
+// This enables diff display without writing files.
+// Must be called AFTER Plan() (which initializes the component installers).
+func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir string) (oldContent, newContent []byte, err error) {
+	// Read existing file content (old state).
+	existing, readErr := fileutil.ReadFileOrEmpty(action.TargetPath)
+	if readErr != nil {
+		return nil, nil, fmt.Errorf("read existing file: %w", readErr)
+	}
+	oldContent = existing
+
+	// For delete actions there is no new content.
+	if action.Action == domain.ActionDelete {
+		return oldContent, nil, nil
+	}
+
+	// Copilot instructions are handled by the copilot manager.
+	if action.ID == "copilot-instructions" {
+		return p.renderCopilot(action, oldContent, projectDir)
+	}
+
+	// Route by component.
+	switch action.Component {
+	case domain.ComponentMemory:
+		return p.renderMemory(action, oldContent)
+
+	case domain.ComponentRules:
+		return p.renderRules(action, oldContent)
+
+	case domain.ComponentSkills:
+		return p.renderSkills(action, oldContent)
+
+	case domain.ComponentCommands:
+		return p.renderCommands(action, oldContent)
+
+	case domain.ComponentAgents:
+		return p.renderAgents(action, oldContent)
+
+	case domain.ComponentMCP:
+		return p.renderMCP(action, oldContent)
+
+	case domain.ComponentSettings:
+		return p.renderSettings(action, oldContent)
+
+	case domain.ComponentPlugins:
+		return p.renderPlugins(action, oldContent)
+
+	case domain.ComponentWorkflows:
+		return p.renderWorkflows(action, oldContent)
+
+	default:
+		return oldContent, []byte("[content preview not available for " + string(action.Component) + "]"), nil
+	}
+}
+
+// renderMemory computes what the memory installer would write.
+func (p *Planner) renderMemory(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.memoryInstaller == nil {
+		return existing, []byte("[memory installer not initialized]"), nil
+	}
+	content := memory.TemplateForAgentID(action.Agent)
+	updated := injectSection(string(existing), memory.SectionID, content)
+	return existing, []byte(updated), nil
+}
+
+// renderRules computes what the rules installer would write.
+func (p *Planner) renderRules(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.rulesInstaller == nil {
+		return existing, []byte("[rules installer not initialized]"), nil
+	}
+	content := p.rulesInstaller.Content()
+	if content == "" {
+		return existing, existing, nil
+	}
+	updated := injectSection(string(existing), rules.SectionID, content)
+	return existing, []byte(updated), nil
+}
+
+// renderSkills computes what the skills installer would write.
+func (p *Planner) renderSkills(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.skillsInstaller == nil {
+		return existing, []byte("[skills installer not initialized]"), nil
+	}
+	newContent, err := p.skillsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for skills: " + err.Error() + "]"), nil
+	}
+	return existing, []byte(newContent), nil
+}
+
+// renderCommands computes what the commands installer would write.
+func (p *Planner) renderCommands(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.commandsInstaller == nil {
+		return existing, []byte("[commands installer not initialized]"), nil
+	}
+	newContent, err := p.commandsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for commands: " + err.Error() + "]"), nil
+	}
+	return existing, []byte(newContent), nil
+}
+
+// renderAgents computes what the agents installer would write.
+func (p *Planner) renderAgents(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.agentsInstaller == nil {
+		return existing, []byte("[agents installer not initialized]"), nil
+	}
+	newContent, err := p.agentsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for agents: " + err.Error() + "]"), nil
+	}
+	if newContent == "" {
+		return existing, existing, nil
+	}
+	return existing, []byte(newContent), nil
+}
+
+// renderMCP computes what the MCP installer would write.
+func (p *Planner) renderMCP(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.mcpInstaller == nil {
+		return existing, []byte("[mcp installer not initialized]"), nil
+	}
+	newContent, err := p.mcpInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for mcp: " + err.Error() + "]"), nil
+	}
+	return existing, []byte(newContent), nil
+}
+
+// renderSettings computes what the settings installer would write.
+func (p *Planner) renderSettings(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.settingsInstaller == nil {
+		return existing, []byte("[settings installer not initialized]"), nil
+	}
+	newContent, err := p.settingsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for settings: " + err.Error() + "]"), nil
+	}
+	return existing, []byte(newContent), nil
+}
+
+// renderPlugins computes what the plugins installer would write.
+func (p *Planner) renderPlugins(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.pluginsInstaller == nil {
+		return existing, []byte("[plugins installer not initialized]"), nil
+	}
+	newContent, err := p.pluginsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for plugins: " + err.Error() + "]"), nil
+	}
+	return existing, []byte(newContent), nil
+}
+
+// renderWorkflows computes what the workflows installer would write.
+func (p *Planner) renderWorkflows(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.workflowsInstaller == nil {
+		return existing, []byte("[workflows installer not initialized]"), nil
+	}
+	newContent, err := p.workflowsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for workflows: " + err.Error() + "]"), nil
+	}
+	return existing, []byte(newContent), nil
+}
+
+// renderCopilot computes what the copilot manager would write.
+func (p *Planner) renderCopilot(action domain.PlannedAction, existing []byte, projectDir string) ([]byte, []byte, error) {
+	_ = action
+	// We don't have the copilot config here directly; use the manager's logic via Apply
+	// but without writing. Since copilot config is embedded in action ID pattern,
+	// use a fallback preview message.
+	return existing, []byte("[content preview not available for copilot-instructions]"), nil
+}
+
+// injectSection is a local helper that calls marker.InjectSection.
+// Avoids a circular import since planner cannot import marker directly.
+// We replicate the logic inline rather than importing the marker package.
+func injectSection(document, sectionID, content string) string {
+	open := "<!-- agent-manager:" + sectionID + " -->"
+	close := "<!-- /agent-manager:" + sectionID + " -->"
+
+	openIdx := indexOf(document, open)
+	closeIdx := indexOf(document, close)
+
+	if openIdx >= 0 && closeIdx >= 0 && closeIdx > openIdx {
+		before := document[:openIdx]
+		after := document[closeIdx+len(close):]
+		if content == "" {
+			result := trimRight(before, "\n") + after
+			if trimSpace(result) == "" {
+				return ""
+			}
+			return result
+		}
+		return before + open + "\n" + content + "\n" + close + after
+	}
+
+	if content == "" {
+		return document
+	}
+
+	block := open + "\n" + content + "\n" + close + "\n"
+	if document == "" {
+		return block
+	}
+	if !hasSuffix(document, "\n\n") {
+		if hasSuffix(document, "\n") {
+			document += "\n"
+		} else {
+			document += "\n\n"
+		}
+	}
+	return document + block
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
+func hasSuffix(s, suffix string) bool {
+	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
+}
+
+func trimRight(s, cutset string) string {
+	for len(s) > 0 {
+		found := false
+		for _, c := range cutset {
+			if rune(s[len(s)-1]) == c {
+				s = s[:len(s)-1]
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+	}
+	return s
+}
+
+func trimSpace(s string) string {
+	// minimal trim for the injectSection helper
+	start := 0
+	for start < len(s) && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
+		start++
+	}
+	end := len(s)
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+		end--
+	}
+	return s[start:end]
 }

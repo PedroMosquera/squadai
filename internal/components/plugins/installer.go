@@ -383,6 +383,51 @@ func (i *Installer) verifySkillFile(adapter domain.Adapter, name string, project
 	}
 }
 
+// RenderContent returns the content that Apply would write for the given action,
+// without performing the write. Used by the diff renderer.
+func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
+	switch {
+	case strings.HasPrefix(action.Description, "plugin:claude:"):
+		return i.renderClaudePluginContent(action)
+	case strings.HasPrefix(action.Description, "plugin:skill:"):
+		name := strings.TrimPrefix(action.Description, "plugin:skill:")
+		return []byte(pluginSkillContentFor(name)), nil
+	default:
+		return nil, fmt.Errorf("unknown plugin action: %s", action.Description)
+	}
+}
+
+// renderClaudePluginContent computes what applyClaudePlugin would write.
+func (i *Installer) renderClaudePluginContent(action domain.PlannedAction) ([]byte, error) {
+	name := strings.TrimPrefix(action.Description, "plugin:claude:")
+	plugin, ok := i.plugins[name]
+	if !ok {
+		return nil, fmt.Errorf("plugin %q not found in config", name)
+	}
+
+	existing, err := readJSONFile(action.TargetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read settings: %w", err)
+	}
+	if existing == nil {
+		existing = make(map[string]interface{})
+	}
+
+	enabledPlugins, _ := existing["enabledPlugins"].(map[string]interface{})
+	if enabledPlugins == nil {
+		enabledPlugins = make(map[string]interface{})
+	}
+	enabledPlugins[plugin.PluginID] = true
+	existing["enabledPlugins"] = enabledPlugins
+
+	data, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal settings: %w", err)
+	}
+	data = append(data, '\n')
+	return data, nil
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 // isAgentSupported checks if agentID is in the supported agents list.

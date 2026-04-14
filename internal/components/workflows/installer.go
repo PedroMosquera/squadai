@@ -126,6 +126,23 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	return nil
 }
 
+// RenderContent returns the content that Apply would write for the given action,
+// without performing the write. Used by the diff renderer.
+func (i *Installer) RenderContent(action domain.PlannedAction) (string, error) {
+	if i.config == nil || i.config.Methodology == "" {
+		return "", fmt.Errorf("no methodology configured for workflow render")
+	}
+	filename, ok := methodologyWorkflowFile[i.config.Methodology]
+	if !ok {
+		return "", fmt.Errorf("unknown methodology: %s", i.config.Methodology)
+	}
+	content, err := assets.Read("workflows/" + filename)
+	if err != nil {
+		return "", fmt.Errorf("read workflow asset %s: %w", filename, err)
+	}
+	return content, nil
+}
+
 // Verify checks post-apply state for the workflows component.
 func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) ([]domain.VerifyResult, error) {
 	if !adapter.SupportsWorkflows() {
