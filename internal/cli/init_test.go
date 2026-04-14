@@ -23,7 +23,7 @@ func TestBuildSmartProjectConfig_GoProject(t *testing.T) {
 	}
 
 	adapters := []domain.Adapter{}
-	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil, domain.ModelTierBalanced)
 
 	if proj.Version != 1 {
 		t.Errorf("Version = %d, want 1", proj.Version)
@@ -51,7 +51,7 @@ func TestBuildSmartProjectConfig_DetectedAdapters(t *testing.T) {
 	// Create mock adapters that look like detected ones.
 	adapters := DetectAdapters(t.TempDir()) // Will at least include OpenCode
 
-	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil, domain.ModelTierBalanced)
 
 	// OpenCode should always be enabled.
 	if !proj.Adapters[string(domain.AgentOpenCode)].Enabled {
@@ -61,7 +61,7 @@ func TestBuildSmartProjectConfig_DetectedAdapters(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_TDD(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil, domain.ModelTierBalanced)
 
 	if proj.Methodology != domain.MethodologyTDD {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyTDD)
@@ -73,7 +73,7 @@ func TestBuildSmartProjectConfig_WithMethodology_TDD(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_SDD(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologySDD, nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologySDD, nil, nil, domain.ModelTierBalanced)
 
 	if proj.Methodology != domain.MethodologySDD {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologySDD)
@@ -85,7 +85,7 @@ func TestBuildSmartProjectConfig_WithMethodology_SDD(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_Conventional(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyConventional, nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyConventional, nil, nil, domain.ModelTierBalanced)
 
 	if proj.Methodology != domain.MethodologyConventional {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyConventional)
@@ -97,7 +97,7 @@ func TestBuildSmartProjectConfig_WithMethodology_Conventional(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_Empty(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	if proj.Methodology != "" {
 		t.Errorf("Methodology = %q, want empty", proj.Methodology)
@@ -476,7 +476,7 @@ func TestRunInit_MCPSummaryPrinted(t *testing.T) {
 
 func TestBuildSmartProjectConfig_HasDefaultMCP(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	if len(proj.MCP) == 0 {
 		t.Error("buildSmartProjectConfig should always include default MCP servers")
@@ -488,7 +488,7 @@ func TestBuildSmartProjectConfig_HasDefaultMCP(t *testing.T) {
 
 func TestBuildSmartProjectConfig_MCPAndMethodology(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil, domain.ModelTierBalanced)
 
 	if proj.Methodology != domain.MethodologyTDD {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyTDD)
@@ -505,7 +505,7 @@ func TestBuildSmartProjectConfig_MCPAndMethodology(t *testing.T) {
 
 func TestBuildSmartProjectConfig_AllNineComponents_WithMethodology(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil, domain.ModelTierBalanced)
 
 	wantComponents := []string{
 		string(domain.ComponentMemory),
@@ -532,7 +532,7 @@ func TestBuildSmartProjectConfig_AllNineComponents_WithMethodology(t *testing.T)
 func TestBuildSmartProjectConfig_ComponentsWithoutMethodology(t *testing.T) {
 	// Without methodology: agents and commands should NOT be present.
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	// Always-on components must be present and enabled.
 	alwaysOn := []string{
@@ -564,7 +564,7 @@ func TestBuildSmartProjectConfig_ComponentsWithoutMethodology(t *testing.T) {
 
 func TestBuildSmartProjectConfig_PluginsComponent_WhenPluginsSelected(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"code-review"})
+	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"code-review"}, domain.ModelTierBalanced)
 
 	cfg, ok := proj.Components[string(domain.ComponentPlugins)]
 	if !ok {
@@ -580,7 +580,7 @@ func TestBuildSmartProjectConfig_PluginsComponent_WhenPluginsSelected(t *testing
 
 func TestBuildSmartProjectConfig_PluginsComponent_WhenNoPluginsSelected(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	if _, ok := proj.Components[string(domain.ComponentPlugins)]; ok {
 		t.Error("plugins component should not be present when no plugins are selected")
@@ -596,7 +596,7 @@ func TestBuildSmartProjectConfig_AllDetectedAdaptersEnabled(t *testing.T) {
 	adapters := DetectAdapters(home)
 
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil, domain.ModelTierBalanced)
 
 	for _, a := range adapters {
 		cfg, ok := proj.Adapters[string(a.ID())]
@@ -644,7 +644,7 @@ func TestRunInit_MCPFlag_FiltersToSelected(t *testing.T) {
 
 func TestBuildSmartProjectConfig_MCPFlag_FiltersMCP(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", []string{"context7"}, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", []string{"context7"}, nil, domain.ModelTierBalanced)
 
 	if _, ok := proj.MCP["context7"]; !ok {
 		t.Errorf("MCP should contain 'context7' when selected, got: %v", proj.MCP)
@@ -657,7 +657,7 @@ func TestBuildSmartProjectConfig_MCPFlag_FiltersMCP(t *testing.T) {
 
 func TestBuildSmartProjectConfig_MCPFlag_EmptySelectionUsesDefaults(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	defaults := DefaultMCPServers()
 	if len(proj.MCP) != len(defaults) {
@@ -699,7 +699,7 @@ func TestRunInit_PluginsFlag_PopulatesPlugins(t *testing.T) {
 
 func TestBuildSmartProjectConfig_PluginsFlag_SetsEnabled(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"code-review"})
+	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"code-review"}, domain.ModelTierBalanced)
 
 	plugin, ok := proj.Plugins["code-review"]
 	if !ok {
@@ -713,7 +713,7 @@ func TestBuildSmartProjectConfig_PluginsFlag_SetsEnabled(t *testing.T) {
 func TestBuildSmartProjectConfig_PluginsFlag_UnknownPluginIgnored(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
 	// "nonexistent" is not in AvailablePlugins() — should be silently ignored.
-	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"nonexistent"})
+	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"nonexistent"}, domain.ModelTierBalanced)
 
 	if len(proj.Plugins) != 0 {
 		t.Errorf("unknown plugin should not populate Plugins, got: %v", proj.Plugins)
@@ -744,7 +744,7 @@ func TestRunInit_WritesFindSkillsFile(t *testing.T) {
 
 func TestBuildSmartProjectConfig_FindSkillsInSkillsMap(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil, domain.ModelTierBalanced)
 
 	if _, ok := proj.Skills["find-skills"]; !ok {
 		t.Error("find-skills should be in the Skills map")
@@ -1116,11 +1116,12 @@ func TestRunInit_Merge_AddsNewAdapters(t *testing.T) {
 		"",
 		nil,
 		nil,
+		domain.ModelTierBalanced,
 	)
 	// Add cursor to the fresh config to simulate detection.
 	freshWithCursor.Adapters["cursor"] = domain.AdapterConfig{Enabled: true}
 
-	merged := mergeProjectConfigs(initial, freshWithCursor, false)
+	merged := mergeProjectConfigs(initial, freshWithCursor, false, false)
 
 	// Original opencode adapter must still be present.
 	if _, ok := merged.Adapters["opencode"]; !ok {
@@ -1371,7 +1372,7 @@ func TestMergeProjectConfigs_AdditiveAdapterMerge(t *testing.T) {
 		Components: map[string]domain.ComponentConfig{},
 	}
 
-	result := mergeProjectConfigs(existing, fresh, false)
+	result := mergeProjectConfigs(existing, fresh, false, false)
 
 	if !result.Adapters["opencode"].Enabled {
 		t.Error("existing opencode adapter Enabled=true should be preserved")
@@ -1401,7 +1402,7 @@ func TestMergeProjectConfigs_ExistingSkillsPreserved(t *testing.T) {
 		},
 	}
 
-	result := mergeProjectConfigs(existing, fresh, false)
+	result := mergeProjectConfigs(existing, fresh, false, false)
 
 	if _, ok := result.Skills["my-skill"]; !ok {
 		t.Error("user skill 'my-skill' should be preserved after merge")
@@ -1429,7 +1430,7 @@ func TestMergeProjectConfigs_MethodologyPreservation(t *testing.T) {
 		Team:        domain.DefaultTeam(domain.MethodologySDD),
 	}
 
-	result := mergeProjectConfigs(existing, fresh, false /* not explicit */)
+	result := mergeProjectConfigs(existing, fresh, false /* not explicit */, false)
 
 	if result.Methodology != domain.MethodologyTDD {
 		t.Errorf("Methodology = %q, want %q (should be preserved when not explicit)", result.Methodology, domain.MethodologyTDD)
@@ -1458,7 +1459,7 @@ func TestMergeProjectConfigs_MethodologyOverride(t *testing.T) {
 		Team:        domain.DefaultTeam(domain.MethodologySDD),
 	}
 
-	result := mergeProjectConfigs(existing, fresh, true /* explicit */)
+	result := mergeProjectConfigs(existing, fresh, true /* explicit */, false)
 
 	if result.Methodology != domain.MethodologySDD {
 		t.Errorf("Methodology = %q, want %q (should be overwritten by explicit flag)", result.Methodology, domain.MethodologySDD)
@@ -1495,7 +1496,7 @@ func TestMergeProjectConfigs_MapIsolation(t *testing.T) {
 		Components: map[string]domain.ComponentConfig{},
 	}
 
-	result := mergeProjectConfigs(existing, fresh, false)
+	result := mergeProjectConfigs(existing, fresh, false, false)
 
 	// Add a new entry to result's maps.
 	result.Adapters["new-adapter"] = domain.AdapterConfig{Enabled: true}
@@ -1537,7 +1538,7 @@ func TestMergeProjectConfigs_MetaAlwaysUpdated(t *testing.T) {
 		Meta:       domain.ProjectMeta{Language: "Go", Name: "new-project"},
 	}
 
-	result := mergeProjectConfigs(existing, fresh, false)
+	result := mergeProjectConfigs(existing, fresh, false, false)
 
 	if result.Version != 2 {
 		t.Errorf("Version = %d, want 2 (always from fresh)", result.Version)
@@ -1571,7 +1572,7 @@ func TestMergeProjectConfigs_CopilotPreserved(t *testing.T) {
 		},
 	}
 
-	result := mergeProjectConfigs(existing, fresh, false)
+	result := mergeProjectConfigs(existing, fresh, false, false)
 
 	if result.Copilot.InstructionsTemplate != "custom" {
 		t.Errorf("Copilot.InstructionsTemplate = %q, want %q (should be preserved)", result.Copilot.InstructionsTemplate, "custom")
@@ -1603,7 +1604,7 @@ func TestMergeProjectConfigs_MCPAdditive(t *testing.T) {
 		},
 	}
 
-	result := mergeProjectConfigs(existing, fresh, false)
+	result := mergeProjectConfigs(existing, fresh, false, false)
 
 	// Existing custom server must be preserved.
 	if _, ok := result.MCP["my-custom-server"]; !ok {
@@ -1616,5 +1617,99 @@ func TestMergeProjectConfigs_MCPAdditive(t *testing.T) {
 	// New server from fresh must be added.
 	if _, ok := result.MCP["new-server"]; !ok {
 		t.Error("new 'new-server' from fresh should be added")
+	}
+}
+
+// ─── RunInit --model-tier flag ────────────────────────────────────────────────
+
+// TestRunInit_ModelTierFlag_SetsInConfig verifies that --model-tier=performance
+// results in project.json having ModelTier set to "performance".
+func TestRunInit_ModelTierFlag_SetsInConfig(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--model-tier=performance"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	if proj.ModelTier != domain.ModelTierPerformance {
+		t.Errorf("ModelTier = %q, want %q", proj.ModelTier, domain.ModelTierPerformance)
+	}
+}
+
+// TestRunInit_ModelTierFlag_InvalidReturnsError verifies that an unknown value
+// for --model-tier returns an error.
+func TestRunInit_ModelTierFlag_InvalidReturnsError(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunInit([]string{"--model-tier=bogus"}, &buf)
+	if err == nil {
+		t.Fatal("expected error for unknown model tier, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown model tier") {
+		t.Errorf("error = %q, want to contain 'unknown model tier'", err.Error())
+	}
+}
+
+// TestRunInit_ModelTierDefault_IsBalanced verifies that without --model-tier,
+// the project.json has ModelTier set to "balanced".
+func TestRunInit_ModelTierDefault_IsBalanced(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit(nil, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	if proj.ModelTier != domain.ModelTierBalanced {
+		t.Errorf("ModelTier = %q, want %q (default should be balanced)", proj.ModelTier, domain.ModelTierBalanced)
+	}
+}
+
+// TestRunInit_HelpIncludesModelTier verifies that --model-tier appears in help output.
+func TestRunInit_HelpIncludesModelTier(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--model-tier") {
+		t.Error("help output should mention --model-tier flag")
 	}
 }

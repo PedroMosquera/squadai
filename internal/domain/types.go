@@ -20,6 +20,16 @@ const (
 	MethodologyConventional Methodology = "conventional"
 )
 
+// ModelTier identifies the AI model cost/quality preset for agent configuration.
+type ModelTier string
+
+const (
+	ModelTierBalanced    ModelTier = "balanced"
+	ModelTierPerformance ModelTier = "performance"
+	ModelTierStarter     ModelTier = "starter"
+	ModelTierManual      ModelTier = "manual"
+)
+
 // DelegationStrategy describes how an agent handles sub-agent delegation.
 type DelegationStrategy string
 

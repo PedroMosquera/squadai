@@ -533,8 +533,8 @@ func TestInitPlugins_EnterGoesToSummary(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitSummary {
-		t.Errorf("screen = %d, want screenInitSummary (%d) after enter", model.screen, screenInitSummary)
+	if model.screen != screenInitModelTier {
+		t.Errorf("screen = %d, want screenInitModelTier (%d) after enter", model.screen, screenInitModelTier)
 	}
 }
 
@@ -563,8 +563,8 @@ func TestInitSummary_EscGoesToPlugins(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenInitPlugins {
-		t.Errorf("screen = %d, want screenInitPlugins (%d) after esc", model.screen, screenInitPlugins)
+	if model.screen != screenInitModelTier {
+		t.Errorf("screen = %d, want screenInitModelTier (%d) after esc", model.screen, screenInitModelTier)
 	}
 }
 
@@ -834,11 +834,18 @@ func TestInitWizard_BackNavigation_FullRound(t *testing.T) {
 	m.mcpSelections = map[string]bool{"context7": true}
 	m.pluginSelections = make(map[string]bool)
 
-	// Esc from summary → plugins
+	// Esc from summary → model tier
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
+	if model.screen != screenInitModelTier {
+		t.Errorf("esc from summary: screen = %d, want screenInitModelTier (%d)", model.screen, screenInitModelTier)
+	}
+
+	// Esc from model tier → plugins
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
 	if model.screen != screenInitPlugins {
-		t.Errorf("esc from summary: screen = %d, want screenInitPlugins (%d)", model.screen, screenInitPlugins)
+		t.Errorf("esc from model tier: screen = %d, want screenInitPlugins (%d)", model.screen, screenInitPlugins)
 	}
 
 	// Esc from plugins → MCP
@@ -1465,5 +1472,58 @@ func TestRenderPanel_ContainsContent(t *testing.T) {
 	out := m.renderPanel("hello world")
 	if !strings.Contains(out, "hello world") {
 		t.Errorf("renderPanel output should contain 'hello world', got: %q", out)
+	}
+}
+
+// ─── Init Model Tier Screen Tests ─────────────────────────────────────────────
+
+// TestInitModelTier_ScreenExists verifies that the screenInitModelTier constant
+// is defined and occupies a unique slot in the screen iota.
+func TestInitModelTier_ScreenExists(t *testing.T) {
+	// screenInitModelTier must be distinct from other screens.
+	screens := []screen{
+		screenIntro,
+		screenMenu,
+		screenRunning,
+		screenResult,
+		screenInitMethodology,
+		screenTeamStatus,
+		screenInitMCP,
+		screenInitPlugins,
+		screenInitSummary,
+		screenSkillBrowser,
+		screenInitApplyPrompt,
+	}
+	for _, s := range screens {
+		if s == screenInitModelTier {
+			t.Errorf("screenInitModelTier (%d) conflicts with another screen constant", screenInitModelTier)
+		}
+	}
+}
+
+// TestInitModelTier_DefaultIsBalanced verifies that NewModel initializes
+// modelTier to ModelTierBalanced.
+func TestInitModelTier_DefaultIsBalanced(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	if m.modelTier != domain.ModelTierBalanced {
+		t.Errorf("modelTier = %q, want %q (default should be balanced)", m.modelTier, domain.ModelTierBalanced)
+	}
+}
+
+// TestInitModelTier_Enter_AdvancesToNextScreen verifies that pressing enter on
+// the model tier screen stores the selected tier and advances to screenInitSummary.
+func TestInitModelTier_Enter_AdvancesToNextScreen(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitModelTier
+	m.initCursor = 0 // balanced is first
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitSummary {
+		t.Errorf("screen = %d, want screenInitSummary (%d) after enter on model tier", model.screen, screenInitSummary)
+	}
+	if model.modelTier != domain.ModelTierBalanced {
+		t.Errorf("modelTier = %q, want %q after selecting first option", model.modelTier, domain.ModelTierBalanced)
 	}
 }

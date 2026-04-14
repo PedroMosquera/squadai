@@ -52,6 +52,8 @@ func RunInit(args []string, stdout io.Writer) error {
 	methodologyExplicit := false
 	var mcpFlag string
 	var pluginsFlag string
+	modelTier := domain.ModelTierBalanced
+	modelTierExplicit := false
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "--methodology=") {
 			methodology = strings.TrimPrefix(arg, "--methodology=")
@@ -66,6 +68,18 @@ func RunInit(args []string, stdout io.Writer) error {
 			pluginsFlag = strings.TrimPrefix(arg, "--plugins=")
 			continue
 		}
+		if strings.HasPrefix(arg, "--model-tier=") {
+			val := strings.TrimPrefix(arg, "--model-tier=")
+			switch domain.ModelTier(val) {
+			case domain.ModelTierBalanced, domain.ModelTierPerformance,
+				domain.ModelTierStarter, domain.ModelTierManual:
+				modelTier = domain.ModelTier(val)
+				modelTierExplicit = true
+			default:
+				return fmt.Errorf("unknown model tier %q (balanced|performance|starter|manual)", val)
+			}
+			continue
+		}
 		switch arg {
 		case "--with-policy":
 			withPolicy = true
@@ -76,7 +90,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force] [--merge] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--with-policy] [--force] [--merge] [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Initialize .squadai/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
@@ -92,6 +106,12 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --plugins=<csv>")
 			fmt.Fprintln(stdout, "                 Comma-separated list of plugin IDs to enable (e.g. code-review).")
 			fmt.Fprintln(stdout, "                 Omit to skip plugin installation.")
+			fmt.Fprintln(stdout, "  --model-tier=<balanced|performance|starter|manual>")
+			fmt.Fprintln(stdout, "                 Set the model tier for agent configuration.")
+			fmt.Fprintln(stdout, "                 balanced: best cost/quality ratio (default)")
+			fmt.Fprintln(stdout, "                 performance: always flagship models — maximum quality, higher cost")
+			fmt.Fprintln(stdout, "                 starter: capable models at lowest cost")
+			fmt.Fprintln(stdout, "                 manual: configure models yourself — no defaults applied")
 			fmt.Fprintln(stdout, "  --with-policy  Also create .squadai/policy.json with a starter template.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
 			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
@@ -102,6 +122,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  squadai init")
 			fmt.Fprintln(stdout, "  squadai init --methodology=tdd --with-policy")
 			fmt.Fprintln(stdout, "  squadai init --methodology=sdd --mcp=context7 --plugins=code-review")
+			fmt.Fprintln(stdout, "  squadai init --model-tier=performance")
 			fmt.Fprintln(stdout, "  squadai init --force")
 			fmt.Fprintln(stdout, "  squadai init --merge")
 			fmt.Fprintln(stdout, "  squadai init --json")
@@ -190,15 +211,15 @@ func RunInit(args []string, stdout io.Writer) error {
 		if loadErr != nil {
 			return fmt.Errorf("load existing project config for merge: %w", loadErr)
 		}
-		fresh := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
-		proj = mergeProjectConfigs(existing, fresh, methodologyExplicit)
+		fresh := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		proj = mergeProjectConfigs(existing, fresh, methodologyExplicit, modelTierExplicit)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
 		fmt.Fprintf(humanOut, "  merged  %s\n", relPath(projectDir, projectPath))
 	} else {
 		// New or force: build fresh config.
-		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
+		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
@@ -211,7 +232,7 @@ func RunInit(args []string, stdout io.Writer) error {
 
 	// When proj was not written (exists + no-op skip), build it for JSON output.
 	if proj == nil {
-		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
+		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
 	}
 
 	// Create policy config if requested.
@@ -368,10 +389,11 @@ func RunInit(args []string, stdout io.Writer) error {
 }
 
 // buildSmartProjectConfig creates a rich project.json from detected metadata, adapters,
-// an optional methodology selection, optional MCP server selections, and optional plugin selections.
+// an optional methodology selection, optional MCP server selections, optional plugin selections,
+// and an optional model tier selection.
 // mcpSelections is a list of MCP server IDs to enable (nil/empty = all defaults).
 // pluginSelections is a list of plugin IDs to enable (nil/empty = none).
-func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter, methodology domain.Methodology, mcpSelections []string, pluginSelections []string) *domain.ProjectConfig {
+func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter, methodology domain.Methodology, mcpSelections []string, pluginSelections []string, modelTier domain.ModelTier) *domain.ProjectConfig {
 	proj := &domain.ProjectConfig{
 		Version: 1,
 		Meta:    meta,
@@ -411,6 +433,11 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 				ContentFile: "skills/find-skills.md",
 			},
 		},
+	}
+
+	// Set model tier when explicitly provided (non-empty).
+	if modelTier != "" {
+		proj.ModelTier = modelTier
 	}
 
 	// Enable ALL detected personal-lane adapters.
@@ -495,8 +522,9 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 //     added, but existing keys are never overwritten (user customizations preserved)
 //   - Methodology, Team, Commands: if methodologyExplicit is true, overwrite from fresh;
 //     otherwise preserve existing values
+//   - ModelTier: if modelTierExplicit is true, overwrite from fresh; otherwise preserve
 //   - Copilot, Rules: always preserved from existing (user-managed)
-func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExplicit bool) *domain.ProjectConfig {
+func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExplicit bool, modelTierExplicit bool) *domain.ProjectConfig {
 	result := *existing
 
 	// Always overwrite version and meta from fresh.
@@ -566,6 +594,11 @@ func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExpli
 	}
 	// If not explicit, result.Methodology/Team/Commands are already the existing
 	// values from the struct copy above.
+
+	// ModelTier-aware: if explicit flag given, overwrite; otherwise preserve.
+	if modelTierExplicit {
+		result.ModelTier = fresh.ModelTier
+	}
 
 	// Copilot and Rules are always preserved from existing (user-managed).
 	result.Copilot = existing.Copilot
