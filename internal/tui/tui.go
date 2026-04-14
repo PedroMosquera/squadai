@@ -262,9 +262,29 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenRunning
 			m.output = ""
 			m.err = nil
-			// TODO(v2-session4): Pass mcpSelections and pluginSelections to RunInit
-			// once CLI flags for MCP/plugin configuration are implemented.
 			args := []string{"--methodology=" + string(m.methodology)}
+			// Add MCP selections.
+			var mcpKeys []string
+			for k, selected := range m.mcpSelections {
+				if selected {
+					mcpKeys = append(mcpKeys, k)
+				}
+			}
+			if len(mcpKeys) > 0 {
+				sort.Strings(mcpKeys) // deterministic
+				args = append(args, "--mcp="+strings.Join(mcpKeys, ","))
+			}
+			// Add plugin selections.
+			var pluginKeys []string
+			for k, selected := range m.pluginSelections {
+				if selected {
+					pluginKeys = append(pluginKeys, k)
+				}
+			}
+			if len(pluginKeys) > 0 {
+				sort.Strings(pluginKeys) // deterministic
+				args = append(args, "--plugins="+strings.Join(pluginKeys, ","))
+			}
 			return m, func() tea.Msg {
 				var buf bytes.Buffer
 				err := cli.RunInit(args, &buf)

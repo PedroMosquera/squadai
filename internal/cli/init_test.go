@@ -23,7 +23,7 @@ func TestBuildSmartProjectConfig_GoProject(t *testing.T) {
 	}
 
 	adapters := []domain.Adapter{}
-	proj := buildSmartProjectConfig(meta, adapters, "")
+	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil)
 
 	if proj.Version != 1 {
 		t.Errorf("Version = %d, want 1", proj.Version)
@@ -51,7 +51,7 @@ func TestBuildSmartProjectConfig_DetectedAdapters(t *testing.T) {
 	// Create mock adapters that look like detected ones.
 	adapters := DetectAdapters(t.TempDir()) // Will at least include OpenCode
 
-	proj := buildSmartProjectConfig(meta, adapters, "")
+	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil)
 
 	// OpenCode should always be enabled.
 	if !proj.Adapters[string(domain.AgentOpenCode)].Enabled {
@@ -61,7 +61,7 @@ func TestBuildSmartProjectConfig_DetectedAdapters(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_TDD(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil)
 
 	if proj.Methodology != domain.MethodologyTDD {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyTDD)
@@ -73,7 +73,7 @@ func TestBuildSmartProjectConfig_WithMethodology_TDD(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_SDD(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologySDD)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologySDD, nil, nil)
 
 	if proj.Methodology != domain.MethodologySDD {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologySDD)
@@ -85,7 +85,7 @@ func TestBuildSmartProjectConfig_WithMethodology_SDD(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_Conventional(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyConventional)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyConventional, nil, nil)
 
 	if proj.Methodology != domain.MethodologyConventional {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyConventional)
@@ -97,7 +97,7 @@ func TestBuildSmartProjectConfig_WithMethodology_Conventional(t *testing.T) {
 
 func TestBuildSmartProjectConfig_WithMethodology_Empty(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "")
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
 
 	if proj.Methodology != "" {
 		t.Errorf("Methodology = %q, want empty", proj.Methodology)
@@ -476,7 +476,7 @@ func TestRunInit_MCPSummaryPrinted(t *testing.T) {
 
 func TestBuildSmartProjectConfig_HasDefaultMCP(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, "")
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
 
 	if len(proj.MCP) == 0 {
 		t.Error("buildSmartProjectConfig should always include default MCP servers")
@@ -488,7 +488,7 @@ func TestBuildSmartProjectConfig_HasDefaultMCP(t *testing.T) {
 
 func TestBuildSmartProjectConfig_MCPAndMethodology(t *testing.T) {
 	meta := domain.ProjectMeta{Language: "Go"}
-	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD)
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil)
 
 	if proj.Methodology != domain.MethodologyTDD {
 		t.Errorf("Methodology = %q, want %q", proj.Methodology, domain.MethodologyTDD)
@@ -498,5 +498,257 @@ func TestBuildSmartProjectConfig_MCPAndMethodology(t *testing.T) {
 	}
 	if _, ok := proj.MCP["context7"]; !ok {
 		t.Errorf("MCP should contain 'context7' even with methodology set, got: %v", proj.MCP)
+	}
+}
+
+// ─── Item 1.1: All 9 component keys ──────────────────────────────────────────
+
+func TestBuildSmartProjectConfig_AllNineComponents_WithMethodology(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, domain.MethodologyTDD, nil, nil)
+
+	wantComponents := []string{
+		string(domain.ComponentMemory),
+		"copilot",
+		string(domain.ComponentRules),
+		string(domain.ComponentSettings),
+		string(domain.ComponentSkills),
+		string(domain.ComponentWorkflows),
+		string(domain.ComponentMCP),
+		string(domain.ComponentAgents),
+		string(domain.ComponentCommands),
+	}
+	for _, comp := range wantComponents {
+		cfg, ok := proj.Components[comp]
+		if !ok {
+			t.Errorf("component %q missing from Components map", comp)
+			continue
+		}
+		if !cfg.Enabled {
+			t.Errorf("component %q should be enabled, got Enabled=false", comp)
+		}
+	}
+}
+
+func TestBuildSmartProjectConfig_ComponentsWithoutMethodology(t *testing.T) {
+	// Without methodology: agents and commands should NOT be present.
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+
+	// Always-on components must be present and enabled.
+	alwaysOn := []string{
+		string(domain.ComponentMemory),
+		"copilot",
+		string(domain.ComponentRules),
+		string(domain.ComponentSettings),
+		string(domain.ComponentSkills),
+		string(domain.ComponentWorkflows),
+		string(domain.ComponentMCP),
+	}
+	for _, comp := range alwaysOn {
+		cfg, ok := proj.Components[comp]
+		if !ok {
+			t.Errorf("always-on component %q missing", comp)
+			continue
+		}
+		if !cfg.Enabled {
+			t.Errorf("always-on component %q should be enabled", comp)
+		}
+	}
+
+	// Methodology-conditional components must NOT be present.
+	for _, comp := range []string{string(domain.ComponentAgents), string(domain.ComponentCommands)} {
+		if _, ok := proj.Components[comp]; ok {
+			t.Errorf("component %q should not be enabled without a methodology", comp)
+		}
+	}
+}
+
+func TestBuildSmartProjectConfig_PluginsComponent_WhenPluginsSelected(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"code-review"})
+
+	cfg, ok := proj.Components[string(domain.ComponentPlugins)]
+	if !ok {
+		t.Fatal("plugins component should be present when plugins are selected")
+	}
+	if !cfg.Enabled {
+		t.Error("plugins component should be enabled when plugins are selected")
+	}
+	if len(proj.Plugins) == 0 {
+		t.Error("proj.Plugins should be populated when plugins are selected")
+	}
+}
+
+func TestBuildSmartProjectConfig_PluginsComponent_WhenNoPluginsSelected(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+
+	if _, ok := proj.Components[string(domain.ComponentPlugins)]; ok {
+		t.Error("plugins component should not be present when no plugins are selected")
+	}
+}
+
+// ─── Item 1.2: All detected adapters enabled ─────────────────────────────────
+
+func TestBuildSmartProjectConfig_AllDetectedAdaptersEnabled(t *testing.T) {
+	// Use a home dir that won't find any personal adapters —
+	// only OpenCode (always included) will be in the slice.
+	home := t.TempDir()
+	adapters := DetectAdapters(home)
+
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, adapters, "", nil, nil)
+
+	for _, a := range adapters {
+		cfg, ok := proj.Adapters[string(a.ID())]
+		if !ok {
+			t.Errorf("adapter %q missing from project Adapters", a.ID())
+			continue
+		}
+		if !cfg.Enabled {
+			t.Errorf("adapter %q should be enabled, got Enabled=false", a.ID())
+		}
+	}
+}
+
+// ─── Item 1.3: --mcp flag ──────────────────────────────────────────────────
+
+func TestRunInit_MCPFlag_FiltersToSelected(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=tdd", "--mcp=context7"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	if _, ok := proj.MCP["context7"]; !ok {
+		t.Errorf("project.json MCP should contain 'context7', got: %v", proj.MCP)
+	}
+	if proj.Components[string(domain.ComponentMCP)].Enabled != true {
+		t.Error("mcp component should be enabled when --mcp flag provided")
+	}
+}
+
+func TestBuildSmartProjectConfig_MCPFlag_FiltersMCP(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "", []string{"context7"}, nil)
+
+	if _, ok := proj.MCP["context7"]; !ok {
+		t.Errorf("MCP should contain 'context7' when selected, got: %v", proj.MCP)
+	}
+	// Verify only the selected server is present.
+	if len(proj.MCP) != 1 {
+		t.Errorf("MCP should have exactly 1 entry when 1 selected, got: %d", len(proj.MCP))
+	}
+}
+
+func TestBuildSmartProjectConfig_MCPFlag_EmptySelectionUsesDefaults(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+
+	defaults := DefaultMCPServers()
+	if len(proj.MCP) != len(defaults) {
+		t.Errorf("empty mcp selection should use all defaults: got %d, want %d", len(proj.MCP), len(defaults))
+	}
+}
+
+// ─── Item 1.3: --plugins flag ──────────────────────────────────────────────
+
+func TestRunInit_PluginsFlag_PopulatesPlugins(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--methodology=sdd", "--plugins=code-review"}, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	projPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("project.json not found: %v", err)
+	}
+
+	var proj domain.ProjectConfig
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("unmarshal project.json: %v", err)
+	}
+
+	if _, ok := proj.Plugins["code-review"]; !ok {
+		t.Errorf("project.json Plugins should contain 'code-review', got: %v", proj.Plugins)
+	}
+	if proj.Components[string(domain.ComponentPlugins)].Enabled != true {
+		t.Error("plugins component should be enabled when --plugins flag provided")
+	}
+}
+
+func TestBuildSmartProjectConfig_PluginsFlag_SetsEnabled(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"code-review"})
+
+	plugin, ok := proj.Plugins["code-review"]
+	if !ok {
+		t.Fatal("code-review plugin should be present")
+	}
+	if !plugin.Enabled {
+		t.Error("selected plugin should have Enabled=true")
+	}
+}
+
+func TestBuildSmartProjectConfig_PluginsFlag_UnknownPluginIgnored(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	// "nonexistent" is not in AvailablePlugins() — should be silently ignored.
+	proj := buildSmartProjectConfig(meta, nil, "", nil, []string{"nonexistent"})
+
+	if len(proj.Plugins) != 0 {
+		t.Errorf("unknown plugin should not populate Plugins, got: %v", proj.Plugins)
+	}
+	if _, ok := proj.Components[string(domain.ComponentPlugins)]; ok {
+		t.Error("plugins component should not be enabled for unknown plugin")
+	}
+}
+
+// ─── find-skills skill file ───────────────────────────────────────────────────
+
+func TestRunInit_WritesFindSkillsFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit(nil, &buf); err != nil {
+		t.Fatalf("RunInit error: %v", err)
+	}
+
+	skillPath := filepath.Join(dir, config.ProjectConfigDir, "skills", "find-skills.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Errorf("find-skills.md skill file not created: %v", err)
+	}
+}
+
+func TestBuildSmartProjectConfig_FindSkillsInSkillsMap(t *testing.T) {
+	meta := domain.ProjectMeta{Language: "Go"}
+	proj := buildSmartProjectConfig(meta, nil, "", nil, nil)
+
+	if _, ok := proj.Skills["find-skills"]; !ok {
+		t.Error("find-skills should be in the Skills map")
 	}
 }
