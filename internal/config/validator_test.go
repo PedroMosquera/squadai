@@ -693,6 +693,105 @@ func TestValidatePolicy_InvalidMCPInRequired(t *testing.T) {
 	assertContainsIssue(t, issues, `MCP server "bad-server" must have a type`)
 }
 
+// ─── V2 component acceptance tests ─────────────────────────────────────────
+
+func TestValidateUser_PluginsComponent_Accepted(t *testing.T) {
+	cfg := domain.DefaultUserConfig()
+	cfg.Components[string(domain.ComponentPlugins)] = domain.ComponentConfig{Enabled: true}
+	issues := ValidateUser(cfg)
+	for _, issue := range issues {
+		if contains(issue, `unknown component "plugins"`) {
+			t.Errorf(`"plugins" should be a known component, got issue: %s`, issue)
+		}
+	}
+}
+
+func TestValidateUser_WorkflowsComponent_Accepted(t *testing.T) {
+	cfg := domain.DefaultUserConfig()
+	cfg.Components[string(domain.ComponentWorkflows)] = domain.ComponentConfig{Enabled: true}
+	issues := ValidateUser(cfg)
+	for _, issue := range issues {
+		if contains(issue, `unknown component "workflows"`) {
+			t.Errorf(`"workflows" should be a known component, got issue: %s`, issue)
+		}
+	}
+}
+
+func TestValidateProject_PluginsComponent_Accepted(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"plugins": {Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	for _, issue := range issues {
+		if contains(issue, `unknown component "plugins"`) {
+			t.Errorf(`"plugins" should be a known component, got issue: %s`, issue)
+		}
+	}
+}
+
+func TestValidateProject_WorkflowsComponent_Accepted(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	for _, issue := range issues {
+		if contains(issue, `unknown component "workflows"`) {
+			t.Errorf(`"workflows" should be a known component, got issue: %s`, issue)
+		}
+	}
+}
+
+func TestValidatePolicy_PluginsComponent_Accepted(t *testing.T) {
+	cfg := domain.DefaultPolicyConfig()
+	cfg.Required.Components[string(domain.ComponentPlugins)] = domain.ComponentConfig{Enabled: true}
+	issues := ValidatePolicy(cfg)
+	for _, issue := range issues {
+		if contains(issue, `unknown component "plugins"`) {
+			t.Errorf(`"plugins" should be a known component in required block, got issue: %s`, issue)
+		}
+	}
+}
+
+func TestValidatePolicy_WorkflowsComponent_Accepted(t *testing.T) {
+	cfg := domain.DefaultPolicyConfig()
+	cfg.Required.Components[string(domain.ComponentWorkflows)] = domain.ComponentConfig{Enabled: true}
+	issues := ValidatePolicy(cfg)
+	for _, issue := range issues {
+		if contains(issue, `unknown component "workflows"`) {
+			t.Errorf(`"workflows" should be a known component in required block, got issue: %s`, issue)
+		}
+	}
+}
+
+func TestValidateProject_AllNineV2Components_Accepted(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentMemory):    {Enabled: true},
+			string(domain.ComponentRules):     {Enabled: true},
+			string(domain.ComponentSettings):  {Enabled: true},
+			string(domain.ComponentMCP):       {Enabled: true},
+			string(domain.ComponentAgents):    {Enabled: true},
+			string(domain.ComponentSkills):    {Enabled: true},
+			string(domain.ComponentCommands):  {Enabled: true},
+			string(domain.ComponentPlugins):   {Enabled: true},
+			string(domain.ComponentWorkflows): {Enabled: true},
+		},
+	}
+	issues := ValidateProject(cfg)
+	for _, issue := range issues {
+		if contains(issue, "unknown component") {
+			t.Errorf("all 9 V2 components should be known, got issue: %s", issue)
+		}
+	}
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func contains(s, substr string) bool {

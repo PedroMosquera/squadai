@@ -306,13 +306,15 @@ var knownAdapters = map[string]struct{}{
 }
 
 var knownComponents = map[string]struct{}{
-	string(domain.ComponentMemory):   {},
-	string(domain.ComponentRules):    {},
-	string(domain.ComponentSettings): {},
-	string(domain.ComponentMCP):      {},
-	string(domain.ComponentAgents):   {},
-	string(domain.ComponentSkills):   {},
-	string(domain.ComponentCommands): {},
+	string(domain.ComponentMemory):    {},
+	string(domain.ComponentRules):     {},
+	string(domain.ComponentSettings):  {},
+	string(domain.ComponentMCP):       {},
+	string(domain.ComponentAgents):    {},
+	string(domain.ComponentSkills):    {},
+	string(domain.ComponentCommands):  {},
+	string(domain.ComponentPlugins):   {},
+	string(domain.ComponentWorkflows): {},
 }
 
 func isKnownAdapter(name string) bool {
