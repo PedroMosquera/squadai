@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-//go:embed all:memory all:standards all:copilot all:skills all:teams all:mcp
+//go:embed all:memory all:standards all:copilot all:skills all:teams all:mcp all:workflows
 var FS embed.FS
 
 // MustRead returns the content of an embedded file or panics.

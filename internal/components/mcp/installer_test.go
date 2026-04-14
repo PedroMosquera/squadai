@@ -7,7 +7,10 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/cursor"
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/vscode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
@@ -743,6 +746,334 @@ func TestUpdateManagedKeys_NoDuplicate(t *testing.T) {
 	keys := meta["managed_keys"].([]string)
 	if len(keys) != 2 {
 		t.Errorf("expected 2 keys (no duplicate), got %d", len(keys))
+	}
+}
+
+// ─── Plan (VS Code — MCPConfigFile) ─────────────────────────────────────────
+
+func TestPlan_VSCode_MCPConfigFile_ReturnsCreate(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionCreate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
+	}
+	// VS Code MCP goes to .vscode/mcp.json, NOT .vscode/settings.json.
+	expected := filepath.Join(project, ".vscode", "mcp.json")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+	if actions[0].Component != domain.ComponentMCP {
+		t.Errorf("Component = %q, want %q", actions[0].Component, domain.ComponentMCP)
+	}
+}
+
+func TestPlan_Cursor_MCPConfigFile_ReturnsCreate(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := newTestInstaller()
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionCreate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
+	}
+	expected := filepath.Join(project, ".cursor", "mcp.json")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+}
+
+func TestPlan_Windsurf_MCPConfigFile_ReturnsCreate(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := newTestInstaller()
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionCreate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
+	}
+	expected := filepath.Join(project, ".windsurf", "mcp_config.json")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+}
+
+func TestPlan_VSCode_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	targetPath := filepath.Join(project, ".vscode", "mcp.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"context7": map[string]interface{}{
+				"type": "remote",
+				"url":  "https://mcp.context7.com/mcp",
+			},
+		},
+	})
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionSkip {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionSkip)
+	}
+}
+
+func TestPlan_VSCode_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	targetPath := filepath.Join(project, ".vscode", "mcp.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"context7": map[string]interface{}{
+				"type": "remote",
+				"url":  "https://old-url.com/mcp",
+			},
+		},
+	})
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if actions[0].Action != domain.ActionUpdate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionUpdate)
+	}
+}
+
+// ─── Apply (MCPConfigFile strategy) ─────────────────────────────────────────
+
+func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if len(actions) == 0 {
+		t.Fatal("expected at least 1 action")
+	}
+
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	// MUST use "mcpServers" key, NOT "mcp".
+	serversMap, ok := doc["mcpServers"].(map[string]interface{})
+	if !ok {
+		t.Fatal("mcpServers key should be a map")
+	}
+	if _, hasMCP := doc["mcp"]; hasMCP {
+		t.Error("should NOT have 'mcp' key — MCPConfigFile uses 'mcpServers'")
+	}
+	server, ok := serversMap["context7"].(map[string]interface{})
+	if !ok {
+		t.Fatal("context7 server should be present")
+	}
+	if server["type"] != "remote" {
+		t.Errorf("type = %v, want remote", server["type"])
+	}
+	if server["url"] != "https://mcp.context7.com/mcp" {
+		t.Errorf("url = %v, want https://mcp.context7.com/mcp", server["url"])
+	}
+
+	// Check managed keys metadata.
+	meta, ok := doc[managedMetaKey].(map[string]interface{})
+	if !ok {
+		t.Fatal("_agent_manager should be present")
+	}
+	keys, ok := meta["managed_keys"].([]interface{})
+	if !ok {
+		t.Fatal("managed_keys should be an array")
+	}
+	foundKey := false
+	for _, k := range keys {
+		if k == "mcpServers" {
+			foundKey = true
+		}
+	}
+	if !foundKey {
+		t.Error("managed_keys should include 'mcpServers'")
+	}
+}
+
+func TestApply_Cursor_MCPConfigFile_PreservesExistingKeys(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := newTestInstaller()
+
+	targetPath := filepath.Join(project, ".cursor", "mcp.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"existingKey": "existingValue",
+	})
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, targetPath)
+	if doc["existingKey"] != "existingValue" {
+		t.Error("existingKey should be preserved")
+	}
+	if _, ok := doc["mcpServers"].(map[string]interface{}); !ok {
+		t.Error("mcpServers key should be written")
+	}
+}
+
+func TestApply_Windsurf_MCPConfigFile_MultipleServers(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := New(map[string]domain.MCPServerDef{
+		"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+		"sentry":   {Type: "remote", URL: "https://mcp.sentry.dev", Enabled: true},
+	})
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if len(actions) != 1 {
+		t.Fatalf("MCPConfigFile should produce 1 action for all servers, got %d", len(actions))
+	}
+
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	serversMap := doc["mcpServers"].(map[string]interface{})
+	if len(serversMap) != 2 {
+		t.Errorf("expected 2 servers, got %d", len(serversMap))
+	}
+	if _, ok := serversMap["context7"]; !ok {
+		t.Error("context7 should be present")
+	}
+	if _, ok := serversMap["sentry"]; !ok {
+		t.Error("sentry should be present")
+	}
+}
+
+func TestApply_VSCode_MCPConfigFile_Idempotent(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	// First apply.
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(actions[0].TargetPath)
+
+	// Second plan — should be Skip.
+	actions2, _ := inst.Plan(adapter, t.TempDir(), project)
+	if actions2[0].Action != domain.ActionSkip {
+		t.Fatalf("second plan should be Skip, got %q", actions2[0].Action)
+	}
+
+	second, _ := os.ReadFile(actions[0].TargetPath)
+	if string(first) != string(second) {
+		t.Error("content should not change on second plan")
+	}
+}
+
+// ─── Verify (MCPConfigFile strategy) ────────────────────────────────────────
+
+func TestVerify_VSCode_MCPConfigFile_AllPass(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := inst.Verify(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("check %q failed: %s", r.Check, r.Message)
+		}
+	}
+	if len(results) != 2 {
+		t.Errorf("expected 2 verify checks, got %d", len(results))
+	}
+}
+
+func TestVerify_Cursor_MCPConfigFile_FailsWhenMissing(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := newTestInstaller()
+
+	results, err := inst.Verify(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("Verify error: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected verify results")
+	}
+	if results[0].Passed {
+		t.Error("expected mcp-configfile-exists check to fail")
+	}
+}
+
+func TestVerify_Windsurf_MCPConfigFile_FailsWhenOutdated(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := newTestInstaller()
+
+	// Write file with wrong mcpServers config.
+	targetPath := filepath.Join(project, ".windsurf", "mcp_config.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"context7": map[string]interface{}{
+				"type": "remote",
+				"url":  "https://wrong-url.com/mcp",
+			},
+		},
+	})
+
+	results, _ := inst.Verify(adapter, t.TempDir(), project)
+	foundCheck := false
+	for _, r := range results {
+		if r.Check == "mcp-configfile-servers-current" {
+			foundCheck = true
+			if r.Passed {
+				t.Error("mcp-configfile-servers-current should fail when config is outdated")
+			}
+		}
+	}
+	if !foundCheck {
+		t.Error("expected mcp-configfile-servers-current check in results")
 	}
 }
 

@@ -92,7 +92,8 @@ func (a *Adapter) SettingsPath(homeDir string) string {
 func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
 	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings,
-		domain.ComponentMCP, domain.ComponentSkills:
+		domain.ComponentMCP, domain.ComponentSkills, domain.ComponentPlugins,
+		domain.ComponentWorkflows:
 		return true
 	default:
 		return false

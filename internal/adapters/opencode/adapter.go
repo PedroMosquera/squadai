@@ -93,7 +93,7 @@ func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
 	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings,
 		domain.ComponentMCP, domain.ComponentAgents, domain.ComponentSkills,
-		domain.ComponentCommands:
+		domain.ComponentCommands, domain.ComponentPlugins:
 		return true
 	default:
 		return false
