@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/config"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/config"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ─── buildSmartProjectConfig ───────────────────────────────────────────────
@@ -814,8 +814,8 @@ func TestRunInit_JSONOutput_NoHumanText(t *testing.T) {
 
 	out := buf.String()
 	// Human-readable output lines start with "  created", "  exists", or the
-	// "Run 'agent-manager apply'" prompt — none of these should appear in JSON mode.
-	for _, forbidden := range []string{"  created", "  exists", "  overwritten", "Run 'agent-manager"} {
+	// "Run 'squadai apply'" prompt — none of these should appear in JSON mode.
+	for _, forbidden := range []string{"  created", "  exists", "  overwritten", "Run 'squadai"} {
 		if strings.Contains(out, forbidden) {
 			t.Errorf("--json should suppress human-readable output %q, got:\n%s", forbidden, out)
 		}

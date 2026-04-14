@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────
@@ -290,7 +290,7 @@ func TestVerify_NoSkills_ReturnsNil(t *testing.T) {
 
 func TestNew_ResolvesContentFile(t *testing.T) {
 	project := t.TempDir()
-	amDir := filepath.Join(project, ".agent-manager")
+	amDir := filepath.Join(project, ".squadai")
 	if err := os.MkdirAll(amDir, 0755); err != nil {
 		t.Fatal(err)
 	}

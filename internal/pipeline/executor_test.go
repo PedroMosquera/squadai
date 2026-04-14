@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
-	"github.com/PedroMosquera/agent-manager-pro/internal/planner"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/backup"
+	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/memory"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/planner"
 )
 
 func TestExecute_AllActionsSucceed(t *testing.T) {

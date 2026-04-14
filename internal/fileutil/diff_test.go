@@ -81,8 +81,8 @@ func TestUnifiedDiff_Delete(t *testing.T) {
 }
 
 func TestUnifiedDiff_Update(t *testing.T) {
-	old := "# Agent Manager\n\nOld description here.\n\nSome other content.\n"
-	newContent := "# Agent Manager\n\nNew description here.\n\nSome other content.\n"
+	old := "# SquadAI\n\nOld description here.\n\nSome other content.\n"
+	newContent := "# SquadAI\n\nNew description here.\n\nSome other content.\n"
 	result := UnifiedDiff("README.md", old, newContent)
 
 	if result == "" {
@@ -219,7 +219,7 @@ These are the team coding standards for Go.
 - Keep functions small
 - Write tests for all public functions
 `
-	result := UnifiedDiff(".agent-manager/templates/team-standards.md", old, newContent)
+	result := UnifiedDiff(".squadai/templates/team-standards.md", old, newContent)
 
 	if result == "" {
 		t.Fatal("expected non-empty diff for realistic config change")

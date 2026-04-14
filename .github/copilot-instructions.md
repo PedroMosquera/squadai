@@ -1,7 +1,7 @@
-<!-- agent-manager:copilot-instructions -->
+<!-- squadai:copilot-instructions -->
 ## Team Standards
 
-### Project: agent-manager-pro
+### Project: squadai
 
 **Stack**: Go
 
@@ -41,4 +41,4 @@
 - Respect package boundaries and import rules
 - Keep domain logic free of infrastructure concerns
 - All mutating operations must support dry-run mode
-<!-- /agent-manager:copilot-instructions -->
+<!-- /squadai:copilot-instructions -->

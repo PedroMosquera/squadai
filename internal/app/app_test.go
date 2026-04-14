@@ -16,7 +16,7 @@ func TestRun_BackupHelp_NoSubcommand(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager backup",
+		"Usage: squadai backup",
 		"create",
 		"list",
 		"delete",
@@ -39,7 +39,7 @@ func TestRun_BackupHelp_HelpFlag(t *testing.T) {
 			}
 			out := buf.String()
 			for _, want := range []string{
-				"Usage: agent-manager backup",
+				"Usage: squadai backup",
 				"create",
 				"list",
 				"delete",
@@ -107,7 +107,7 @@ func TestPrintBackupUsage_ContainsJSONFlag(t *testing.T) {
 func TestPrintBackupUsage_ContainsUsageLine(t *testing.T) {
 	var buf bytes.Buffer
 	printBackupUsage(&buf)
-	if !strings.Contains(buf.String(), "Usage: agent-manager backup") {
+	if !strings.Contains(buf.String(), "Usage: squadai backup") {
 		t.Errorf("printBackupUsage should contain usage line")
 	}
 }

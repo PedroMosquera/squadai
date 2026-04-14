@@ -1,22 +1,22 @@
 #!/bin/sh
-# install.sh — Downloads the latest agent-manager binary to /usr/local/bin.
-# Usage: curl -sSL https://raw.githubusercontent.com/PedroMosquera/agent-manager-pro/main/scripts/install.sh | sh
+# install.sh — Downloads the latest squadai binary to /usr/local/bin.
+# Usage: curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
 #
 # Requirements: curl
 # Supports: darwin/arm64, darwin/amd64, linux/arm64, linux/amd64
 #
 # Windows users: This POSIX shell script does not run on Windows natively.
 # Install on Windows via one of the following methods:
-#   1. go install: go install github.com/PedroMosquera/agent-manager-pro/cmd/agent-manager@latest
+#   1. go install: go install github.com/PedroMosquera/squadai/cmd/squadai@latest
 #   2. Download the .zip release asset for windows/amd64 or windows/arm64 from:
-#      https://github.com/PedroMosquera/agent-manager-pro/releases/latest
-#      and add the extracted agent-manager.exe to a directory on your PATH.
+#      https://github.com/PedroMosquera/squadai/releases/latest
+#      and add the extracted squadai.exe to a directory on your PATH.
 
 set -e
 
-REPO="PedroMosquera/agent-manager-pro"
+REPO="PedroMosquera/squadai"
 INSTALL_DIR="/usr/local/bin"
-BINARY_NAME="agent-manager"
+BINARY_NAME="squadai"
 
 # --- Detect architecture ---
 detect_arch() {
@@ -64,7 +64,7 @@ main() {
     # Strip leading 'v' for archive name
     VERSION_NUM=$(echo "$VERSION" | sed 's/^v//')
 
-    ARCHIVE="agent-manager-pro_${VERSION_NUM}_${OS}_${ARCH}.tar.gz"
+    ARCHIVE="squadai_${VERSION_NUM}_${OS}_${ARCH}.tar.gz"
     DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
 
     echo "Detected: ${OS}/${ARCH}"
@@ -94,8 +94,8 @@ main() {
     chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 
     echo ""
-    echo "agent-manager installed to ${INSTALL_DIR}/${BINARY_NAME}"
-    echo "Run 'agent-manager version' to verify."
+    echo "squadai installed to ${INSTALL_DIR}/${BINARY_NAME}"
+    echo "Run 'squadai version' to verify."
 }
 
 main

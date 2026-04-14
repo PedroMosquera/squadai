@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/cursor"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/vscode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
+	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────

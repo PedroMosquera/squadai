@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
+	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/memory"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 func TestPlan_MemoryAndCopilot_BothEnabled(t *testing.T) {

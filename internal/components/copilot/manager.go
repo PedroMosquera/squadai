@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
-	"github.com/PedroMosquera/agent-manager-pro/internal/templates"
+	"github.com/PedroMosquera/squadai/internal/assets"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/templates"
 )
 
 const (
@@ -157,7 +157,7 @@ func TemplateContent(templateRef string) string {
 
 // TemplateContentWithContext resolves a template reference with full context.
 // If cfg.CustomContent is non-empty and templateRef is "custom", uses CustomContent.
-// If templateRef is "file:<path>", reads from .agent-manager/<path> in projectDir.
+// If templateRef is "file:<path>", reads from .squadai/<path> in projectDir.
 // Falls back to built-in standard template for "standard" or empty.
 // When the standard template is used, cfg.Meta is used for project-aware rendering.
 func TemplateContentWithContext(cfg domain.CopilotConfig, projectDir string) string {
@@ -180,12 +180,12 @@ func standardTemplate(meta domain.ProjectMeta) string {
 	t, err := template.New("copilot").Parse(tmpl)
 	if err != nil {
 		// Should never happen with a tested embedded template; fall back to minimal.
-		return "## Team Standards\n\nManaged by agent-manager-pro."
+		return "## Team Standards\n\nManaged by SquadAI."
 	}
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, meta); err != nil {
-		return "## Team Standards\n\nManaged by agent-manager-pro."
+		return "## Team Standards\n\nManaged by SquadAI."
 	}
 
 	return buf.String()

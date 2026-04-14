@@ -9,7 +9,7 @@ import (
 
 func TestOpenTag(t *testing.T) {
 	got := OpenTag("memory")
-	want := "<!-- agent-manager:memory -->"
+	want := "<!-- squadai:memory -->"
 	if got != want {
 		t.Errorf("OpenTag = %q, want %q", got, want)
 	}
@@ -17,7 +17,7 @@ func TestOpenTag(t *testing.T) {
 
 func TestCloseTag(t *testing.T) {
 	got := CloseTag("memory")
-	want := "<!-- /agent-manager:memory -->"
+	want := "<!-- /squadai:memory -->"
 	if got != want {
 		t.Errorf("CloseTag = %q, want %q", got, want)
 	}
@@ -27,9 +27,9 @@ func TestCloseTag(t *testing.T) {
 
 func TestInjectSection_EmptyDocument_AppendsSection(t *testing.T) {
 	result := InjectSection("", "memory", "memory content")
-	assertContains(t, result, "<!-- agent-manager:memory -->")
+	assertContains(t, result, "<!-- squadai:memory -->")
 	assertContains(t, result, "memory content")
-	assertContains(t, result, "<!-- /agent-manager:memory -->")
+	assertContains(t, result, "<!-- /squadai:memory -->")
 }
 
 func TestInjectSection_ExistingDocument_AppendsAtEnd(t *testing.T) {
@@ -40,12 +40,12 @@ func TestInjectSection_ExistingDocument_AppendsAtEnd(t *testing.T) {
 	assertContains(t, result, "# My Config")
 	assertContains(t, result, "Some user content.")
 	// Section appended.
-	assertContains(t, result, "<!-- agent-manager:memory -->")
+	assertContains(t, result, "<!-- squadai:memory -->")
 	assertContains(t, result, "injected")
 }
 
 func TestInjectSection_ReplacesExisting(t *testing.T) {
-	doc := "before\n<!-- agent-manager:memory -->\nold content\n<!-- /agent-manager:memory -->\nafter\n"
+	doc := "before\n<!-- squadai:memory -->\nold content\n<!-- /squadai:memory -->\nafter\n"
 	result := InjectSection(doc, "memory", "new content")
 
 	assertContains(t, result, "new content")
@@ -55,10 +55,10 @@ func TestInjectSection_ReplacesExisting(t *testing.T) {
 }
 
 func TestInjectSection_RemovesWhenContentEmpty(t *testing.T) {
-	doc := "before\n<!-- agent-manager:memory -->\nold\n<!-- /agent-manager:memory -->\nafter\n"
+	doc := "before\n<!-- squadai:memory -->\nold\n<!-- /squadai:memory -->\nafter\n"
 	result := InjectSection(doc, "memory", "")
 
-	assertNotContains(t, result, "<!-- agent-manager:memory -->")
+	assertNotContains(t, result, "<!-- squadai:memory -->")
 	assertNotContains(t, result, "old")
 	assertContains(t, result, "before")
 	assertContains(t, result, "after")
@@ -88,12 +88,12 @@ func TestInjectSection_MultipleSections(t *testing.T) {
 
 	assertContains(t, doc, "mem content")
 	assertContains(t, doc, "copilot content")
-	assertContains(t, doc, "<!-- agent-manager:memory -->")
-	assertContains(t, doc, "<!-- agent-manager:copilot -->")
+	assertContains(t, doc, "<!-- squadai:memory -->")
+	assertContains(t, doc, "<!-- squadai:copilot -->")
 }
 
 func TestInjectSection_UpdatesOnlyTargetSection(t *testing.T) {
-	doc := "<!-- agent-manager:memory -->\nmem\n<!-- /agent-manager:memory -->\n\n<!-- agent-manager:copilot -->\ncop\n<!-- /agent-manager:copilot -->\n"
+	doc := "<!-- squadai:memory -->\nmem\n<!-- /squadai:memory -->\n\n<!-- squadai:copilot -->\ncop\n<!-- /squadai:copilot -->\n"
 
 	result := InjectSection(doc, "memory", "new-mem")
 
@@ -105,7 +105,7 @@ func TestInjectSection_UpdatesOnlyTargetSection(t *testing.T) {
 // ─── ExtractSection ─────────────────────────────────────────────────────────
 
 func TestExtractSection_Found(t *testing.T) {
-	doc := "<!-- agent-manager:memory -->\nmy content\n<!-- /agent-manager:memory -->"
+	doc := "<!-- squadai:memory -->\nmy content\n<!-- /squadai:memory -->"
 	got := ExtractSection(doc, "memory")
 	if got != "my content" {
 		t.Errorf("ExtractSection = %q, want %q", got, "my content")
@@ -122,7 +122,7 @@ func TestExtractSection_NotFound(t *testing.T) {
 // ─── HasSection ─────────────────────────────────────────────────────────────
 
 func TestHasSection_True(t *testing.T) {
-	doc := "<!-- agent-manager:memory -->\nstuff\n<!-- /agent-manager:memory -->"
+	doc := "<!-- squadai:memory -->\nstuff\n<!-- /squadai:memory -->"
 	if !HasSection(doc, "memory") {
 		t.Error("expected HasSection=true")
 	}
@@ -148,32 +148,32 @@ func TestStripAll_NoMarkers(t *testing.T) {
 }
 
 func TestStripAll_SingleSection(t *testing.T) {
-	doc := "<!-- agent-manager:memory -->\nmanaged content\n<!-- /agent-manager:memory -->\n"
+	doc := "<!-- squadai:memory -->\nmanaged content\n<!-- /squadai:memory -->\n"
 	got, found := StripAll(doc)
 	if !found {
 		t.Error("expected found=true")
 	}
-	assertNotContains(t, got, "<!-- agent-manager:memory -->")
-	assertNotContains(t, got, "<!-- /agent-manager:memory -->")
+	assertNotContains(t, got, "<!-- squadai:memory -->")
+	assertNotContains(t, got, "<!-- /squadai:memory -->")
 	assertNotContains(t, got, "managed content")
 }
 
 func TestStripAll_MultipleSections(t *testing.T) {
-	doc := "<!-- agent-manager:memory -->\nmem\n<!-- /agent-manager:memory -->\n\n<!-- agent-manager:rules -->\nrules\n<!-- /agent-manager:rules -->\n"
+	doc := "<!-- squadai:memory -->\nmem\n<!-- /squadai:memory -->\n\n<!-- squadai:rules -->\nrules\n<!-- /squadai:rules -->\n"
 	got, found := StripAll(doc)
 	if !found {
 		t.Error("expected found=true")
 	}
-	assertNotContains(t, got, "<!-- agent-manager:memory -->")
-	assertNotContains(t, got, "<!-- /agent-manager:memory -->")
-	assertNotContains(t, got, "<!-- agent-manager:rules -->")
-	assertNotContains(t, got, "<!-- /agent-manager:rules -->")
+	assertNotContains(t, got, "<!-- squadai:memory -->")
+	assertNotContains(t, got, "<!-- /squadai:memory -->")
+	assertNotContains(t, got, "<!-- squadai:rules -->")
+	assertNotContains(t, got, "<!-- /squadai:rules -->")
 	assertNotContains(t, got, "mem")
 	assertNotContains(t, got, "rules")
 }
 
 func TestStripAll_PreservesUserContent(t *testing.T) {
-	doc := "# Title\n\nUser paragraph.\n\n<!-- agent-manager:memory -->\nmanaged\n<!-- /agent-manager:memory -->\n\nTrailing user text.\n"
+	doc := "# Title\n\nUser paragraph.\n\n<!-- squadai:memory -->\nmanaged\n<!-- /squadai:memory -->\n\nTrailing user text.\n"
 	got, found := StripAll(doc)
 	if !found {
 		t.Error("expected found=true")
@@ -181,7 +181,7 @@ func TestStripAll_PreservesUserContent(t *testing.T) {
 	assertContains(t, got, "# Title")
 	assertContains(t, got, "User paragraph.")
 	assertContains(t, got, "Trailing user text.")
-	assertNotContains(t, got, "<!-- agent-manager:memory -->")
+	assertNotContains(t, got, "<!-- squadai:memory -->")
 	assertNotContains(t, got, "managed")
 }
 
@@ -196,7 +196,7 @@ func TestStripAll_EmptyDocument(t *testing.T) {
 }
 
 func TestStripAll_OnlyMarkers(t *testing.T) {
-	doc := "<!-- agent-manager:memory -->\nmanaged\n<!-- /agent-manager:memory -->"
+	doc := "<!-- squadai:memory -->\nmanaged\n<!-- /squadai:memory -->"
 	got, found := StripAll(doc)
 	if !found {
 		t.Error("expected found=true")

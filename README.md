@@ -1,9 +1,9 @@
-# Agent Manager Pro
+# SquadAI
 
 Standardize AI coding agent environments across your team.
 
-[![Build](https://github.com/PedroMosquera/agent-manager-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroMosquera/agent-manager-pro/actions)
-[![Go](https://img.shields.io/github/go-mod/go-version/PedroMosquera/agent-manager-pro)](go.mod)
+[![Build](https://github.com/PedroMosquera/squadai/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroMosquera/squadai/actions)
+[![Go](https://img.shields.io/github/go-mod/go-version/PedroMosquera/squadai)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
@@ -13,8 +13,8 @@ Standardize AI coding agent environments across your team.
 One command configures every AI coding agent on your team to use the same methodology, team structure, MCP servers, and coding standards.
 
 ```sh
-agent-manager init --methodology tdd
-agent-manager apply
+squadai init --methodology tdd
+squadai apply
 ```
 
 That's it. Every developer on the team gets identical agent configurations, regardless of which editor they use.
@@ -37,22 +37,22 @@ That's it. Every developer on the team gets identical agent configurations, rega
 
 ```sh
 # Install
-go install github.com/PedroMosquera/agent-manager-pro/cmd/agent-manager@latest
+go install github.com/PedroMosquera/squadai/cmd/squadai@latest
 
 # Initialize with TDD methodology
-agent-manager init --methodology tdd
+squadai init --methodology tdd
 
 # Preview changes
-agent-manager plan --dry-run
+squadai plan --dry-run
 
 # Apply configuration
-agent-manager apply
+squadai apply
 
 # Verify compliance
-agent-manager verify
+squadai verify
 ```
 
-Run `agent-manager` with no arguments to launch the interactive TUI wizard (methodology, MCP servers, plugins, summary).
+Run `squadai` with no arguments to launch the interactive TUI wizard (methodology, MCP servers, plugins, summary).
 
 ---
 
@@ -96,7 +96,7 @@ Monorepo support: when multiple languages are detected, all language standards a
 
 ## Components
 
-`agent-manager apply` installs up to 9 components per agent:
+`squadai apply` installs up to 9 components per agent:
 
 | Component | ID | What It Installs |
 |-----------|-----|-----------------|
@@ -165,9 +165,9 @@ Policy (locked fields)  >  Project config  >  User defaults
 
 | Layer | File | Scope |
 |-------|------|-------|
-| User defaults | `~/.agent-manager/config.json` | Personal preferences, backup paths |
-| Project config | `.agent-manager/project.json` | Per-repo settings, methodology, team, MCP |
-| Team policy | `.agent-manager/policy.json` | Locked fields that cannot be overridden |
+| User defaults | `~/.squadai/config.json` | Personal preferences, backup paths |
+| Project config | `.squadai/project.json` | Per-repo settings, methodology, team, MCP |
+| Team policy | `.squadai/policy.json` | Locked fields that cannot be overridden |
 
 ### Example `project.json`
 
@@ -234,21 +234,21 @@ Policy (locked fields)  >  Project config  >  User defaults
 
 | Command | Description |
 |---------|-------------|
-| `agent-manager init` | Initialize project config and detect agents |
-| `agent-manager plan` | Compute and display the action plan |
-| `agent-manager diff` | Preview what apply would change (unified diffs) |
-| `agent-manager apply` | Execute plan with backup and rollback safety |
-| `agent-manager sync` | Idempotent reconciliation (alias for apply) |
-| `agent-manager verify` | Run compliance checks and print health report |
-| `agent-manager status` | Show project health: adapters, components, managed files |
-| `agent-manager validate-policy` | Validate policy schema and lock/required consistency |
-| `agent-manager backup create` | Manually snapshot managed files |
-| `agent-manager backup list` | List available backups |
-| `agent-manager backup delete <id>` | Delete a specific backup snapshot |
-| `agent-manager backup prune --keep=N` | Remove old backups, keep N most recent |
-| `agent-manager restore <id>` | Restore files from a backup |
-| `agent-manager remove --force` | Remove all managed files and strip marker blocks |
-| `agent-manager version` | Print version |
+| `squadai init` | Initialize project config and detect agents |
+| `squadai plan` | Compute and display the action plan |
+| `squadai diff` | Preview what apply would change (unified diffs) |
+| `squadai apply` | Execute plan with backup and rollback safety |
+| `squadai sync` | Idempotent reconciliation (alias for apply) |
+| `squadai verify` | Run compliance checks and print health report |
+| `squadai status` | Show project health: adapters, components, managed files |
+| `squadai validate-policy` | Validate policy schema and lock/required consistency |
+| `squadai backup create` | Manually snapshot managed files |
+| `squadai backup list` | List available backups |
+| `squadai backup delete <id>` | Delete a specific backup snapshot |
+| `squadai backup prune --keep=N` | Remove old backups, keep N most recent |
+| `squadai restore <id>` | Restore files from a backup |
+| `squadai remove --force` | Remove all managed files and strip marker blocks |
+| `squadai version` | Print version |
 
 ### Flags
 
@@ -266,7 +266,7 @@ Policy (locked fields)  >  Project config  >  User defaults
 
 ### Interactive TUI
 
-Run `agent-manager` with no arguments for a guided wizard:
+Run `squadai` with no arguments for a guided wizard:
 
 1. Intro screen with detected agents and mode
 2. Methodology selection (TDD / SDD / Conventional)
@@ -293,7 +293,7 @@ Layer 6: Interfaces   CLI commands, TUI wizard
 Key design principles:
 
 - **Adapters own all paths.** No hardcoded agent paths outside adapter packages.
-- **Marker blocks for managed content.** User content outside `<!-- agent-manager:SECTION -->` markers is never modified.
+- **Marker blocks for managed content.** User content outside `<!-- squadai:SECTION -->` markers is never modified.
 - **Atomic writes.** Temp file + rename via `fileutil.WriteAtomic` for crash safety.
 - **Idempotent by default.** Planner returns `ActionSkip` when state matches; writer skips when bytes are identical.
 - **Fail loudly.** Errors are always surfaced, never silently swallowed.
@@ -316,17 +316,17 @@ Every `apply` operation:
 ### From source (requires Go 1.24+)
 
 ```sh
-go install github.com/PedroMosquera/agent-manager-pro/cmd/agent-manager@latest
+go install github.com/PedroMosquera/squadai/cmd/squadai@latest
 ```
 
 ### GitHub Releases
 
-Download the binary for your architecture from [Releases](https://github.com/PedroMosquera/agent-manager-pro/releases).
+Download the binary for your architecture from [Releases](https://github.com/PedroMosquera/squadai/releases).
 
 ### Shell script
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/PedroMosquera/agent-manager-pro/main/scripts/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
 ```
 
 ### Homebrew

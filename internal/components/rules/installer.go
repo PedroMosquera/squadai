@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 const (
@@ -26,7 +26,7 @@ type Installer struct {
 // New returns a rules component installer with the resolved team standards content.
 // The content is resolved once at construction from RulesConfig:
 //   - If TeamStandards is non-empty, use it directly (inline content).
-//   - If TeamStandardsFile is non-empty, read from .agent-manager/<path> in projectDir.
+//   - If TeamStandardsFile is non-empty, read from .squadai/<path> in projectDir.
 //   - If both are empty, the installer produces no actions.
 func New(cfg domain.RulesConfig, projectDir string) *Installer {
 	content := resolveContent(cfg, projectDir)
@@ -198,9 +198,9 @@ func resolveContent(cfg domain.RulesConfig, projectDir string) string {
 		return cfg.TeamStandards
 	}
 
-	// File reference: relative to .agent-manager/ in projectDir.
+	// File reference: relative to .squadai/ in projectDir.
 	if cfg.TeamStandardsFile != "" && projectDir != "" {
-		filePath := filepath.Join(projectDir, ".agent-manager", cfg.TeamStandardsFile)
+		filePath := filepath.Join(projectDir, ".squadai", cfg.TeamStandardsFile)
 		data, err := os.ReadFile(filePath)
 		if err != nil {
 			return "" // silently skip if file not found

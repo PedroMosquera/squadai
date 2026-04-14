@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ─── Merge precedence tests ─────────────────────────────────────────────────
@@ -21,7 +21,7 @@ func TestMerge_AllNil_ReturnsDefaults(t *testing.T) {
 	if len(merged.Components) != 0 {
 		t.Errorf("Components count = %d, want 0", len(merged.Components))
 	}
-	if merged.Paths.BackupDir != "~/.agent-manager/backups" {
+	if merged.Paths.BackupDir != "~/.squadai/backups" {
 		t.Errorf("BackupDir = %q, want default", merged.Paths.BackupDir)
 	}
 	if len(merged.Violations) != 0 {

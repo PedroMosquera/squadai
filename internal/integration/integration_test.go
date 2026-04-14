@@ -6,21 +6,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/cursor"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/vscode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
-	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
-	"github.com/PedroMosquera/agent-manager-pro/internal/cli"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
-	"github.com/PedroMosquera/agent-manager-pro/internal/config"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
-	"github.com/PedroMosquera/agent-manager-pro/internal/pipeline"
-	"github.com/PedroMosquera/agent-manager-pro/internal/planner"
-	"github.com/PedroMosquera/agent-manager-pro/internal/verify"
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
+	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
+	"github.com/PedroMosquera/squadai/internal/backup"
+	"github.com/PedroMosquera/squadai/internal/cli"
+	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/memory"
+	"github.com/PedroMosquera/squadai/internal/config"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/pipeline"
+	"github.com/PedroMosquera/squadai/internal/planner"
+	"github.com/PedroMosquera/squadai/internal/verify"
 )
 
 // TestFullRoundTrip_PlanApplyVerify exercises the complete flow:
@@ -1056,7 +1056,7 @@ func TestFullPipeline_TDD_OpenCode(t *testing.T) {
 	// AGENTS.md must exist with memory marker.
 	memPath := filepath.Join(project, "AGENTS.md")
 	assertFileExists(t, memPath, "TDD/OpenCode: AGENTS.md")
-	assertFileContains(t, memPath, "agent-manager", "TDD/OpenCode: AGENTS.md has marker")
+	assertFileContains(t, memPath, "squadai", "TDD/OpenCode: AGENTS.md has marker")
 
 	// .opencode/agents/ dir with orchestrator and TDD roles.
 	agentsDir := filepath.Join(project, ".opencode", "agents")
@@ -1109,7 +1109,7 @@ func TestFullPipeline_SDD_ClaudeCode(t *testing.T) {
 	// CLAUDE.md must exist with memory marker.
 	claudeMD := filepath.Join(project, "CLAUDE.md")
 	assertFileExists(t, claudeMD, "SDD/Claude: CLAUDE.md")
-	assertFileContains(t, claudeMD, "agent-manager", "SDD/Claude: CLAUDE.md has marker")
+	assertFileContains(t, claudeMD, "squadai", "SDD/Claude: CLAUDE.md has marker")
 
 	// ~/.claude/mcp/context7.json must exist (SeparateMCPFiles strategy).
 	mcpFile := filepath.Join(home, ".claude", "mcp", "context7.json")

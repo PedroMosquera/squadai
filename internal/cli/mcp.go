@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/PedroMosquera/agent-manager-pro/internal/domain"
+import "github.com/PedroMosquera/squadai/internal/domain"
 
 // DefaultMCPServers returns the recommended MCP server configurations.
 // Context7 is included and enabled by default.

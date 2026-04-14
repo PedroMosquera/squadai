@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/backup"
+	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // Executor runs a plan and produces a step-level report.

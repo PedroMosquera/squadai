@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/config"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/config"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // ─── Help text coverage ──────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ func TestRunPlan_HelpText(t *testing.T) {
 			}
 			out := buf.String()
 			for _, want := range []string{
-				"Usage: agent-manager plan",
+				"Usage: squadai plan",
 				"--dry-run",
 				"--json",
 				"read-only",
@@ -50,7 +50,7 @@ func TestRunApply_HelpText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager apply",
+		"Usage: squadai apply",
 		"--dry-run",
 		"--json",
 		"--force",
@@ -70,7 +70,7 @@ func TestRunSync_HelpText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager sync",
+		"Usage: squadai sync",
 		"--dry-run",
 		"--json",
 		"--force",
@@ -88,7 +88,7 @@ func TestRunSync_HelpDoesNotDelegatToApplyHelp(t *testing.T) {
 		t.Fatalf("help should not error: %v", err)
 	}
 	out := buf.String()
-	if strings.Contains(out, "Usage: agent-manager apply") {
+	if strings.Contains(out, "Usage: squadai apply") {
 		t.Error("sync --help should show sync usage, not apply usage")
 	}
 }
@@ -100,7 +100,7 @@ func TestRunVerify_HelpText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager verify",
+		"Usage: squadai verify",
 		"--json",
 		"PASS",
 		"FAIL",
@@ -119,7 +119,7 @@ func TestRunValidatePolicy_HelpText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager validate-policy",
+		"Usage: squadai validate-policy",
 		"policy.json",
 		"--json",
 	} {
@@ -211,7 +211,7 @@ func TestRunBackupCreate_HelpText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager backup create",
+		"Usage: squadai backup create",
 		"--json",
 		"snapshot",
 	} {
@@ -228,7 +228,7 @@ func TestRunBackupList_HelpText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager backup list",
+		"Usage: squadai backup list",
 		"--json",
 		"restore",
 	} {
@@ -245,7 +245,7 @@ func TestRunRestore_HelpText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"Usage: agent-manager restore",
+		"Usage: squadai restore",
 		"--dry-run",
 		"--json",
 		"backup-id",
@@ -554,7 +554,7 @@ func TestRunApply_NoProjectJSON_ReturnsError(t *testing.T) {
 	if !strings.Contains(out, "Error: No project.json found in current directory.") {
 		t.Errorf("output should contain error message, got: %s", out)
 	}
-	if !strings.Contains(out, "agent-manager init") {
+	if !strings.Contains(out, "squadai init") {
 		t.Errorf("output should suggest running init, got: %s", out)
 	}
 	if !strings.Contains(out, "--force") {
@@ -798,7 +798,7 @@ func TestRunStatus_Help(t *testing.T) {
 			}
 			out := buf.String()
 			for _, want := range []string{
-				"Usage: agent-manager status",
+				"Usage: squadai status",
 				"--json",
 			} {
 				if !strings.Contains(out, want) {
@@ -933,7 +933,7 @@ func TestRunBackupDelete_Help(t *testing.T) {
 			}
 			out := buf.String()
 			for _, want := range []string{
-				"Usage: agent-manager backup delete",
+				"Usage: squadai backup delete",
 				"--json",
 			} {
 				if !strings.Contains(out, want) {
@@ -1105,7 +1105,7 @@ func TestRunRemove_Help(t *testing.T) {
 			}
 			out := buf.String()
 			for _, want := range []string{
-				"Usage: agent-manager remove",
+				"Usage: squadai remove",
 				"--force",
 				"--dry-run",
 				"--json",
@@ -1436,7 +1436,7 @@ func TestRunBackupPrune_Help(t *testing.T) {
 			}
 			out := buf.String()
 			for _, want := range []string{
-				"Usage: agent-manager backup prune",
+				"Usage: squadai backup prune",
 				"--keep=N",
 				"--json",
 			} {
@@ -1538,7 +1538,7 @@ func TestRunDiff_Help(t *testing.T) {
 			}
 			out := buf.String()
 			for _, want := range []string{
-				"Usage: agent-manager diff",
+				"Usage: squadai diff",
 				"Preview what 'apply' would change",
 				"unified diff",
 				"--json",
@@ -1786,7 +1786,7 @@ func TestRunDiff_NoFilesWritten(t *testing.T) {
 		t.Fatalf("collect after entries: %v", err)
 	}
 
-	// Only the .agent-manager directory should exist (project.json was there before).
+	// Only the .squadai directory should exist (project.json was there before).
 	// No new managed files should have been created.
 	for path := range afterEntries {
 		if _, existed := beforeEntries[path]; !existed {

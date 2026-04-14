@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // mockAdapter implements domain.Adapter for testing.
@@ -50,7 +50,7 @@ func TestIntroScreen_ShowsVersionAndMode(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
 
 	view := m.View()
-	if !strings.Contains(view, "agent-manager 1.0.0") {
+	if !strings.Contains(view, "SquadAI 1.0.0") {
 		t.Error("intro should show version")
 	}
 	if !strings.Contains(view, "Mode: team") {
@@ -729,8 +729,8 @@ func TestInitSummary_ShowsWillCreate(t *testing.T) {
 	if !strings.Contains(view, "This will create") {
 		t.Errorf("summary should show 'This will create', got:\n%s", view)
 	}
-	if !strings.Contains(view, ".agent-manager/project.json") {
-		t.Errorf("summary should show '.agent-manager/project.json', got:\n%s", view)
+	if !strings.Contains(view, ".squadai/project.json") {
+		t.Errorf("summary should show '.squadai/project.json', got:\n%s", view)
 	}
 }
 

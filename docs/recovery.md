@@ -1,6 +1,6 @@
 # Recovery
 
-This document covers backup, rollback, and restore procedures in Agent Manager Pro.
+This document covers backup, rollback, and restore procedures in SquadAI.
 
 ## How Safety Works
 
@@ -23,7 +23,7 @@ When any step in `apply` fails, the pipeline automatically:
 4. Reports the failure with the backup ID
 
 ```sh
-$ agent-manager apply
+$ squadai apply
 Backup: a1b2c3d4-e5f6-...
 
   [ok]   Install memory protocol for opencode
@@ -32,7 +32,7 @@ Backup: a1b2c3d4-e5f6-...
   [SKIP] Update settings for opencode
 
 Apply failed. All changes rolled back (backup: a1b2c3d4-e5f6-...).
-Use 'agent-manager restore a1b2c3d4-e5f6-...' to manually restore if needed.
+Use 'squadai restore a1b2c3d4-e5f6-...' to manually restore if needed.
 ```
 
 The `[ok]` step was undone by the automatic rollback. The filesystem is back to its pre-apply state.
@@ -42,13 +42,13 @@ The `[ok]` step was undone by the automatic rollback. The filesystem is back to 
 Create a snapshot at any time:
 
 ```sh
-agent-manager backup create
+squadai backup create
 ```
 
 This snapshots all files managed by the planner, including those already in desired state. Useful before manual edits or as a safety checkpoint.
 
 ```sh
-$ agent-manager backup create
+$ squadai backup create
 Backup created: e7f8a9b0-c1d2-...
   Files: 2
   Time:  2026-04-12 15:30:00 UTC
@@ -57,13 +57,13 @@ Backup created: e7f8a9b0-c1d2-...
 ## Listing Backups
 
 ```sh
-agent-manager backup list
+squadai backup list
 ```
 
 Shows all backups sorted by time (newest first):
 
 ```sh
-$ agent-manager backup list
+$ squadai backup list
 Backups (3):
 
   ID                                    COMMAND     FILES  STATUS
@@ -85,13 +85,13 @@ Backups (3):
 Restore files to their state at the time of a backup:
 
 ```sh
-agent-manager restore <backup-id>
+squadai restore <backup-id>
 ```
 
 **Preview first with dry run:**
 
 ```sh
-$ agent-manager restore a1b2c3d4 --dry-run
+$ squadai restore a1b2c3d4 --dry-run
 Dry run: would restore 2 file(s) from backup a1b2c3d4
   restore ~/.opencode/memory/protocol.md
   restore .github/copilot-instructions.md
@@ -100,7 +100,7 @@ Dry run: would restore 2 file(s) from backup a1b2c3d4
 **Execute the restore:**
 
 ```sh
-$ agent-manager restore a1b2c3d4
+$ squadai restore a1b2c3d4
 Restored 2 file(s) from backup a1b2c3d4.
   restored ~/.opencode/memory/protocol.md
   restored .github/copilot-instructions.md
@@ -117,9 +117,9 @@ Restored 2 file(s) from backup a1b2c3d4.
 Backups are stored at:
 
 ```
-~/.agent-manager/backups/<id>/manifest.json
-~/.agent-manager/backups/<id>/files/0
-~/.agent-manager/backups/<id>/files/1
+~/.squadai/backups/<id>/manifest.json
+~/.squadai/backups/<id>/files/0
+~/.squadai/backups/<id>/files/1
 ...
 ```
 
@@ -141,29 +141,29 @@ In rare cases, the rollback itself may fail (e.g., disk full, permission changes
 ```
 CRITICAL: rollback failed — manual recovery may be needed.
   Backup ID: a1b2c3d4-e5f6-...
-  Try: agent-manager restore a1b2c3d4-e5f6-...
+  Try: squadai restore a1b2c3d4-e5f6-...
 ```
 
 In this situation:
 
 1. Note the backup ID from the error message
 2. Fix the underlying issue (permissions, disk space)
-3. Run `agent-manager restore <backup-id>` to manually restore
-4. Run `agent-manager verify` to confirm the system is in a good state
+3. Run `squadai restore <backup-id>` to manually restore
+4. Run `squadai verify` to confirm the system is in a good state
 
 ## Troubleshooting
 
 **"No managed files found to back up"**
 
-The planner found no files to manage. This usually means no adapters are enabled or no components are configured. Check your config with `agent-manager plan`.
+The planner found no files to manage. This usually means no adapters are enabled or no components are configured. Check your config with `squadai plan`.
 
 **"backup not found"**
 
-The backup ID doesn't match any stored backup. List available backups with `agent-manager backup list`.
+The backup ID doesn't match any stored backup. List available backups with `squadai backup list`.
 
 **Backup directory missing or unreadable**
 
-Check that `~/.agent-manager/backups/` exists and is writable. The directory is created automatically on the first backup, but may need manual creation if the parent directory doesn't exist.
+Check that `~/.squadai/backups/` exists and is writable. The directory is created automatically on the first backup, but may need manual creation if the parent directory doesn't exist.
 
 **Files changed between backup and restore**
 

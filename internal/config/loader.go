@@ -6,18 +6,18 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 const (
 	// UserConfigDir is the directory under $HOME for user-level config.
-	UserConfigDir = ".agent-manager"
+	UserConfigDir = ".squadai"
 
 	// UserConfigFile is the filename for user-level config.
 	UserConfigFile = "config.json"
 
 	// ProjectConfigDir is the directory in a project root for project/policy config.
-	ProjectConfigDir = ".agent-manager"
+	ProjectConfigDir = ".squadai"
 
 	// ProjectConfigFile is the filename for project-level config.
 	ProjectConfigFile = "project.json"
@@ -41,7 +41,7 @@ func PolicyConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ProjectConfigDir, PolicyConfigFile)
 }
 
-// LoadUser reads and parses the user config from ~/.agent-manager/config.json.
+// LoadUser reads and parses the user config from ~/.squadai/config.json.
 // Returns domain.ErrConfigNotFound if the file does not exist.
 func LoadUser(homeDir string) (*domain.UserConfig, error) {
 	path := UserConfigPath(homeDir)
@@ -64,7 +64,7 @@ func LoadUser(homeDir string) (*domain.UserConfig, error) {
 	return &cfg, nil
 }
 
-// LoadProject reads and parses .agent-manager/project.json.
+// LoadProject reads and parses .squadai/project.json.
 // Returns domain.ErrConfigNotFound if the file does not exist.
 func LoadProject(projectDir string) (*domain.ProjectConfig, error) {
 	path := ProjectConfigPath(projectDir)
@@ -87,7 +87,7 @@ func LoadProject(projectDir string) (*domain.ProjectConfig, error) {
 	return &cfg, nil
 }
 
-// LoadPolicy reads and parses .agent-manager/policy.json.
+// LoadPolicy reads and parses .squadai/policy.json.
 // Returns domain.ErrConfigNotFound if the file does not exist.
 func LoadPolicy(projectDir string) (*domain.PolicyConfig, error) {
 	path := PolicyConfigPath(projectDir)

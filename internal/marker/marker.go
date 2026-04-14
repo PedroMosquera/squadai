@@ -5,18 +5,18 @@ import (
 	"strings"
 )
 
-const prefix = "agent-manager"
+const prefix = "squadai"
 
 // OpenTag returns the opening marker for a section.
 //
-//	<!-- agent-manager:SECTION_ID -->
+//	<!-- squadai:SECTION_ID -->
 func OpenTag(sectionID string) string {
 	return fmt.Sprintf("<!-- %s:%s -->", prefix, sectionID)
 }
 
 // CloseTag returns the closing marker for a section.
 //
-//	<!-- /agent-manager:SECTION_ID -->
+//	<!-- /squadai:SECTION_ID -->
 func CloseTag(sectionID string) string {
 	return fmt.Sprintf("<!-- /%s:%s -->", prefix, sectionID)
 }
@@ -97,7 +97,7 @@ func HasSection(document, sectionID string) bool {
 		strings.Contains(document, CloseTag(sectionID))
 }
 
-// StripAll removes all agent-manager marker blocks from document.
+// StripAll removes all squadai marker blocks from document.
 // Returns the stripped content and true if any blocks were found.
 // Returns the original content and false if no blocks were found.
 func StripAll(document string) (string, bool) {

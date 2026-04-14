@@ -47,8 +47,8 @@ func TestResolveTemplate_CustomWithEmptyContent_Error(t *testing.T) {
 func TestResolveTemplate_FileReference(t *testing.T) {
 	projectDir := t.TempDir()
 
-	// Create .agent-manager/templates/copilot.md
-	tmplDir := filepath.Join(projectDir, ".agent-manager", "templates")
+	// Create .squadai/templates/copilot.md
+	tmplDir := filepath.Join(projectDir, ".squadai", "templates")
 	if err := os.MkdirAll(tmplDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -121,8 +121,8 @@ func TestIsBuiltin_File(t *testing.T) {
 func TestResolveTemplate_FileNestedPath(t *testing.T) {
 	projectDir := t.TempDir()
 
-	// Create .agent-manager/deep/nested/template.md
-	tmplDir := filepath.Join(projectDir, ".agent-manager", "deep", "nested")
+	// Create .squadai/deep/nested/template.md
+	tmplDir := filepath.Join(projectDir, ".squadai", "deep", "nested")
 	if err := os.MkdirAll(tmplDir, 0755); err != nil {
 		t.Fatal(err)
 	}

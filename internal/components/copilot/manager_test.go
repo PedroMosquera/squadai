@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // standardCfg returns a CopilotConfig for the standard template.
@@ -276,7 +276,7 @@ func TestApply_FileTemplate(t *testing.T) {
 	mgr := New()
 
 	// Create template file.
-	tmplDir := filepath.Join(projectDir, ".agent-manager", "templates")
+	tmplDir := filepath.Join(projectDir, ".squadai", "templates")
 	if err := os.MkdirAll(tmplDir, 0755); err != nil {
 		t.Fatal(err)
 	}

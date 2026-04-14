@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ─── ValidateUser tests ─────────────────────────────────────────────────────

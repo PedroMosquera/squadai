@@ -32,7 +32,7 @@ func WriteAtomic(path string, content []byte, perm os.FileMode) (WriteResult, er
 	}
 
 	// Write to temp file in the same directory (ensures same filesystem for rename).
-	tmp, err := os.CreateTemp(dir, ".agent-manager-*.tmp")
+	tmp, err := os.CreateTemp(dir, ".squadai-*.tmp")
 	if err != nil {
 		return WriteResult{}, err
 	}

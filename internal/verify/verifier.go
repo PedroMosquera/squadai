@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/agents"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/commands"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/plugins"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/skills"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/workflows"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/components/agents"
+	"github.com/PedroMosquera/squadai/internal/components/commands"
+	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/mcp"
+	"github.com/PedroMosquera/squadai/internal/components/memory"
+	"github.com/PedroMosquera/squadai/internal/components/plugins"
+	"github.com/PedroMosquera/squadai/internal/components/rules"
+	"github.com/PedroMosquera/squadai/internal/components/settings"
+	"github.com/PedroMosquera/squadai/internal/components/skills"
+	"github.com/PedroMosquera/squadai/internal/components/workflows"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // Verifier runs post-apply compliance checks across all components and adapters.

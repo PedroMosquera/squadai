@@ -1,6 +1,6 @@
 package domain
 
-// UserConfig represents ~/.agent-manager/config.json.
+// UserConfig represents ~/.squadai/config.json.
 type UserConfig struct {
 	Version    int                        `json:"version"`
 	Mode       OperationalMode            `json:"mode"`
@@ -9,7 +9,7 @@ type UserConfig struct {
 	Paths      PathsConfig                `json:"paths"`
 }
 
-// ProjectConfig represents .agent-manager/project.json.
+// ProjectConfig represents .squadai/project.json.
 type ProjectConfig struct {
 	Version     int                        `json:"version"`
 	Adapters    map[string]AdapterConfig   `json:"adapters,omitempty"`
@@ -26,7 +26,7 @@ type ProjectConfig struct {
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 }
 
-// PolicyConfig represents .agent-manager/policy.json.
+// PolicyConfig represents .squadai/policy.json.
 type PolicyConfig struct {
 	Version  int             `json:"version"`
 	Mode     OperationalMode `json:"mode"`
@@ -71,7 +71,7 @@ type CopilotConfig struct {
 type RulesConfig struct {
 	// TeamStandards is inline markdown content injected into AGENTS.md / CLAUDE.md.
 	TeamStandards string `json:"team_standards,omitempty"`
-	// TeamStandardsFile is a path (relative to .agent-manager/) to load content from.
+	// TeamStandardsFile is a path (relative to .squadai/) to load content from.
 	TeamStandardsFile string `json:"team_standards_file,omitempty"`
 	// Instructions lists additional instruction file paths to reference.
 	Instructions []string `json:"instructions,omitempty"`
@@ -182,7 +182,7 @@ func DefaultUserConfig() *UserConfig {
 			string(ComponentMemory): {Enabled: true},
 		},
 		Paths: PathsConfig{
-			BackupDir: "~/.agent-manager/backups",
+			BackupDir: "~/.squadai/backups",
 		},
 	}
 }

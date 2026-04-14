@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────
@@ -33,8 +33,8 @@ func TestTemplateForAdapter_OpenCode(t *testing.T) {
 	if !strings.Contains(content, "AGENTS.md") {
 		t.Error("OpenCode template should reference AGENTS.md")
 	}
-	if !strings.Contains(content, ".agent-manager/") {
-		t.Error("OpenCode template should reference .agent-manager/")
+	if !strings.Contains(content, ".squadai/") {
+		t.Error("OpenCode template should reference .squadai/")
 	}
 }
 

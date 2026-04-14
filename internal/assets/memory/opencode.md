@@ -1,12 +1,12 @@
 ## Memory Protocol
 
 This protocol defines how you manage persistent context across sessions using AGENTS.md
-and the `.agent-manager/` configuration directory.
+and the `.squadai/` configuration directory.
 
 ### Session Start
 
 1. Read the project's `AGENTS.md` for accumulated context, prior decisions, and conventions.
-2. Check `.agent-manager/project.json` for project configuration, enabled components, and team policy.
+2. Check `.squadai/project.json` for project configuration, enabled components, and team policy.
 3. Search existing memory for any notes relevant to the current task before beginning work.
 4. Review the most recent session summary (if present) at the end of AGENTS.md.
 

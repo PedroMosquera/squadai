@@ -63,7 +63,7 @@ func ChecksumFile(path string) (string, error) {
 // an absolute path. If backupDir is empty, returns the default location.
 func ResolveBackupDir(backupDir, homeDir string) string {
 	if backupDir == "" {
-		return fmt.Sprintf("%s/.agent-manager/backups", homeDir)
+		return fmt.Sprintf("%s/.squadai/backups", homeDir)
 	}
 	if strings.HasPrefix(backupDir, "~/") {
 		return homeDir + backupDir[1:]

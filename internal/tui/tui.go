@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
-	"github.com/PedroMosquera/agent-manager-pro/internal/cli"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/assets"
+	"github.com/PedroMosquera/squadai/internal/cli"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // Ensure badgeDisabledStyle is used (it renders unchecked checkboxes).
@@ -225,7 +225,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "restore":
 				// Restore requires an ID — show prompt in output.
-				m.output = "Use CLI: agent-manager restore <backup-id>\n\nRestore requires a backup ID argument.\nRun 'agent-manager backup list' to see available backups."
+				m.output = "Use CLI: squadai restore <backup-id>\n\nRestore requires a backup ID argument.\nRun 'squadai backup list' to see available backups."
 				m.err = nil
 				m.screen = screenResult
 				return m, nil
@@ -508,7 +508,8 @@ func (m Model) viewIntro() string {
 
 	// Header panel: version + mode
 	var hdr strings.Builder
-	hdr.WriteString(fmt.Sprintf("agent-manager %s\n", m.version))
+	hdr.WriteString(titleStyle.Render("SquadAI") + "\n")
+	hdr.WriteString(fmt.Sprintf("SquadAI %s\n", m.version))
 	hdr.WriteString("Team-consistent AI setup with safe local customization.\n")
 	hdr.WriteString(fmt.Sprintf("Mode: %s", m.mode))
 	b.WriteString(m.renderPanel(hdr.String()))
@@ -537,7 +538,7 @@ func (m Model) viewIntro() string {
 
 func (m Model) viewMenu() string {
 	var menuContent strings.Builder
-	menuContent.WriteString(headingStyle.Render("agent-manager "+m.version) + "\n\n")
+	menuContent.WriteString(headingStyle.Render("SquadAI "+m.version) + "\n\n")
 
 	for i, item := range menuItems {
 		if i == m.cursor {
@@ -838,9 +839,9 @@ func (m Model) viewInitSummary() string {
 
 	content.WriteString("\n")
 	content.WriteString("This will create:\n")
-	content.WriteString(mutedStyle.Render("  .agent-manager/project.json") + "\n")
+	content.WriteString(mutedStyle.Render("  .squadai/project.json") + "\n")
 	content.WriteString(mutedStyle.Render("  Agent-specific config files (e.g., AGENTS.md, CLAUDE.md)") + "\n")
-	content.WriteString(mutedStyle.Render("  .agent-manager/skills/ directory") + "\n")
+	content.WriteString(mutedStyle.Render("  .squadai/skills/ directory") + "\n")
 
 	var b strings.Builder
 	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))

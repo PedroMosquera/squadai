@@ -12,7 +12,7 @@ import (
 // Template references are resolved in this order:
 //   - "standard" or "" → returns ("", nil) — caller should use built-in default
 //   - "custom" → returns (customContent, nil) — inline content from config
-//   - "file:<path>" → reads the file at .agent-manager/<path> relative to projectDir
+//   - "file:<path>" → reads the file at .squadai/<path> relative to projectDir
 //   - anything else → returned as-is (treated as inline content)
 func ResolveTemplate(templateRef, customContent, projectDir string) (string, error) {
 	if templateRef == "" || templateRef == "standard" {
@@ -31,7 +31,7 @@ func ResolveTemplate(templateRef, customContent, projectDir string) (string, err
 		if relPath == "" {
 			return "", fmt.Errorf("template file path is empty in \"file:\" reference")
 		}
-		absPath := filepath.Join(projectDir, ".agent-manager", relPath)
+		absPath := filepath.Join(projectDir, ".squadai", relPath)
 		content, err := os.ReadFile(absPath)
 		if err != nil {
 			return "", fmt.Errorf("read template file %s: %w", absPath, err)
