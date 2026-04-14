@@ -533,8 +533,8 @@ func TestInitPlugins_EnterGoesToSummary(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitModelTier {
-		t.Errorf("screen = %d, want screenInitModelTier (%d) after enter", model.screen, screenInitModelTier)
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) after enter", model.screen, screenInitAdapters)
 	}
 }
 
@@ -1491,6 +1491,9 @@ func TestInitModelTier_ScreenExists(t *testing.T) {
 		screenInitMCP,
 		screenInitPlugins,
 		screenInitSummary,
+		screenInitAdapters,
+		screenInitPreset,
+		screenInitInstallSummary,
 		screenSkillBrowser,
 		screenInitApplyPrompt,
 	}
@@ -1511,7 +1514,7 @@ func TestInitModelTier_DefaultIsBalanced(t *testing.T) {
 }
 
 // TestInitModelTier_Enter_AdvancesToNextScreen verifies that pressing enter on
-// the model tier screen stores the selected tier and advances to screenInitSummary.
+// the model tier screen stores the selected tier and advances to screenInitInstallSummary.
 func TestInitModelTier_Enter_AdvancesToNextScreen(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitModelTier
@@ -1520,10 +1523,360 @@ func TestInitModelTier_Enter_AdvancesToNextScreen(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitSummary {
-		t.Errorf("screen = %d, want screenInitSummary (%d) after enter on model tier", model.screen, screenInitSummary)
+	if model.screen != screenInitInstallSummary {
+		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter on model tier", model.screen, screenInitInstallSummary)
 	}
 	if model.modelTier != domain.ModelTierBalanced {
 		t.Errorf("modelTier = %q, want %q after selecting first option", model.modelTier, domain.ModelTierBalanced)
+	}
+}
+
+// ─── screenInitAdapters Tests ─────────────────────────────────────────────────
+
+func TestInitAdapters_ScreenExists(t *testing.T) {
+	// screenInitAdapters must be distinct from all other screen constants.
+	others := []screen{
+		screenIntro,
+		screenMenu,
+		screenRunning,
+		screenResult,
+		screenInitMethodology,
+		screenTeamStatus,
+		screenInitMCP,
+		screenInitPlugins,
+		screenInitModelTier,
+		screenInitSummary,
+		screenInitPreset,
+		screenInitInstallSummary,
+		screenSkillBrowser,
+		screenInitApplyPrompt,
+	}
+	for _, s := range others {
+		if s == screenInitAdapters {
+			t.Errorf("screenInitAdapters (%d) conflicts with screen %d", screenInitAdapters, s)
+		}
+	}
+}
+
+func TestInitPlugins_Enter_GoesToAdapters(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPlugins
+	m.pluginSelections = make(map[string]bool)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) after enter on plugins", model.screen, screenInitAdapters)
+	}
+}
+
+func TestInitAdapters_Esc_GoesToPlugins(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitAdapters
+	m.agentSelections = make(map[string]bool)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitPlugins {
+		t.Errorf("screen = %d, want screenInitPlugins (%d) after esc on adapters", model.screen, screenInitPlugins)
+	}
+}
+
+func TestInitAdapters_Enter_GoesToPreset(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitAdapters
+	m.agentSelections = make(map[string]bool)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitPreset {
+		t.Errorf("screen = %d, want screenInitPreset (%d) after enter on adapters", model.screen, screenInitPreset)
+	}
+}
+
+func TestInitAdapters_ShowsAllFiveAgents(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitAdapters
+	m.agentSelections = make(map[string]bool)
+
+	view := m.View()
+	expected := []string{"opencode", "claude-code", "vscode-copilot", "cursor", "windsurf"}
+	for _, id := range expected {
+		if !strings.Contains(view, id) {
+			t.Errorf("adapters view should contain agent %q, got:\n%s", id, view)
+		}
+	}
+}
+
+func TestInitAdapters_OpenCodeIsLocked(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, []domain.Adapter{
+		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
+	}, "/tmp/home")
+	m.screen = screenInitAdapters
+	m.agentSelections = map[string]bool{
+		string(domain.AgentOpenCode): true,
+	}
+	m.initCursor = 0 // opencode is first
+
+	// Toggle opencode with space — should have no effect.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := updated.(Model)
+
+	if !model.agentSelections[string(domain.AgentOpenCode)] {
+		t.Error("toggling opencode should have no effect — it must stay checked")
+	}
+}
+
+func TestInitAdapters_TogglePersonalAdapter(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, []domain.Adapter{
+		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
+		&mockAdapter{id: domain.AgentCursor, lane: domain.LanePersonal},
+	}, "/tmp/home")
+	m.screen = screenInitAdapters
+	m.agentSelections = map[string]bool{
+		string(domain.AgentOpenCode): true,
+		string(domain.AgentCursor):   true,
+	}
+	m.initCursor = 3 // cursor is 4th in the list (index 3)
+
+	// Space toggles cursor off.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := updated.(Model)
+
+	if model.agentSelections[string(domain.AgentCursor)] {
+		t.Error("cursor should be toggled off after space")
+	}
+
+	// Space again toggles cursor back on.
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model = updated.(Model)
+
+	if !model.agentSelections[string(domain.AgentCursor)] {
+		t.Error("cursor should be toggled on again after second space")
+	}
+}
+
+func TestInitAdapters_AllDetectedPreChecked(t *testing.T) {
+	adapters := []domain.Adapter{
+		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
+		&mockAdapter{id: domain.AgentCursor, lane: domain.LanePersonal},
+		&mockAdapter{id: domain.AgentClaudeCode, lane: domain.LanePersonal},
+	}
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+	m.screen = screenInitPlugins
+	m.pluginSelections = make(map[string]bool)
+
+	// Pressing enter on plugins → adapters should pre-check detected agents.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitAdapters {
+		t.Fatalf("should be on screenInitAdapters, got %d", model.screen)
+	}
+	if !model.agentSelections[string(domain.AgentOpenCode)] {
+		t.Error("opencode should be pre-checked")
+	}
+	if !model.agentSelections[string(domain.AgentCursor)] {
+		t.Error("cursor should be pre-checked (was detected)")
+	}
+	if !model.agentSelections[string(domain.AgentClaudeCode)] {
+		t.Error("claude-code should be pre-checked (was detected)")
+	}
+}
+
+// ─── screenInitPreset Tests ───────────────────────────────────────────────────
+
+func TestInitPreset_ScreenExists(t *testing.T) {
+	others := []screen{
+		screenIntro,
+		screenMenu,
+		screenRunning,
+		screenResult,
+		screenInitMethodology,
+		screenTeamStatus,
+		screenInitMCP,
+		screenInitPlugins,
+		screenInitModelTier,
+		screenInitSummary,
+		screenInitAdapters,
+		screenInitInstallSummary,
+		screenSkillBrowser,
+		screenInitApplyPrompt,
+	}
+	for _, s := range others {
+		if s == screenInitPreset {
+			t.Errorf("screenInitPreset (%d) conflicts with screen %d", screenInitPreset, s)
+		}
+	}
+}
+
+func TestInitPreset_FullSquad_SetsMethodologyAndTier(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPreset
+	m.initCursor = 0 // Full Squad is first
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.methodology != domain.MethodologySDD {
+		t.Errorf("methodology = %q, want sdd for full-squad", model.methodology)
+	}
+	if model.modelTier != domain.ModelTierBalanced {
+		t.Errorf("modelTier = %q, want balanced for full-squad", model.modelTier)
+	}
+}
+
+func TestInitPreset_Lean_SetsMethodologyAndTier(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPreset
+	m.initCursor = 1 // Lean is second
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.methodology != domain.MethodologyConventional {
+		t.Errorf("methodology = %q, want conventional for lean", model.methodology)
+	}
+	if model.modelTier != domain.ModelTierStarter {
+		t.Errorf("modelTier = %q, want starter for lean", model.modelTier)
+	}
+}
+
+func TestInitPreset_Custom_GoesToMethodology(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPreset
+	m.initCursor = 2 // Custom is third
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitMethodology {
+		t.Errorf("screen = %d, want screenInitMethodology (%d) for custom preset", model.screen, screenInitMethodology)
+	}
+}
+
+func TestInitPreset_FullSquad_SkipsToInstallSummary(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPreset
+	m.initCursor = 0 // Full Squad
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitInstallSummary {
+		t.Errorf("screen = %d, want screenInitInstallSummary (%d) for full-squad", model.screen, screenInitInstallSummary)
+	}
+}
+
+func TestInitPreset_Esc_GoesToAdapters(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitPreset
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) after esc on preset", model.screen, screenInitAdapters)
+	}
+}
+
+// ─── screenInitInstallSummary Tests ──────────────────────────────────────────
+
+func TestInstallSummary_ShowsMethodology(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.methodology = domain.MethodologySDD
+	m.modelTier = domain.ModelTierBalanced
+	m.setupPreset = domain.PresetFullSquad
+
+	view := m.View()
+	if !strings.Contains(view, "sdd") {
+		t.Errorf("install summary should contain methodology 'sdd', got:\n%s", view)
+	}
+}
+
+func TestInstallSummary_ShowsSelectedAgentsOnly(t *testing.T) {
+	adapters := []domain.Adapter{
+		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
+		&mockAdapter{id: domain.AgentCursor, lane: domain.LanePersonal},
+	}
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.methodology = domain.MethodologySDD
+	m.modelTier = domain.ModelTierBalanced
+	m.setupPreset = domain.PresetFullSquad
+	m.agentSelections = map[string]bool{
+		string(domain.AgentOpenCode): true,
+		string(domain.AgentCursor):   true,
+		// claude-code, vscode-copilot, windsurf not selected
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "opencode") {
+		t.Errorf("install summary should show opencode, got:\n%s", view)
+	}
+	if !strings.Contains(view, "cursor") {
+		t.Errorf("install summary should show cursor (selected), got:\n%s", view)
+	}
+}
+
+func TestInstallSummary_ShowsPresetName(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.setupPreset = domain.PresetFullSquad
+	m.methodology = domain.MethodologySDD
+	m.modelTier = domain.ModelTierBalanced
+
+	view := m.View()
+	if !strings.Contains(view, "Full Squad") {
+		t.Errorf("install summary should show preset name 'Full Squad', got:\n%s", view)
+	}
+}
+
+func TestInstallSummary_ShowsModelTier(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.setupPreset = domain.PresetLean
+	m.methodology = domain.MethodologyConventional
+	m.modelTier = domain.ModelTierStarter
+
+	view := m.View()
+	if !strings.Contains(view, "starter") {
+		t.Errorf("install summary should show model tier 'starter', got:\n%s", view)
+	}
+}
+
+func TestInstallSummary_Enter_GoesToApplyPrompt(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.methodology = domain.MethodologySDD
+	m.modelTier = domain.ModelTierBalanced
+	m.setupPreset = domain.PresetFullSquad
+	m.mcpSelections = map[string]bool{"context7": true}
+	m.pluginSelections = make(map[string]bool)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenRunning {
+		t.Errorf("screen = %d, want screenRunning (%d) after enter on install summary", model.screen, screenRunning)
+	}
+	if cmd == nil {
+		t.Error("enter on install summary should dispatch a RunInit command")
+	}
+}
+
+func TestInstallSummary_Esc_GoesToPreset(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitPreset {
+		t.Errorf("screen = %d, want screenInitPreset (%d) after esc on install summary", model.screen, screenInitPreset)
 	}
 }

@@ -32,6 +32,9 @@ const (
 	screenInitPlugins
 	screenInitModelTier
 	screenInitSummary
+	screenInitAdapters       // agent selection checkboxes
+	screenInitPreset         // setup preset radio (full-squad / lean / custom)
+	screenInitInstallSummary // review and confirm before applying
 	screenSkillBrowser
 	screenInitApplyPrompt // "Apply now?" prompt after successful init
 )
@@ -119,6 +122,10 @@ type Model struct {
 	mcpSelections    map[string]bool
 	pluginSelections map[string]bool
 	modelTier        domain.ModelTier
+
+	// Agent selection and preset (new screens).
+	agentSelections map[string]bool    // key=AgentID string, val=selected
+	setupPreset     domain.SetupPreset // "full-squad", "lean", "custom"
 
 	// Skill browser state.
 	skillCat         skillCatalog
@@ -332,8 +339,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pluginSelections[name] = !m.pluginSelections[name]
 			}
 		case "enter":
+			// Initialize agentSelections from detected adapters (all pre-checked).
+			m.agentSelections = make(map[string]bool)
+			for _, a := range m.adapters {
+				m.agentSelections[string(a.ID())] = true
+			}
+			// OpenCode is always required.
+			m.agentSelections[string(domain.AgentOpenCode)] = true
 			m.initCursor = 0
-			m.screen = screenInitModelTier
+			m.screen = screenInitAdapters
 			return m, nil
 		case "esc":
 			m.screen = screenInitMCP
@@ -359,7 +373,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.modelTier = tiers[m.initCursor]
 			m.initCursor = 0
-			m.screen = screenInitSummary
+			m.screen = screenInitInstallSummary
 			return m, nil
 		case "esc":
 			m.screen = screenInitPlugins
@@ -405,6 +419,160 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "esc":
 			m.screen = screenInitModelTier
+			return m, nil
+		}
+
+	case screenInitAdapters:
+		// All 5 canonical agents in fixed order.
+		allAgents := []domain.AgentID{
+			domain.AgentOpenCode,
+			domain.AgentClaudeCode,
+			domain.AgentVSCodeCopilot,
+			domain.AgentCursor,
+			domain.AgentWindsurf,
+		}
+		switch key {
+		case "up", "k":
+			if m.initCursor > 0 {
+				m.initCursor--
+			}
+		case "down", "j":
+			if m.initCursor < len(allAgents)-1 {
+				m.initCursor++
+			}
+		case " ":
+			// Toggle selection; OpenCode cannot be deselected.
+			if m.initCursor < len(allAgents) {
+				id := string(allAgents[m.initCursor])
+				if id != string(domain.AgentOpenCode) {
+					if m.agentSelections == nil {
+						m.agentSelections = make(map[string]bool)
+					}
+					m.agentSelections[id] = !m.agentSelections[id]
+				}
+			}
+		case "enter":
+			m.initCursor = 0
+			m.screen = screenInitPreset
+			return m, nil
+		case "esc":
+			m.screen = screenInitPlugins
+			return m, nil
+		}
+
+	case screenInitPreset:
+		presets := []domain.SetupPreset{
+			domain.PresetFullSquad,
+			domain.PresetLean,
+			domain.PresetCustom,
+		}
+		switch key {
+		case "up", "k":
+			if m.initCursor > 0 {
+				m.initCursor--
+			}
+		case "down", "j":
+			if m.initCursor < len(presets)-1 {
+				m.initCursor++
+			}
+		case "enter":
+			m.setupPreset = presets[m.initCursor]
+			switch m.setupPreset {
+			case domain.PresetFullSquad:
+				m.methodology = domain.MethodologySDD
+				m.modelTier = domain.ModelTierBalanced
+				m.initCursor = 0
+				m.screen = screenInitInstallSummary
+			case domain.PresetLean:
+				m.methodology = domain.MethodologyConventional
+				m.modelTier = domain.ModelTierStarter
+				m.initCursor = 0
+				m.screen = screenInitInstallSummary
+			case domain.PresetCustom:
+				m.initCursor = 0
+				m.screen = screenInitMethodology
+			}
+			return m, nil
+		case "esc":
+			m.screen = screenInitAdapters
+			return m, nil
+		}
+
+	case screenInitInstallSummary:
+		switch key {
+		case "enter":
+			m.screen = screenRunning
+			m.output = ""
+			m.err = nil
+			m.initJustCompleted = true
+			args := []string{"--methodology=" + string(m.methodology)}
+			// Add model tier.
+			args = append(args, "--model-tier="+string(m.modelTier))
+			// Add MCP selections.
+			var mcpKeys []string
+			for k, selected := range m.mcpSelections {
+				if selected {
+					mcpKeys = append(mcpKeys, k)
+				}
+			}
+			if len(mcpKeys) > 0 {
+				sort.Strings(mcpKeys)
+				args = append(args, "--mcp="+strings.Join(mcpKeys, ","))
+			}
+			// Add plugin selections.
+			var pluginKeys []string
+			for k, selected := range m.pluginSelections {
+				if selected {
+					pluginKeys = append(pluginKeys, k)
+				}
+			}
+			if len(pluginKeys) > 0 {
+				sort.Strings(pluginKeys)
+				args = append(args, "--plugins="+strings.Join(pluginKeys, ","))
+			}
+			// Add preset (when not custom).
+			if m.setupPreset != "" && m.setupPreset != domain.PresetCustom {
+				args = append(args, "--preset="+string(m.setupPreset))
+			}
+			// Add agent filter only when user deselected at least one agent.
+			if m.agentSelections != nil {
+				var selectedIDs []string
+				for id, sel := range m.agentSelections {
+					if sel {
+						selectedIDs = append(selectedIDs, id)
+					}
+				}
+				// Check if all canonical agents are selected; if not, pass --agents=.
+				allCanonical := []string{
+					string(domain.AgentOpenCode),
+					string(domain.AgentClaudeCode),
+					string(domain.AgentVSCodeCopilot),
+					string(domain.AgentCursor),
+					string(domain.AgentWindsurf),
+				}
+				selectedSet := make(map[string]bool, len(selectedIDs))
+				for _, id := range selectedIDs {
+					selectedSet[id] = true
+				}
+				allSelected := true
+				for _, id := range allCanonical {
+					if !selectedSet[id] {
+						allSelected = false
+						break
+					}
+				}
+				if !allSelected && len(selectedIDs) > 0 {
+					sort.Strings(selectedIDs)
+					args = append(args, "--agents="+strings.Join(selectedIDs, ","))
+				}
+			}
+			return m, func() tea.Msg {
+				var buf bytes.Buffer
+				err := cli.RunInit(args, &buf)
+				return commandResult{output: buf.String(), err: err}
+			}
+		case "esc":
+			m.screen = screenInitPreset
 			return m, nil
 		}
 
@@ -528,6 +696,12 @@ func (m Model) View() string {
 		return m.viewInitModelTier()
 	case screenInitSummary:
 		return m.viewInitSummary()
+	case screenInitAdapters:
+		return m.viewInitAdapters()
+	case screenInitPreset:
+		return m.viewInitPreset()
+	case screenInitInstallSummary:
+		return m.viewInitInstallSummary()
 	case screenSkillBrowser:
 		return m.viewSkillBrowser()
 	case screenInitApplyPrompt:
@@ -938,6 +1112,230 @@ func (m Model) viewInitSummary() string {
 	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("enter: confirm  esc: go back"))
+	return b.String()
+}
+
+// viewInitAdapters renders the agent selection checkbox screen.
+func (m Model) viewInitAdapters() string {
+	// All 5 canonical agents in fixed order.
+	allAgents := []domain.AgentID{
+		domain.AgentOpenCode,
+		domain.AgentClaudeCode,
+		domain.AgentVSCodeCopilot,
+		domain.AgentCursor,
+		domain.AgentWindsurf,
+	}
+
+	// Build a set of detected agent IDs for quick lookup.
+	detectedSet := make(map[string]bool, len(m.adapters))
+	for _, a := range m.adapters {
+		detectedSet[string(a.ID())] = true
+	}
+
+	// Build a set of delegation strategies by agent ID.
+	strategyMap := make(map[string]string)
+	for _, a := range m.adapters {
+		strategyMap[string(a.ID())] = string(a.DelegationStrategy())
+	}
+	// Known strategies for non-detected agents.
+	knownStrategies := map[string]string{
+		string(domain.AgentOpenCode):      "native",
+		string(domain.AgentClaudeCode):    "prompt",
+		string(domain.AgentVSCodeCopilot): "solo",
+		string(domain.AgentCursor):        "native",
+		string(domain.AgentWindsurf):      "solo",
+	}
+
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Select Agents to Configure") + "\n\n")
+
+	for i, agentID := range allAgents {
+		id := string(agentID)
+		isOpenCode := id == string(domain.AgentOpenCode)
+		isDetected := detectedSet[id]
+
+		// Determine checked state.
+		checked := m.agentSelections != nil && m.agentSelections[id]
+		if isOpenCode {
+			checked = true // always checked
+		}
+
+		var checkStr string
+		if checked {
+			checkStr = badgeActiveStyle.Render("[x]")
+		} else {
+			checkStr = badgeDisabledStyle.Render("[ ]")
+		}
+
+		// Determine strategy label.
+		strategy := strategyMap[id]
+		if strategy == "" {
+			strategy = knownStrategies[id]
+		}
+
+		// Build name and suffix.
+		var nameStr, suffix string
+		if i == m.initCursor {
+			nameStr = activeStyle.Render(id)
+		} else {
+			nameStr = id
+		}
+
+		switch {
+		case isOpenCode:
+			suffix = mutedStyle.Render("(required)")
+		case !isDetected:
+			suffix = mutedStyle.Render("(not detected)")
+		}
+
+		line := fmt.Sprintf("  %s %-20s %-8s %s", checkStr, nameStr, strategy, suffix)
+		content.WriteString(line + "\n")
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate  space: toggle  enter: next  esc: back"))
+	return b.String()
+}
+
+// viewInitPreset renders the setup preset selection screen.
+func (m Model) viewInitPreset() string {
+	presets := []struct {
+		value domain.SetupPreset
+		title string
+		line1 string
+		line2 string
+	}{
+		{
+			domain.PresetFullSquad,
+			"Full Squad",
+			"SDD methodology (8 roles), balanced models, all",
+			"components enabled",
+		},
+		{
+			domain.PresetLean,
+			"Lean",
+			"Conventional (4 roles), starter models, core only",
+			"Rules, memory, standards — minimal footprint",
+		},
+		{
+			domain.PresetCustom,
+			"Custom",
+			"Pick methodology, model tier, and components",
+			"Opens the full setup wizard",
+		},
+	}
+
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Setup Preset") + "\n\n")
+	content.WriteString("Choose a setup preset:\n\n")
+
+	for i, p := range presets {
+		if i == m.initCursor {
+			content.WriteString(activeStyle.Render("> "+p.title) + "  " + activeStyle.Render(p.line1) + "\n")
+			content.WriteString("  " + mutedStyle.Render("                    "+p.line2) + "\n")
+		} else {
+			content.WriteString("  " + p.title + "  " + p.line1 + "\n")
+			content.WriteString(mutedStyle.Render("                    "+p.line2) + "\n")
+		}
+		content.WriteString("\n")
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate   enter: select   esc: back"))
+	return b.String()
+}
+
+// viewInitInstallSummary renders the review and confirm screen before applying.
+func (m Model) viewInitInstallSummary() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Review and Confirm") + "\n\n")
+
+	// Preset name.
+	presetName := string(m.setupPreset)
+	switch m.setupPreset {
+	case domain.PresetFullSquad:
+		presetName = "Full Squad"
+	case domain.PresetLean:
+		presetName = "Lean"
+	case domain.PresetCustom:
+		presetName = "Custom"
+	case "":
+		presetName = "Custom"
+	}
+
+	// Methodology display.
+	methodDesc := string(m.methodology)
+	if m.methodology != "" {
+		team := domain.DefaultTeam(m.methodology)
+		methodDesc = fmt.Sprintf("%s (%d roles)", m.methodology, len(team))
+	}
+
+	// Model tier display.
+	tierName := string(m.modelTier)
+	if tierName == "" {
+		tierName = string(domain.ModelTierBalanced)
+	}
+
+	content.WriteString(fmt.Sprintf("  %-16s %s\n", "Preset", presetName))
+	if m.methodology != "" {
+		content.WriteString(fmt.Sprintf("  %-16s %s\n", "Methodology", methodDesc))
+	}
+	content.WriteString(fmt.Sprintf("  %-16s %s\n", "Model tier", tierName))
+
+	content.WriteString("\n")
+	content.WriteString(headingStyle.Render("Agents") + "\n")
+
+	// List all 5 canonical agents; show only selected ones.
+	allAgents := []domain.AgentID{
+		domain.AgentOpenCode,
+		domain.AgentClaudeCode,
+		domain.AgentVSCodeCopilot,
+		domain.AgentCursor,
+		domain.AgentWindsurf,
+	}
+	knownStrategies := map[string]string{
+		string(domain.AgentOpenCode):      "native",
+		string(domain.AgentClaudeCode):    "prompt",
+		string(domain.AgentVSCodeCopilot): "solo",
+		string(domain.AgentCursor):        "native",
+		string(domain.AgentWindsurf):      "solo",
+	}
+	strategyMap := make(map[string]string)
+	for _, a := range m.adapters {
+		strategyMap[string(a.ID())] = string(a.DelegationStrategy())
+	}
+
+	hasAny := false
+	for _, agentID := range allAgents {
+		id := string(agentID)
+		isOpenCode := id == string(domain.AgentOpenCode)
+		selected := (m.agentSelections != nil && m.agentSelections[id]) || isOpenCode
+		if !selected {
+			continue
+		}
+		hasAny = true
+		strategy := strategyMap[id]
+		if strategy == "" {
+			strategy = knownStrategies[id]
+		}
+		var suffix string
+		if isOpenCode {
+			suffix = mutedStyle.Render("(required)")
+		}
+		content.WriteString(fmt.Sprintf("  %-20s %-8s %s\n", id, strategy, suffix))
+	}
+	if !hasAny {
+		content.WriteString(mutedStyle.Render("  (none selected)") + "\n")
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("enter: install   esc: back"))
 	return b.String()
 }
 

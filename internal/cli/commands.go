@@ -54,6 +54,8 @@ func RunInit(args []string, stdout io.Writer) error {
 	var pluginsFlag string
 	modelTier := domain.ModelTierBalanced
 	modelTierExplicit := false
+	var agentSelections []string
+	var presetValue string
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "--methodology=") {
 			methodology = strings.TrimPrefix(arg, "--methodology=")
@@ -80,6 +82,23 @@ func RunInit(args []string, stdout io.Writer) error {
 			}
 			continue
 		}
+		if strings.HasPrefix(arg, "--agents=") {
+			val := strings.TrimPrefix(arg, "--agents=")
+			if val != "" {
+				agentSelections = strings.Split(val, ",")
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--preset=") {
+			val := strings.TrimPrefix(arg, "--preset=")
+			switch domain.SetupPreset(val) {
+			case domain.PresetFullSquad, domain.PresetLean, domain.PresetCustom:
+				presetValue = val
+			default:
+				return fmt.Errorf("unknown preset %q (full-squad|lean|custom)", val)
+			}
+			continue
+		}
 		switch arg {
 		case "--with-policy":
 			withPolicy = true
@@ -90,7 +109,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--with-policy] [--force] [--merge] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--force] [--merge] [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Initialize .squadai/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
@@ -112,6 +131,13 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "                 performance: always flagship models — maximum quality, higher cost")
 			fmt.Fprintln(stdout, "                 starter: capable models at lowest cost")
 			fmt.Fprintln(stdout, "                 manual: configure models yourself — no defaults applied")
+			fmt.Fprintln(stdout, "  --agents=<csv> Comma-separated list of agent IDs to configure (e.g. opencode,cursor).")
+			fmt.Fprintln(stdout, "                 OpenCode is always included. Omit to configure all detected agents.")
+			fmt.Fprintln(stdout, "  --preset=<full-squad|lean|custom>")
+			fmt.Fprintln(stdout, "                 Apply a named setup preset:")
+			fmt.Fprintln(stdout, "                 full-squad: SDD methodology, balanced models, all components")
+			fmt.Fprintln(stdout, "                 lean: conventional methodology, starter models, core only")
+			fmt.Fprintln(stdout, "                 custom: explicit flags or wizard defaults")
 			fmt.Fprintln(stdout, "  --with-policy  Also create .squadai/policy.json with a starter template.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
 			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
@@ -123,12 +149,35 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  squadai init --methodology=tdd --with-policy")
 			fmt.Fprintln(stdout, "  squadai init --methodology=sdd --mcp=context7 --plugins=code-review")
 			fmt.Fprintln(stdout, "  squadai init --model-tier=performance")
+			fmt.Fprintln(stdout, "  squadai init --agents=opencode,cursor")
+			fmt.Fprintln(stdout, "  squadai init --preset=full-squad")
 			fmt.Fprintln(stdout, "  squadai init --force")
 			fmt.Fprintln(stdout, "  squadai init --merge")
 			fmt.Fprintln(stdout, "  squadai init --json")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for init", arg)
+		}
+	}
+
+	// Apply preset AFTER flag parsing but BEFORE building config.
+	// Preset sets methodology/modelTier only when not already explicitly set.
+	switch domain.SetupPreset(presetValue) {
+	case domain.PresetFullSquad:
+		if !methodologyExplicit {
+			methodology = string(domain.MethodologySDD)
+			methodologyExplicit = true
+		}
+		if !modelTierExplicit {
+			modelTier = domain.ModelTierBalanced
+		}
+	case domain.PresetLean:
+		if !methodologyExplicit {
+			methodology = string(domain.MethodologyConventional)
+			methodologyExplicit = true
+		}
+		if !modelTierExplicit {
+			modelTier = domain.ModelTierStarter
 		}
 	}
 
@@ -189,6 +238,10 @@ func RunInit(args []string, stdout io.Writer) error {
 		detectedAdapters = DetectAdapters(homeDir)
 	}
 
+	// Filter adapters to user-selected subset (--agents= flag).
+	// OpenCode is always preserved regardless of selection.
+	selectedAdapters := filterAdapters(detectedAdapters, agentSelections)
+
 	// When --json is set, suppress all human-readable writes to stdout by
 	// redirecting the human output writer to a discard sink.
 	humanOut := stdout
@@ -211,7 +264,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		if loadErr != nil {
 			return fmt.Errorf("load existing project config for merge: %w", loadErr)
 		}
-		fresh := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		fresh := buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
 		proj = mergeProjectConfigs(existing, fresh, methodologyExplicit, modelTierExplicit)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
@@ -219,7 +272,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		fmt.Fprintf(humanOut, "  merged  %s\n", relPath(projectDir, projectPath))
 	} else {
 		// New or force: build fresh config.
-		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		proj = buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
@@ -232,7 +285,7 @@ func RunInit(args []string, stdout io.Writer) error {
 
 	// When proj was not written (exists + no-op skip), build it for JSON output.
 	if proj == nil {
-		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		proj = buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
 	}
 
 	// Create policy config if requested.
@@ -313,8 +366,8 @@ func RunInit(args []string, stdout io.Writer) error {
 
 	if jsonOut {
 		// Build adapter ID list.
-		adapterIDs := make([]string, 0, len(detectedAdapters))
-		for _, a := range detectedAdapters {
+		adapterIDs := make([]string, 0, len(selectedAdapters))
+		for _, a := range selectedAdapters {
 			adapterIDs = append(adapterIDs, string(a.ID()))
 		}
 
@@ -364,7 +417,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		if meta.Name != "" {
 			fmt.Fprintf(stdout, "  Project:  %s\n", meta.Name)
 		}
-		adapterNames := adapterSummary(detectedAdapters)
+		adapterNames := adapterSummary(selectedAdapters)
 		if adapterNames != "" {
 			fmt.Fprintf(stdout, "  Agents:   %s\n", adapterNames)
 		}
@@ -2173,6 +2226,29 @@ func DetectAdapters(homeDir string) []domain.Adapter {
 	}
 
 	return adapters
+}
+
+// filterAdapters returns only adapters whose ID is in the selections set.
+// OpenCode is always included regardless of selections (team-required adapter).
+// If selections is nil/empty, returns detected unchanged (backward-compatible).
+func filterAdapters(detected []domain.Adapter, selections []string) []domain.Adapter {
+	if len(selections) == 0 {
+		return detected
+	}
+	allowed := make(map[string]bool, len(selections))
+	for _, s := range selections {
+		allowed[strings.TrimSpace(s)] = true
+	}
+	// OpenCode is always required.
+	allowed[string(domain.AgentOpenCode)] = true
+
+	var result []domain.Adapter
+	for _, a := range detected {
+		if allowed[string(a.ID())] {
+			result = append(result, a)
+		}
+	}
+	return result
 }
 
 // LoadAndMerge is the shared config loading logic for commands that need merged config.
