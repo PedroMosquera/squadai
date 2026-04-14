@@ -1,6 +1,10 @@
 package domain
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 // ─── DefaultTeam ────────────────────────────────────────────────────────────
 
@@ -59,6 +63,37 @@ func TestDefaultTeam_Empty_ReturnsNil(t *testing.T) {
 	team := DefaultTeam("")
 	if team != nil {
 		t.Errorf("empty methodology should return nil, got %v", team)
+	}
+}
+
+// ─── ProjectMeta JSON serialization ─────────────────────────────────────────
+
+func TestProjectMeta_PackageManager_OmitemptyWhenEmpty(t *testing.T) {
+	meta := ProjectMeta{
+		Name:     "my-service",
+		Language: "Go",
+	}
+	data, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	if strings.Contains(string(data), "package_manager") {
+		t.Errorf("JSON output should not contain 'package_manager' when it is empty, got: %s", data)
+	}
+}
+
+func TestProjectMeta_PackageManager_PresentWhenSet(t *testing.T) {
+	meta := ProjectMeta{
+		Name:           "my-app",
+		Language:       "TypeScript",
+		PackageManager: "pnpm",
+	}
+	data, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	if !strings.Contains(string(data), `"package_manager":"pnpm"`) {
+		t.Errorf("JSON output should contain 'package_manager', got: %s", data)
 	}
 }
 
