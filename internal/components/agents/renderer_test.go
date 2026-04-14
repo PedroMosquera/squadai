@@ -103,3 +103,80 @@ func TestBuildTemplateData_NilMCP_HasContext7False(t *testing.T) {
 		t.Error("HasContext7 should be false when MCP map is nil")
 	}
 }
+
+func TestTemplateData_IncludesPackageManager(t *testing.T) {
+	adapter := opencode.New()
+	cfg := &domain.MergedConfig{
+		Methodology: domain.MethodologyTDD,
+		Meta: domain.ProjectMeta{
+			Language:       "TypeScript",
+			PackageManager: "pnpm",
+		},
+		MCP: map[string]domain.MCPServerDef{},
+	}
+	data := buildTemplateData(adapter, cfg, "/home/user", "/proj")
+	if data.PackageManager != "pnpm" {
+		t.Errorf("PackageManager = %q, want pnpm", data.PackageManager)
+	}
+}
+
+func TestTemplateData_IncludesModelTier(t *testing.T) {
+	adapter := opencode.New()
+	cfg := &domain.MergedConfig{
+		Methodology: domain.MethodologyTDD,
+		Meta:        domain.ProjectMeta{Language: "Go"},
+		ModelTier:   domain.ModelTierPerformance,
+		MCP:         map[string]domain.MCPServerDef{},
+	}
+	data := buildTemplateData(adapter, cfg, "/home/user", "/proj")
+	if data.ModelTier != "performance" {
+		t.Errorf("ModelTier = %q, want performance", data.ModelTier)
+	}
+}
+
+func TestTemplateData_IncludesModelHint(t *testing.T) {
+	adapter := opencode.New()
+	cfg := &domain.MergedConfig{
+		Methodology: domain.MethodologyTDD,
+		Meta:        domain.ProjectMeta{Language: "Go"},
+		ModelTier:   domain.ModelTierBalanced,
+		MCP:         map[string]domain.MCPServerDef{},
+	}
+	data := buildTemplateData(adapter, cfg, "/home/user", "/proj")
+	if data.ModelHint == "" {
+		t.Error("ModelHint should be non-empty for balanced tier")
+	}
+	if !strings.Contains(data.ModelHint, "Claude Sonnet 4") {
+		t.Errorf("ModelHint for balanced should mention Claude Sonnet 4, got: %q", data.ModelHint)
+	}
+}
+
+func TestTemplateData_IncludesFramework(t *testing.T) {
+	adapter := opencode.New()
+	cfg := &domain.MergedConfig{
+		Methodology: domain.MethodologyConventional,
+		Meta: domain.ProjectMeta{
+			Language:  "TypeScript",
+			Framework: "Next.js",
+		},
+		MCP: map[string]domain.MCPServerDef{},
+	}
+	data := buildTemplateData(adapter, cfg, "/home/user", "/proj")
+	if data.Framework != "Next.js" {
+		t.Errorf("Framework = %q, want Next.js", data.Framework)
+	}
+}
+
+func TestTemplateData_ModelHintEmptyForManual(t *testing.T) {
+	adapter := opencode.New()
+	cfg := &domain.MergedConfig{
+		Methodology: domain.MethodologyTDD,
+		Meta:        domain.ProjectMeta{Language: "Go"},
+		ModelTier:   domain.ModelTierManual,
+		MCP:         map[string]domain.MCPServerDef{},
+	}
+	data := buildTemplateData(adapter, cfg, "/home/user", "/proj")
+	if data.ModelHint != "" {
+		t.Errorf("ModelHint should be empty for manual tier, got: %q", data.ModelHint)
+	}
+}

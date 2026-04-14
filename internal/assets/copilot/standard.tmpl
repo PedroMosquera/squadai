@@ -9,6 +9,9 @@
 {{- if .Language}} {{.Language}}{{end}}
 {{- if .Framework}} / {{.Framework}}{{end}}
 {{- end}}
+{{- if .PackageManager}}
+- Package Manager: {{.PackageManager}}
+{{- end}}
 
 ### General Principles
 

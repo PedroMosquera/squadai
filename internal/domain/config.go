@@ -163,6 +163,7 @@ type MergedConfig struct {
 	Meta        ProjectMeta                `json:"meta,omitempty"`
 	Paths       PathsConfig                `json:"paths"`
 	Methodology Methodology                `json:"methodology,omitempty"`
+	ModelTier   ModelTier                  `json:"model_tier,omitempty"`
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 

@@ -87,6 +87,9 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		if project.Methodology != "" {
 			merged.Methodology = project.Methodology
 		}
+		if project.ModelTier != "" {
+			merged.ModelTier = project.ModelTier
+		}
 		if project.Team != nil {
 			merged.Team = cloneTeamRoles(project.Team)
 		}
