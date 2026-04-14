@@ -659,6 +659,75 @@ func delegationStrategyForAgent(id domain.AgentID) string {
 	}
 }
 
+// RenderContent returns the content that Apply would write for the given action,
+// without performing the write. Used by the diff renderer.
+func (i *Installer) RenderContent(action domain.PlannedAction) (string, error) {
+	switch {
+	case strings.HasPrefix(action.Description, "team:native:"):
+		return i.renderNativeAgentContent(action)
+	case strings.HasPrefix(action.Description, "team:prompt:"):
+		return i.renderMarkerInjectionContent(action, "prompt")
+	case strings.HasPrefix(action.Description, "team:solo:"):
+		return i.renderMarkerInjectionContent(action, "solo")
+	default:
+		return i.renderCustomAgentContent(action)
+	}
+}
+
+// renderNativeAgentContent computes the content for a native agent file.
+func (i *Installer) renderNativeAgentContent(action domain.PlannedAction) (string, error) {
+	if i.config == nil {
+		return "", fmt.Errorf("renderNativeAgentContent: config is nil")
+	}
+	roleName := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
+	methodology := string(i.config.Methodology)
+	data := buildTemplateDataFromAction(i.config, i.projectDir, roleName, action.Agent)
+
+	var templateContent string
+	if roleName == "orchestrator" {
+		templateContent = assets.MustRead("teams/" + methodology + "/orchestrator-native.md")
+	} else {
+		var err error
+		templateContent, err = assets.Read("teams/" + methodology + "/" + roleName + ".md")
+		if err != nil {
+			return "", fmt.Errorf("read team agent template %s: %w", roleName, err)
+		}
+	}
+	return renderTemplate(roleName, templateContent, data)
+}
+
+// renderMarkerInjectionContent computes the content for a prompt/solo marker injection.
+func (i *Installer) renderMarkerInjectionContent(action domain.PlannedAction, variant string) (string, error) {
+	if i.config == nil {
+		return "", fmt.Errorf("renderMarkerInjectionContent: config is nil")
+	}
+	methodology := string(i.config.Methodology)
+	data := buildTemplateDataFromAction(i.config, i.projectDir, "orchestrator", action.Agent)
+	templatePath := "teams/" + methodology + "/orchestrator-" + variant + ".md"
+	rendered, err := renderTemplate("orchestrator", assets.MustRead(templatePath), data)
+	if err != nil {
+		return "", fmt.Errorf("render %s orchestrator: %w", variant, err)
+	}
+
+	existing, readErr := fileutil.ReadFileOrEmpty(action.TargetPath)
+	if readErr != nil {
+		return "", fmt.Errorf("read rules file: %w", readErr)
+	}
+
+	updated := marker.InjectSection(string(existing), teamSectionID, rendered)
+	return updated, nil
+}
+
+// renderCustomAgentContent computes the content for a custom agent file.
+func (i *Installer) renderCustomAgentContent(action domain.PlannedAction) (string, error) {
+	name := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
+	def, ok := i.agents[name]
+	if !ok {
+		return "", fmt.Errorf("agent %q not found in config", name)
+	}
+	return renderAgent(name, def), nil
+}
+
 // renderAgent generates the markdown content for an agent definition with YAML frontmatter.
 func renderAgent(name string, def domain.AgentDef) string {
 	var b strings.Builder

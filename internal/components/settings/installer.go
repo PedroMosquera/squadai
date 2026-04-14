@@ -218,6 +218,39 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	return results, nil
 }
 
+// RenderContent returns the content that Apply would write for the given action,
+// without performing the write. Used by the diff renderer.
+func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
+	agentID := string(action.Agent)
+	settings := i.adapterSettings[agentID]
+	if len(settings) == 0 {
+		return nil, nil
+	}
+
+	existing, err := readJSONFile(action.TargetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read target: %w", err)
+	}
+	if existing == nil {
+		existing = make(map[string]interface{})
+	}
+
+	managedKeys := make([]string, 0, len(settings))
+	for key, val := range settings {
+		existing[key] = val
+		managedKeys = append(managedKeys, key)
+	}
+	sort.Strings(managedKeys)
+	existing[managedMetaKey] = managedMeta{ManagedKeys: managedKeys}
+
+	data, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal settings: %w", err)
+	}
+	data = append(data, '\n')
+	return data, nil
+}
+
 // readJSONFile reads a JSON file into a generic map.
 // Returns nil, nil if the file does not exist.
 func readJSONFile(path string) (map[string]interface{}, error) {

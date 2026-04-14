@@ -36,6 +36,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "plan":
 		return cli.RunPlan(args[1:], stdout)
 
+	case "diff":
+		return cli.RunDiff(args[1:], stdout)
+
 	case "apply":
 		return cli.RunApply(args[1:], stdout)
 
@@ -86,6 +89,7 @@ Commands:
   init               Initialize project config and optional policy template
   validate-policy    Validate policy schema and lock/required consistency
   plan               Compute action plan (use --dry-run to preview)
+  diff               Show what apply would change as unified diffs
   apply              Execute plan with backup and rollback safety
   sync               Idempotent reconciliation to desired state
   verify             Print compliance and health report

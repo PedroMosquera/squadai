@@ -511,6 +511,14 @@ func selectStandards(language string) string {
 		return assets.MustRead("standards/php.md")
 	case "Swift":
 		return assets.MustRead("standards/swift.md")
+	case "C/C++":
+		return assets.MustRead("standards/cpp.md")
+	case "Dart":
+		return assets.MustRead("standards/dart.md")
+	case "Elixir":
+		return assets.MustRead("standards/elixir.md")
+	case "Scala":
+		return assets.MustRead("standards/scala.md")
 	default:
 		return assets.MustRead("standards/generic.md")
 	}
@@ -2026,4 +2034,160 @@ func loadAndMerge(homeDir, projectDir string) (*domain.MergedConfig, error) {
 	}
 
 	return config.Merge(user, project, policy), nil
+}
+
+// diffEntry is the JSON representation of a single diff action.
+type diffEntry struct {
+	Path      string `json:"path"`
+	Action    string `json:"action"`
+	Agent     string `json:"agent,omitempty"`
+	Component string `json:"component"`
+	Diff      string `json:"diff"`
+}
+
+// RunDiff shows what apply would change as unified diffs. It is read-only.
+func RunDiff(args []string, stdout io.Writer) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	return runDiff(args, stdout, homeDir, projectDir)
+}
+
+// runDiff is the testable core of RunDiff with injected homeDir and projectDir.
+func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error {
+	jsonOut := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager diff [flags]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Show what apply would change as unified diffs.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json    Output as JSON")
+			fmt.Fprintln(stdout, "  -h        Show this help")
+			return nil
+		default:
+			return fmt.Errorf("unknown flag %q for diff", arg)
+		}
+	}
+
+	merged, err := loadAndMerge(homeDir, projectDir)
+	if err != nil {
+		return err
+	}
+
+	adapters := DetectAdapters(homeDir)
+	p := planner.New()
+	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
+	if err != nil {
+		return fmt.Errorf("plan: %w", err)
+	}
+
+	// Filter to only non-skip actions.
+	var nonSkip []domain.PlannedAction
+	for _, a := range actions {
+		if a.Action != domain.ActionSkip {
+			nonSkip = append(nonSkip, a)
+		}
+	}
+
+	if len(nonSkip) == 0 {
+		if jsonOut {
+			fmt.Fprintln(stdout, "[]")
+			return nil
+		}
+		fmt.Fprintln(stdout, "Nothing to change.")
+		return nil
+	}
+
+	if jsonOut {
+		entries := make([]diffEntry, 0, len(nonSkip))
+		for _, a := range nonSkip {
+			entry := diffEntry{
+				Path:      a.TargetPath,
+				Action:    string(a.Action),
+				Agent:     string(a.Agent),
+				Component: string(a.Component),
+			}
+			if a.Action == domain.ActionDelete {
+				entry.Diff = "Would remove: " + a.TargetPath
+			} else {
+				old, newContent, renderErr := p.RenderAction(a, homeDir, projectDir)
+				if renderErr == nil {
+					entry.Diff = fileutil.UnifiedDiff(a.TargetPath, string(old), string(newContent))
+				}
+			}
+			entries = append(entries, entry)
+		}
+		data, _ := json.MarshalIndent(entries, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	// Human-readable output.
+	for _, a := range nonSkip {
+		agentInfo := ""
+		if a.Agent != "" || a.Component != "" {
+			parts := []string{}
+			if a.Component != "" {
+				parts = append(parts, string(a.Component))
+			}
+			if a.Agent != "" {
+				parts = append(parts, string(a.Agent))
+			}
+			if len(parts) > 0 {
+				agentInfo = " (" + strings.Join(parts, "/") + ")"
+			}
+		}
+
+		switch a.Action {
+		case domain.ActionDelete:
+			fmt.Fprintf(stdout, "=== Would remove: %s\n\n", a.TargetPath)
+
+		case domain.ActionCreate, domain.ActionUpdate:
+			label := "Would create"
+			if a.Action == domain.ActionUpdate {
+				label = "Would update"
+			}
+			fmt.Fprintf(stdout, "=== %s: %s%s\n", label, a.TargetPath, agentInfo)
+
+			old, newContent, renderErr := p.RenderAction(a, homeDir, projectDir)
+			if renderErr != nil {
+				fmt.Fprintf(stdout, "(could not render diff: %v)\n\n", renderErr)
+				continue
+			}
+
+			diff := fileutil.UnifiedDiff(a.TargetPath, string(old), string(newContent))
+			if diff != "" {
+				fmt.Fprintln(stdout, diff)
+			} else {
+				fmt.Fprintln(stdout, "(no textual diff available)")
+				fmt.Fprintln(stdout)
+			}
+		}
+	}
+
+	return nil
+}
+
+// join concatenates elements with a separator (avoids importing strings just for this).
+func join(elems []string, sep string) string {
+	result := ""
+	for i, e := range elems {
+		if i > 0 {
+			result += sep
+		}
+		result += e
+	}
+	return result
 }

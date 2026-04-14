@@ -190,6 +190,17 @@ func renderCommand(name string, def domain.CommandDef) string {
 	return b.String()
 }
 
+// RenderContent returns the content that Apply would write for the given action,
+// without performing the write. Used by the diff renderer.
+func (i *Installer) RenderContent(action domain.PlannedAction) (string, error) {
+	name := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
+	def, ok := i.commands[name]
+	if !ok {
+		return "", fmt.Errorf("command %q not found in config", name)
+	}
+	return renderCommand(name, def), nil
+}
+
 func sortedKeys(m map[string]domain.CommandDef) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
