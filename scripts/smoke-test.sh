@@ -326,6 +326,15 @@ assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"reviewer"' "sc
 assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"debugger"' "scenario6: debugger role"
 assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"context7"' "scenario6: context7 MCP server"
 
+# -- apply --
+log "  Running: agent-manager apply (TDD)"
+APPLY_OUT=$("$BIN" apply 2>&1) || true
+
+assert_file_exists "$TDD_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario6: find-skills skill installed"
+assert_file_exists "$TDD_PROJECT/.opencode/commands/review.md" "scenario6: review command installed"
+assert_file_exists "$TDD_PROJECT/.opencode/commands/run-tests.md" "scenario6: run-tests command installed"
+assert_file_exists "$TDD_PROJECT/.opencode/commands/tdd-cycle.md" "scenario6: tdd-cycle command installed"
+
 # ── Scenario 7: SDD Init (Python project) ──────────────────────────────────
 
 log "Scenario 7: SDD Init (Python project)"
@@ -345,6 +354,14 @@ assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"spec-writer"' 
 assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"designer"' "scenario7: designer role"
 assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"task-planner"' "scenario7: task-planner role"
 assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"verifier"' "scenario7: verifier role"
+
+# -- apply --
+log "  Running: agent-manager apply (SDD)"
+APPLY_OUT=$("$BIN" apply 2>&1) || true
+
+assert_file_exists "$SDD_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario7: find-skills skill installed"
+assert_file_exists "$SDD_PROJECT/.opencode/commands/review.md" "scenario7: review command installed"
+assert_file_exists "$SDD_PROJECT/.opencode/commands/spec.md" "scenario7: spec command installed"
 
 # ── Scenario 8: Conventional Init + Apply (TypeScript project) ─────────────
 
@@ -367,6 +384,9 @@ APPLY_OUT=$("$BIN" apply 2>&1) || true
 assert_file_exists "$CONV_PROJECT/AGENTS.md" "scenario8: AGENTS.md created after apply"
 assert_file_contains "$CONV_PROJECT/AGENTS.md" "agent-manager" "scenario8: AGENTS.md has marker"
 assert_output_contains "$APPLY_OUT" "written" "scenario8: apply reports written files"
+assert_file_exists "$CONV_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario8: find-skills skill installed"
+assert_file_exists "$CONV_PROJECT/.opencode/commands/review.md" "scenario8: review command installed"
+assert_file_exists "$CONV_PROJECT/.opencode/commands/implement.md" "scenario8: implement command installed"
 
 # Verify
 VERIFY_OUT=$("$BIN" verify 2>&1) || true

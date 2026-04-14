@@ -330,7 +330,6 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 					"team_standards_file": "templates/team-standards.md",
 				},
 			},
-			string(domain.ComponentSettings):  {Enabled: true},
 			string(domain.ComponentSkills):    {Enabled: true},
 			string(domain.ComponentWorkflows): {Enabled: true},
 		},
@@ -362,10 +361,23 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 		proj.Adapters[string(a.ID())] = domain.AdapterConfig{Enabled: true}
 	}
 
+	// Enable settings component only when at least one adapter has non-empty Settings.
+	hasSettings := false
+	for _, ac := range proj.Adapters {
+		if len(ac.Settings) > 0 {
+			hasSettings = true
+			break
+		}
+	}
+	if hasSettings {
+		proj.Components[string(domain.ComponentSettings)] = domain.ComponentConfig{Enabled: true}
+	}
+
 	// Apply methodology and generate team composition if specified.
 	if methodology != "" {
 		proj.Methodology = methodology
 		proj.Team = domain.DefaultTeam(methodology)
+		proj.Commands = defaultCommandsForMethodology(methodology)
 		// Enable agent and command components when methodology is active.
 		proj.Components[string(domain.ComponentAgents)] = domain.ComponentConfig{Enabled: true}
 		proj.Components[string(domain.ComponentCommands)] = domain.ComponentConfig{Enabled: true}
@@ -415,6 +427,41 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 	}
 
 	return proj
+}
+
+// defaultCommandsForMethodology returns a set of command definitions appropriate
+// for the given methodology. All methodologies include a base "review" command;
+// TDD adds "run-tests" and "tdd-cycle"; SDD adds "spec"; Conventional adds "implement".
+// Empty or unknown methodology returns only the base review command.
+func defaultCommandsForMethodology(m domain.Methodology) map[string]domain.CommandDef {
+	base := map[string]domain.CommandDef{
+		"review": {
+			Description: "Run structured code review on staged changes",
+			Template:    "Review the staged changes using the code-review skill.",
+		},
+	}
+	switch m {
+	case domain.MethodologyTDD:
+		base["run-tests"] = domain.CommandDef{
+			Description: "Run full test suite and report failures",
+			Template:    "Run the test suite. Report each failure with file, line, and a fix suggestion.",
+		}
+		base["tdd-cycle"] = domain.CommandDef{
+			Description: "Execute one red-green-refactor cycle",
+			Template:    "Using the test-driven-development skill, execute one complete red-green-refactor cycle.",
+		}
+	case domain.MethodologySDD:
+		base["spec"] = domain.CommandDef{
+			Description: "Generate a formal spec document for a feature",
+			Template:    "Using the sdd-spec skill, write a formal specification for the requested feature.",
+		}
+	case domain.MethodologyConventional:
+		base["implement"] = domain.CommandDef{
+			Description: "Implement a feature with inline review",
+			Template:    "Implement the requested feature, then self-review before presenting the result.",
+		}
+	}
+	return base
 }
 
 // selectStandards returns the content of the language-specific standards asset.
