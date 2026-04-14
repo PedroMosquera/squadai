@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
@@ -103,6 +104,22 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 		}
 	}
 
+	// Handle delete actions: remove the target file if it exists.
+	// Idempotent — non-existent files are treated as already deleted.
+	if action.Action == domain.ActionDelete {
+		if err := deleteFile(action.TargetPath); err != nil {
+			return domain.StepResult{
+				Action: action,
+				Status: domain.StepFailed,
+				Error:  err.Error(),
+			}
+		}
+		return domain.StepResult{
+			Action: action,
+			Status: domain.StepSuccess,
+		}
+	}
+
 	var err error
 
 	// Route to the right handler.
@@ -138,6 +155,16 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 		Action: action,
 		Status: domain.StepSuccess,
 	}
+}
+
+// deleteFile removes path from disk. It is idempotent: if the file does not
+// exist, the call succeeds without error.
+func deleteFile(path string) error {
+	err := os.Remove(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove %s: %w", path, err)
+	}
+	return nil
 }
 
 // collectTargetPaths extracts unique target paths from non-skip actions.

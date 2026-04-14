@@ -480,6 +480,151 @@ func TestComponentInstallers_BeforePlan_NoNilPanic(t *testing.T) {
 	}
 }
 
+// ─── Stale file cleanup pass ─────────────────────────────────────────────────
+
+// TestPlan_DisabledAdapter_ProducesDeleteActions verifies that when an adapter is
+// disabled and its managed files still exist on disk, the planner emits
+// ActionDelete actions for those files.
+func TestPlan_DisabledAdapter_ProducesDeleteActions(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	// First plan with adapter enabled to identify target paths.
+	enabledCfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+	p := New()
+	enabledActions, err := p.Plan(enabledCfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("plan (enabled): %v", err)
+	}
+
+	// Collect target paths from the enabled plan.
+	var targetPaths []string
+	for _, a := range enabledActions {
+		if a.TargetPath != "" {
+			targetPaths = append(targetPaths, a.TargetPath)
+		}
+	}
+	if len(targetPaths) == 0 {
+		t.Fatal("enabled plan produced no target paths — test setup is wrong")
+	}
+
+	// Create the target files on disk to simulate previously applied state.
+	for _, path := range targetPaths {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte("managed content"), 0644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	// Now plan with the adapter disabled — should produce ActionDelete for existing files.
+	disabledCfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: false},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	actions, err := p.Plan(disabledCfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("plan (disabled): %v", err)
+	}
+
+	// Verify at least one ActionDelete action is present for the created files.
+	deleteCount := 0
+	for _, a := range actions {
+		if a.Action == domain.ActionDelete {
+			deleteCount++
+			if a.TargetPath == "" {
+				t.Errorf("ActionDelete %q has empty TargetPath", a.ID)
+			}
+			if a.Agent != domain.AgentOpenCode {
+				t.Errorf("ActionDelete %q has wrong agent %q, want %q", a.ID, a.Agent, domain.AgentOpenCode)
+			}
+		}
+	}
+
+	if deleteCount == 0 {
+		t.Error("expected at least one ActionDelete action for the disabled adapter's existing files")
+	}
+}
+
+// TestPlan_DisabledAdapter_NoDeleteForNonexistent verifies that when a disabled
+// adapter has no managed files on disk, no ActionDelete actions are produced.
+func TestPlan_DisabledAdapter_NoDeleteForNonexistent(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	// Adapter is disabled and no files have been created on disk.
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: false},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	adapters := []domain.Adapter{opencode.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, a := range actions {
+		if a.Action == domain.ActionDelete {
+			t.Errorf("expected no ActionDelete actions when no files exist, got one for path %q", a.TargetPath)
+		}
+	}
+}
+
+// TestPlan_AllEnabled_NoDeleteActions verifies that when all adapters are
+// enabled, no ActionDelete actions are emitted.
+func TestPlan_AllEnabled_NoDeleteActions(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+
+	adapters := []domain.Adapter{opencode.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, a := range actions {
+		if a.Action == domain.ActionDelete {
+			t.Errorf("expected no ActionDelete actions when all adapters are enabled, got one for path %q", a.TargetPath)
+		}
+	}
+}
+
 func TestComponentInstallers_AfterPlan_IncludesNewInstallers(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()

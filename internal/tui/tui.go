@@ -32,6 +32,7 @@ const (
 	screenInitPlugins
 	screenInitSummary
 	screenSkillBrowser
+	screenInitApplyPrompt // "Apply now?" prompt after successful init
 )
 
 // menuItem is a selectable action.
@@ -119,6 +120,10 @@ type Model struct {
 	skillCatErr      error
 	skillCatCursor   int // selected category index
 	skillScrollIndex int // first visible skill within the current category
+
+	// Init apply-prompt state.
+	initJustCompleted bool   // set before launching init; triggers apply-prompt on success
+	initOutput        string // stores init output while on apply-prompt screen
 }
 
 // NewModel creates a TUI model with the given state.
@@ -151,7 +156,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commandResult:
 		m.output = msg.output
 		m.err = msg.err
-		m.screen = screenResult
+		if m.initJustCompleted && msg.err == nil {
+			// Init succeeded — offer the apply-now prompt.
+			m.initOutput = msg.output
+			m.initJustCompleted = false
+			m.screen = screenInitApplyPrompt
+		} else {
+			m.initJustCompleted = false
+			m.screen = screenResult
+		}
 		return m, nil
 	}
 	return m, nil
@@ -323,6 +336,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenRunning
 			m.output = ""
 			m.err = nil
+			m.initJustCompleted = true
 			args := []string{"--methodology=" + string(m.methodology)}
 			// Add MCP selections.
 			var mcpKeys []string
@@ -353,6 +367,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "esc":
 			m.screen = screenInitPlugins
+			return m, nil
+		}
+
+	case screenInitApplyPrompt:
+		switch key {
+		case "y", "enter":
+			m.screen = screenRunning
+			m.output = ""
+			m.err = nil
+			return m, m.runCommand("apply")
+		case "n", "esc":
+			// Show the stored init output on the result screen.
+			m.output = m.initOutput
+			m.initOutput = ""
+			m.screen = screenResult
 			return m, nil
 		}
 
@@ -440,6 +469,8 @@ func (m Model) View() string {
 		return m.viewInitSummary()
 	case screenSkillBrowser:
 		return m.viewSkillBrowser()
+	case screenInitApplyPrompt:
+		return m.viewInitApplyPrompt()
 	}
 	return ""
 }
@@ -787,6 +818,20 @@ func (m Model) viewInitSummary() string {
 	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("enter: confirm  esc: go back"))
+	return b.String()
+}
+
+// viewInitApplyPrompt renders the "Apply now?" confirmation prompt shown after
+// a successful init run.
+func (m Model) viewInitApplyPrompt() string {
+	var content strings.Builder
+	content.WriteString(successStyle.Render("✓ Init completed successfully!") + "\n\n")
+	content.WriteString("Apply now to install configuration files? [y/n]\n")
+
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("Press y or Enter to apply, n or Esc to view init output."))
 	return b.String()
 }
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
@@ -232,6 +233,29 @@ func RunInit(args []string, stdout io.Writer) error {
 		writeInitFile(humanOut, projectDir, sf.path, content, force)
 		skillNames = append(skillNames, sf.name)
 	}
+
+	// Write .gitignore suggestion file.
+	agentManagerDir := filepath.Join(projectDir, config.ProjectConfigDir)
+	gitignoreSuggestion := `# Files to add to your .gitignore for agent-manager
+# ================================================
+
+# Always ignore backups (contain file snapshots, can be large)
+.agent-manager/backups/
+
+# Ignore user-specific config (each developer has their own)
+.agent-manager/user.json
+
+# ------------------------------------------------
+# Files to COMMIT (team-shared configuration)
+# ------------------------------------------------
+# .agent-manager/project.json    — project-level agent config
+# .agent-manager/policy.json     — team policy enforcement
+# AGENTS.md                      — agent system prompt
+# CLAUDE.md                      — Claude Code system prompt
+# .cursorrules                   — Cursor rules
+# .instructions.md               — VS Code Copilot instructions
+`
+	writeInitFile(humanOut, projectDir, filepath.Join(agentManagerDir, ".gitignore-suggestion"), gitignoreSuggestion, force)
 
 	if jsonOut {
 		// Build adapter ID list.
@@ -1631,6 +1655,96 @@ func RunBackupDelete(args []string, stdout io.Writer) error {
 	}
 
 	fmt.Fprintf(stdout, "Deleted backup %s (%d files).\n", id, fileCount)
+	return nil
+}
+
+// RunBackupPrune removes all but the N most recent backups.
+func RunBackupPrune(args []string, stdout io.Writer) error {
+	keep := 10
+	jsonOut := false
+
+	for _, arg := range args {
+		switch {
+		case arg == "--json":
+			jsonOut = true
+		case arg == "-h" || arg == "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager backup prune [--keep=N] [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Remove all but the N most recent backup snapshots. Keeps the newest N backups")
+			fmt.Fprintln(stdout, "and permanently deletes the rest. Use 'agent-manager backup list' to see available")
+			fmt.Fprintln(stdout, "backups before pruning.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --keep=N   Number of recent backups to keep (default 10).")
+			fmt.Fprintln(stdout, "  --json     Output the result as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager backup prune")
+			fmt.Fprintln(stdout, "  agent-manager backup prune --keep=5")
+			fmt.Fprintln(stdout, "  agent-manager backup prune --keep=3 --json")
+			return nil
+		case strings.HasPrefix(arg, "--keep="):
+			val := strings.TrimPrefix(arg, "--keep=")
+			n, err := strconv.Atoi(val)
+			if err != nil {
+				return fmt.Errorf("invalid --keep value %q: %w", val, err)
+			}
+			keep = n
+		default:
+			return fmt.Errorf("unknown flag %q for backup prune", arg)
+		}
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	merged, err := loadAndMerge(homeDir, projectDir)
+	if err != nil {
+		merged = &domain.MergedConfig{
+			Paths: domain.PathsConfig{BackupDir: "~/.agent-manager/backups"},
+		}
+	}
+
+	backupDir := backup.ResolveBackupDir(merged.Paths.BackupDir, homeDir)
+	store := backup.NewStore(backupDir)
+
+	// Count current backups before pruning to report accurate "kept" count.
+	manifests, err := store.List()
+	if err != nil {
+		return fmt.Errorf("list backups: %w", err)
+	}
+	total := len(manifests)
+
+	deleted, err := store.Prune(keep)
+	if err != nil {
+		return fmt.Errorf("prune backups: %w", err)
+	}
+
+	kept := total - deleted
+
+	if jsonOut {
+		result := map[string]interface{}{
+			"deleted": deleted,
+			"kept":    keep,
+		}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	if deleted == 0 {
+		fmt.Fprintf(stdout, "Nothing to prune (%d backups, keeping %d).\n", kept, keep)
+		return nil
+	}
+
+	fmt.Fprintf(stdout, "Pruned %d backups (kept %d most recent).\n", deleted, kept)
 	return nil
 }
 

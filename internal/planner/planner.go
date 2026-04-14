@@ -2,6 +2,7 @@ package planner
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/agents"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/commands"
@@ -160,7 +161,84 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 		actions = append(actions, copilotAction)
 	}
 
+	// Stale file cleanup pass: for adapters that are disabled, emit ActionDelete
+	// for any managed files that still exist on disk.
+	deleteActions := p.planStaleCleanup(cfg, adapters, homeDir, projectDir)
+	actions = append(actions, deleteActions...)
+
 	return actions, nil
+}
+
+// planStaleCleanup returns ActionDelete actions for files belonging to disabled
+// adapters that still exist on disk. This prevents orphaned managed files when
+// an adapter transitions from enabled to disabled.
+func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.Adapter, homeDir, projectDir string) []domain.PlannedAction {
+	// Build a lookup of adapters by ID for matching against cfg.Adapters.
+	adapterByID := make(map[domain.AgentID]domain.Adapter, len(adapters))
+	for _, adapter := range adapters {
+		adapterByID[adapter.ID()] = adapter
+	}
+
+	var deleteActions []domain.PlannedAction
+
+	for adapterKey, adapterCfg := range cfg.Adapters {
+		if adapterCfg.Enabled {
+			continue // only clean up disabled adapters
+		}
+
+		adapter, ok := adapterByID[domain.AgentID(adapterKey)]
+		if !ok {
+			continue // adapter not in the provided list — nothing to clean up
+		}
+
+		// Collect all file paths that this adapter's components can write to.
+		paths := managedFilePaths(adapter, homeDir, projectDir)
+
+		for _, path := range paths {
+			if path == "" {
+				continue
+			}
+			if _, err := os.Stat(path); err != nil {
+				continue // file does not exist — nothing to delete
+			}
+			deleteActions = append(deleteActions, domain.PlannedAction{
+				ID:          fmt.Sprintf("%s-stale-cleanup-%s", adapterKey, sanitizePath(path)),
+				Agent:       adapter.ID(),
+				Component:   domain.ComponentID(""),
+				Action:      domain.ActionDelete,
+				TargetPath:  path,
+				Description: fmt.Sprintf("remove stale file for disabled adapter %s: %s", adapterKey, path),
+			})
+		}
+	}
+
+	return deleteActions
+}
+
+// managedFilePaths returns the set of individual file paths that an adapter's
+// components may write to. Directory paths (agents dir, skills dir, etc.) are
+// excluded because their contents are not directly managed as single files.
+func managedFilePaths(adapter domain.Adapter, homeDir, projectDir string) []string {
+	return []string{
+		adapter.SystemPromptFile(homeDir),
+		adapter.SettingsPath(homeDir),
+		adapter.ProjectRulesFile(projectDir),
+		adapter.ProjectConfigFile(projectDir),
+	}
+}
+
+// sanitizePath converts a file path to a string safe for use in an action ID
+// by replacing path separators with dashes.
+func sanitizePath(path string) string {
+	result := make([]byte, len(path))
+	for i := 0; i < len(path); i++ {
+		if path[i] == '/' || path[i] == '\\' || path[i] == ':' {
+			result[i] = '-'
+		} else {
+			result[i] = path[i]
+		}
+	}
+	return string(result)
 }
 
 // ComponentInstallers returns the installers used by this planner.

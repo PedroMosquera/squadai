@@ -1327,3 +1327,79 @@ func newSkillBrowserModel(t *testing.T) Model {
 	m.skillScrollIndex = 0
 	return m
 }
+
+// ─── Init Apply Prompt Tests ──────────────────────────────────────────────────
+
+// TestTUI_InitApplyPrompt_ShownAfterInit verifies that when a commandResult
+// arrives after a successful init, the model transitions to
+// screenInitApplyPrompt and the view contains "Apply now".
+func TestTUI_InitApplyPrompt_ShownAfterInit(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenRunning
+	m.initJustCompleted = true
+
+	updated, _ := m.Update(commandResult{output: "Init output text", err: nil})
+	model := updated.(Model)
+
+	if model.screen != screenInitApplyPrompt {
+		t.Errorf("screen = %d, want screenInitApplyPrompt (%d) after successful init", model.screen, screenInitApplyPrompt)
+	}
+	view := model.View()
+	if !strings.Contains(view, "Apply now") {
+		t.Errorf("view should contain 'Apply now', got:\n%s", view)
+	}
+}
+
+// TestTUI_InitApplyPrompt_YRunsApply verifies that pressing 'y' on the apply
+// prompt transitions away from screenInitApplyPrompt to screenRunning.
+func TestTUI_InitApplyPrompt_YRunsApply(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitApplyPrompt
+	m.initOutput = "Init output text"
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model := updated.(Model)
+
+	if model.screen != screenRunning {
+		t.Errorf("screen = %d, want screenRunning (%d) after pressing y", model.screen, screenRunning)
+	}
+	if cmd == nil {
+		t.Error("pressing y should dispatch an apply command (non-nil cmd)")
+	}
+}
+
+// TestTUI_InitApplyPrompt_NShowsResult verifies that pressing 'n' on the apply
+// prompt transitions to screenResult with the stored init output.
+func TestTUI_InitApplyPrompt_NShowsResult(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitApplyPrompt
+	m.initOutput = "Init ran successfully."
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model := updated.(Model)
+
+	if model.screen != screenResult {
+		t.Errorf("screen = %d, want screenResult (%d) after pressing n", model.screen, screenResult)
+	}
+	if !strings.Contains(model.output, "Init ran successfully.") {
+		t.Errorf("output should contain init output %q, got %q", "Init ran successfully.", model.output)
+	}
+}
+
+// TestTUI_InitApplyPrompt_NotShownOnError verifies that when init fails,
+// the model goes directly to screenResult without showing the apply prompt.
+func TestTUI_InitApplyPrompt_NotShownOnError(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenRunning
+	m.initJustCompleted = true
+
+	updated, _ := m.Update(commandResult{output: "", err: fmt.Errorf("init failed: something went wrong")})
+	model := updated.(Model)
+
+	if model.screen != screenResult {
+		t.Errorf("screen = %d, want screenResult (%d) when init fails", model.screen, screenResult)
+	}
+	if model.screen == screenInitApplyPrompt {
+		t.Error("should NOT show apply prompt when init fails")
+	}
+}

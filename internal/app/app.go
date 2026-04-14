@@ -50,7 +50,7 @@ func Run(args []string, stdout, stderr io.Writer) error {
 
 	case "backup":
 		if len(args) < 2 {
-			return fmt.Errorf("backup requires a subcommand: create, list, delete")
+			return fmt.Errorf("backup requires a subcommand: create, list, delete, prune")
 		}
 		switch args[1] {
 		case "create":
@@ -59,6 +59,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			return cli.RunBackupList(args[2:], stdout)
 		case "delete":
 			return cli.RunBackupDelete(args[2:], stdout)
+		case "prune":
+			return cli.RunBackupPrune(args[2:], stdout)
 		default:
 			return fmt.Errorf("unknown backup subcommand %q", args[1])
 		}
@@ -91,6 +93,7 @@ Commands:
   backup create      Snapshot managed files
   backup list        List available backups
   backup delete <id> Delete a backup snapshot
+  backup prune       Remove old backups (keep N most recent)
   restore <id>       Restore from a backup
   remove             Remove all managed files (use --force to confirm)
   version            Print version
