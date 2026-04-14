@@ -1539,8 +1539,10 @@ func TestRunDiff_Help(t *testing.T) {
 			out := buf.String()
 			for _, want := range []string{
 				"Usage: agent-manager diff",
-				"Show what apply would change",
+				"Preview what 'apply' would change",
+				"unified diff",
 				"--json",
+				"Examples:",
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("diff help missing %q, got:\n%s", want, out)

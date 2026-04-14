@@ -52,8 +52,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return cli.RunStatus(args[1:], stdout)
 
 	case "backup":
-		if len(args) < 2 {
-			return fmt.Errorf("backup requires a subcommand: create, list, delete, prune")
+		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" || args[1] == "help" {
+			printBackupUsage(stdout)
+			return nil
 		}
 		switch args[1] {
 		case "create":
@@ -77,6 +78,20 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	default:
 		return fmt.Errorf("unknown command %q — run 'agent-manager help' for available commands", args[0])
 	}
+}
+
+func printBackupUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: agent-manager backup <subcommand> [flags]
+
+Subcommands:
+  create        Create a backup of all managed files
+  list          List all backup snapshots
+  delete <id>   Delete a specific backup snapshot
+  prune         Remove old backups, keep N most recent (default 10)
+
+Flags:
+  --json        Output results in JSON format
+`)
 }
 
 func printUsage(w io.Writer) {

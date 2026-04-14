@@ -2,10 +2,9 @@
 
 Standardize AI coding agent environments across your team.
 
-<!-- Badges: build | go version | license -->
-<!-- [![Build](https://github.com/PedroMosquera/agent-manager-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroMosquera/agent-manager-pro/actions) -->
-<!-- [![Go](https://img.shields.io/github/go-mod/go-version/PedroMosquera/agent-manager-pro)](go.mod) -->
-<!-- [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) -->
+[![Build](https://github.com/PedroMosquera/agent-manager-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroMosquera/agent-manager-pro/actions)
+[![Go](https://img.shields.io/github/go-mod/go-version/PedroMosquera/agent-manager-pro)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -68,6 +67,30 @@ Run `agent-manager` with no arguments to launch the interactive TUI wizard (meth
 | Windsurf | `.windsurfrules` | solo + workflows | MCPConfigFile (`.windsurf/mcp_config.json`) |
 
 All detected agents are auto-enabled during `init`. The planner generates actions only for agents actually installed on each developer's machine.
+
+---
+
+## Supported Languages
+
+| Language | Auto-detection | Standards Included |
+|----------|---------------|-------------------|
+| Go | `go.mod` | Error wrapping, table-driven tests, `context.Context`, MixedCaps |
+| TypeScript | `tsconfig.json` | `strict: true`, discriminated unions, explicit return types |
+| JavaScript | `package.json` | Module patterns, ESLint + Prettier, `const` by default |
+| Python | `pyproject.toml`, `requirements.txt` | Type hints, dataclasses, ruff, pytest fixtures |
+| Rust | `Cargo.toml` | Ownership, `thiserror`/`anyhow`, Clippy lints |
+| Java | `pom.xml`, `build.gradle` | Sealed classes, records, Optional, Javadoc |
+| Kotlin | `build.gradle.kts` | Shared Java standards |
+| Ruby | `Gemfile` | RuboCop, minitest/RSpec, frozen string literals |
+| C# | `*.csproj`, `*.sln` | Nullable refs, async/await, EditorConfig |
+| PHP | `composer.json` | PSR-12, PHPStan, type declarations |
+| Swift | `Package.swift`, `*.xcodeproj` | SwiftLint, value types, protocol-oriented |
+| C/C++ | `CMakeLists.txt` | Smart pointers, RAII, clang-tidy |
+| Dart | `pubspec.yaml` | Null safety, Flutter widgets, effective Dart |
+| Elixir | `mix.exs` | Pattern matching, GenServer, dialyzer |
+| Scala | `build.sbt` | Case classes, implicits, ScalaTest |
+
+Monorepo support: when multiple languages are detected, all language standards are combined.
 
 ---
 
@@ -213,13 +236,18 @@ Policy (locked fields)  >  Project config  >  User defaults
 |---------|-------------|
 | `agent-manager init` | Initialize project config and detect agents |
 | `agent-manager plan` | Compute and display the action plan |
+| `agent-manager diff` | Preview what apply would change (unified diffs) |
 | `agent-manager apply` | Execute plan with backup and rollback safety |
 | `agent-manager sync` | Idempotent reconciliation (alias for apply) |
 | `agent-manager verify` | Run compliance checks and print health report |
+| `agent-manager status` | Show project health: adapters, components, managed files |
 | `agent-manager validate-policy` | Validate policy schema and lock/required consistency |
 | `agent-manager backup create` | Manually snapshot managed files |
 | `agent-manager backup list` | List available backups |
+| `agent-manager backup delete <id>` | Delete a specific backup snapshot |
+| `agent-manager backup prune --keep=N` | Remove old backups, keep N most recent |
 | `agent-manager restore <id>` | Restore files from a backup |
+| `agent-manager remove --force` | Remove all managed files and strip marker blocks |
 | `agent-manager version` | Print version |
 
 ### Flags
@@ -230,9 +258,11 @@ Policy (locked fields)  >  Project config  >  User defaults
 | `--mcp=<csv>` | `init` | Comma-separated MCP server IDs to enable |
 | `--plugins=<csv>` | `init` | Comma-separated plugin IDs to enable |
 | `--with-policy` | `init` | Generate team policy template |
-| `--force` | `init` | Overwrite existing template and skill files |
+| `--force` | `init`, `remove` | Overwrite existing template and skill files; required for remove |
+| `--merge` | `init` | Re-run init, merge new config on top of existing (preserves customizations) |
 | `--dry-run` | `plan`, `apply`, `sync`, `restore` | Preview changes without writing files |
 | `--json` | `plan`, `apply`, `verify`, `backup` | Machine-readable JSON output |
+| `--keep=N` | `backup prune` | Number of backups to retain (default 10) |
 
 ### Interactive TUI
 
@@ -310,7 +340,7 @@ Coming soon.
 | Platform | Status |
 |----------|--------|
 | macOS (darwin/arm64, darwin/amd64) | Fully supported |
-| Linux | Planned |
+| Linux (linux/amd64, linux/arm64) | Supported |
 | Windows | Planned |
 
 ---

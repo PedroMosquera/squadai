@@ -114,6 +114,51 @@ Returns an array of `PlannedAction` objects.
 
 ---
 
+## `agent-manager diff`
+
+Preview what `apply` would change, rendered as unified diffs.
+
+```sh
+agent-manager diff [--json]
+```
+
+Computes the same action plan as `plan`, but instead of listing actions, shows the exact content changes for each file. Useful for reviewing what will be written before committing to `apply`.
+
+- **create** actions show the full file content as additions
+- **update** actions show a unified diff between current and desired content
+- **skip** actions are omitted (no changes)
+
+**Example:**
+
+```sh
+$ agent-manager diff
+--- AGENTS.md (current)
++++ AGENTS.md (desired)
+@@ -1,3 +1,12 @@
++<!-- agent-manager:memory-protocol -->
++# Memory Protocol
++...
++<!-- /agent-manager:memory-protocol -->
+
+--- .github/copilot-instructions.md (new file)
++++ .github/copilot-instructions.md (desired)
+@@ -0,0 +1,8 @@
++<!-- agent-manager:copilot -->
++# Project: my-project
++...
++<!-- /agent-manager:copilot -->
+```
+
+**JSON output:**
+
+```sh
+agent-manager diff --json
+```
+
+Returns an array of objects with `path`, `action`, and `diff` fields.
+
+---
+
 ## `agent-manager apply`
 
 Execute the action plan with backup safety.
@@ -196,6 +241,58 @@ Failed checks include a message explaining what's wrong.
 
 ---
 
+## `agent-manager status`
+
+Show project health: detected adapters, enabled components, and managed file states.
+
+```sh
+agent-manager status [--json]
+```
+
+Provides an at-a-glance summary of the current project configuration and file state without computing a full plan or running compliance checks. Faster than `verify` for quick orientation.
+
+**Example:**
+
+```sh
+$ agent-manager status
+Project: my-project
+Language: Go
+Methodology: tdd
+Mode: hybrid
+
+Adapters (3 detected):
+  opencode       enabled   delegation: native
+  claude-code    enabled   delegation: prompt
+  cursor         enabled   delegation: native
+
+Components (9):
+  memory    enabled    rules     enabled    settings  enabled
+  mcp       enabled    agents    enabled    skills    enabled
+  commands  enabled    plugins   enabled    workflows enabled
+
+Managed files (12):
+  AGENTS.md                          current
+  CLAUDE.md                          current
+  .github/copilot-instructions.md    current
+  .cursorrules                       current
+  .windsurfrules                     stale
+  .opencode/agents/orchestrator.md   current
+  ...
+
+MCP servers: context7
+Team roles: 6 (orchestrator, brainstormer, planner, implementer, reviewer, debugger)
+```
+
+**JSON output:**
+
+```sh
+agent-manager status --json
+```
+
+Returns a structured object with `project`, `adapters`, `components`, `files`, and `team` fields.
+
+---
+
 ## `agent-manager validate-policy`
 
 Validate the team policy file for schema correctness and lock/required consistency.
@@ -261,6 +358,71 @@ Backups (2):
 
 ---
 
+## `agent-manager backup delete`
+
+Delete a specific backup snapshot.
+
+```sh
+agent-manager backup delete <backup-id>
+```
+
+Permanently removes a single backup by ID. The backup directory and all its stored file snapshots are deleted. This operation is irreversible.
+
+**Example:**
+
+```sh
+$ agent-manager backup delete a1b2c3d4-e5f6-...
+Deleted backup: a1b2c3d4-e5f6-...
+```
+
+If the backup ID does not exist, the command exits with an error:
+
+```sh
+$ agent-manager backup delete nonexistent
+Error: backup not found: nonexistent
+```
+
+---
+
+## `agent-manager backup prune`
+
+Remove old backups, keeping the N most recent.
+
+```sh
+agent-manager backup prune [--keep=N] [--dry-run] [--json]
+```
+
+Sorts backups by creation time and deletes all but the most recent N. Default retention is 10 backups.
+
+| Flag | Description |
+|------|-------------|
+| `--keep=N` | Number of backups to retain (default 10) |
+| `--dry-run` | List backups that would be deleted without deleting |
+
+**Example:**
+
+```sh
+$ agent-manager backup prune --keep=3
+Pruned 5 backup(s), kept 3.
+  deleted  20260401T120000Z-abc12345
+  deleted  20260402T130000Z-def67890
+  deleted  20260403T140000Z-ghi11111
+  deleted  20260404T150000Z-jkl22222
+  deleted  20260405T160000Z-mno33333
+```
+
+**Dry run:**
+
+```sh
+$ agent-manager backup prune --keep=3 --dry-run
+Dry run: would prune 5 backup(s), keep 3.
+  would delete  20260401T120000Z-abc12345
+  would delete  20260402T130000Z-def67890
+  ...
+```
+
+---
+
 ## `agent-manager restore`
 
 Restore files from a backup snapshot.
@@ -280,6 +442,54 @@ $ agent-manager restore a1b2c3d4 --dry-run
 Dry run: would restore 2 file(s) from backup a1b2c3d4
   restore ~/.opencode/memory/protocol.md
   restore .github/copilot-instructions.md
+```
+
+---
+
+## `agent-manager remove`
+
+Remove all managed files and strip marker blocks from shared files.
+
+```sh
+agent-manager remove --force [--dry-run] [--json]
+```
+
+The `--force` flag is required to prevent accidental removal. Without it, the command exits with an error.
+
+Behavior:
+- Files that are entirely managed (e.g., `.opencode/agents/orchestrator.md`, `.cursor/mcp.json`) are deleted
+- Files that contain both managed and user content (e.g., `AGENTS.md` with user notes outside markers) have only the managed marker blocks stripped; user content is preserved
+- The `.agent-manager/` config directory is not removed — only the generated output files
+
+**Example:**
+
+```sh
+$ agent-manager remove --force
+  removed  .opencode/agents/orchestrator.md
+  removed  .opencode/agents/brainstormer.md
+  removed  .cursor/mcp.json
+  stripped AGENTS.md (managed markers removed, user content preserved)
+  stripped .github/copilot-instructions.md (managed markers removed)
+  removed  .windsurf/workflows/tdd-workflow.md
+
+Removed 4 files, stripped 2 files.
+```
+
+**Dry run:**
+
+```sh
+$ agent-manager remove --force --dry-run
+Dry run: would remove 4 files, strip 2 files.
+  would remove  .opencode/agents/orchestrator.md
+  would strip   AGENTS.md
+  ...
+```
+
+**Without --force:**
+
+```sh
+$ agent-manager remove
+Error: --force is required to remove managed files.
 ```
 
 ---
