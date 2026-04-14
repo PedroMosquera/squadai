@@ -1403,3 +1403,67 @@ func TestTUI_InitApplyPrompt_NotShownOnError(t *testing.T) {
 		t.Error("should NOT show apply prompt when init fails")
 	}
 }
+
+// ─── Terminal Width Tests ──────────────────────────────────────────────────────
+
+func TestUpdate_WindowSizeMsg(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+
+	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := updated.(Model)
+
+	if model.width != 120 {
+		t.Errorf("width = %d, want 120", model.width)
+	}
+	if model.height != 40 {
+		t.Errorf("height = %d, want 40", model.height)
+	}
+	if cmd != nil {
+		t.Error("WindowSizeMsg should return nil cmd")
+	}
+}
+
+func TestPanelWidth_DefaultsTo78(t *testing.T) {
+	m := Model{} // width = 0
+	if m.panelWidth() != 78 {
+		t.Errorf("panelWidth() = %d, want 78 (default when width is 0)", m.panelWidth())
+	}
+}
+
+func TestPanelWidth_CapsAt120(t *testing.T) {
+	m := Model{width: 300}
+	if m.panelWidth() != 120 {
+		t.Errorf("panelWidth() = %d, want 120 (cap for ultra-wide)", m.panelWidth())
+	}
+}
+
+func TestPanelWidth_MinimumIs40(t *testing.T) {
+	m := Model{width: 20}
+	if m.panelWidth() != 40 {
+		t.Errorf("panelWidth() = %d, want 40 (minimum)", m.panelWidth())
+	}
+}
+
+func TestPanelWidth_NormalWidth(t *testing.T) {
+	m := Model{width: 100}
+	// 100 - 2 (border) = 98
+	if m.panelWidth() != 98 {
+		t.Errorf("panelWidth() = %d, want 98 for terminal width 100", m.panelWidth())
+	}
+}
+
+func TestPanelWidth_ExactMinEdge(t *testing.T) {
+	// width = 42: 42 - 2 = 40, which equals the minimum — should return 40.
+	m := Model{width: 42}
+	if m.panelWidth() != 40 {
+		t.Errorf("panelWidth() = %d, want 40 for terminal width 42", m.panelWidth())
+	}
+}
+
+func TestRenderPanel_ContainsContent(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	out := m.renderPanel("hello world")
+	if !strings.Contains(out, "hello world") {
+		t.Errorf("renderPanel output should contain 'hello world', got: %q", out)
+	}
+}

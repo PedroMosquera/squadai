@@ -103,6 +103,9 @@ type Model struct {
 	adapters []domain.Adapter
 	homeDir  string
 
+	width  int
+	height int
+
 	screen   screen
 	cursor   int
 	output   string
@@ -151,6 +154,10 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages and key presses.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case commandResult:
@@ -442,6 +449,27 @@ func (m Model) runCommand(command string) tea.Cmd {
 	}
 }
 
+// panelWidth returns the width for panel content, accounting for border and padding.
+// Falls back to 78 when terminal size is unknown (tests, no TTY).
+func (m Model) panelWidth() int {
+	if m.width <= 0 {
+		return 78 // default 80 - 2 for border
+	}
+	w := m.width - 2 // subtract border characters
+	if w < 40 {
+		return 40
+	}
+	if w > 120 {
+		return 120 // cap for readability on ultra-wide terminals
+	}
+	return w
+}
+
+// renderPanel wraps content in the panel style at the current terminal width.
+func (m Model) renderPanel(content string) string {
+	return panelStyle.Width(m.panelWidth()).Render(content)
+}
+
 // View renders the TUI.
 func (m Model) View() string {
 	if m.quitting {
@@ -483,7 +511,7 @@ func (m Model) viewIntro() string {
 	hdr.WriteString(fmt.Sprintf("agent-manager %s\n", m.version))
 	hdr.WriteString("Team-consistent AI setup with safe local customization.\n")
 	hdr.WriteString(fmt.Sprintf("Mode: %s", m.mode))
-	b.WriteString(panelStyle.Render(hdr.String()))
+	b.WriteString(m.renderPanel(hdr.String()))
 	b.WriteString("\n\n")
 
 	// Adapter list panel
@@ -500,7 +528,7 @@ func (m Model) viewIntro() string {
 			adapterContent.WriteString(fmt.Sprintf("  %-16s %-10s %s\n", id, "("+lane+")", strategy))
 		}
 	}
-	b.WriteString(panelStyle.Render(strings.TrimRight(adapterContent.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(adapterContent.String(), "\n")))
 	b.WriteString("\n\n")
 
 	b.WriteString(mutedStyle.Render("Press any key to continue."))
@@ -520,7 +548,7 @@ func (m Model) viewMenu() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(menuContent.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(menuContent.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("↑/↓: navigate  enter: select  q: quit"))
 	return b.String()
@@ -549,7 +577,7 @@ func (m Model) viewResult() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(resultContent.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(resultContent.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("Press any key to return to menu."))
 	return b.String()
@@ -587,7 +615,7 @@ func (m Model) viewInitMethodology() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("↑/↓: navigate  enter: select  esc: back"))
 	return b.String()
@@ -656,7 +684,7 @@ func (m Model) viewTeamStatus() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("Press any key to return to menu."))
 	return b.String()
@@ -707,7 +735,7 @@ func (m Model) viewInitMCP() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("↑/↓: navigate  space: toggle  enter: next  esc: back"))
 	return b.String()
@@ -754,7 +782,7 @@ func (m Model) viewInitPlugins() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("↑/↓: navigate  space: toggle  enter: next  esc: back"))
 	return b.String()
@@ -815,7 +843,7 @@ func (m Model) viewInitSummary() string {
 	content.WriteString(mutedStyle.Render("  .agent-manager/skills/ directory") + "\n")
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("enter: confirm  esc: go back"))
 	return b.String()
@@ -829,7 +857,7 @@ func (m Model) viewInitApplyPrompt() string {
 	content.WriteString("Apply now to install configuration files? [y/n]\n")
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("Press y or Enter to apply, n or Esc to view init output."))
 	return b.String()
@@ -843,7 +871,7 @@ func (m Model) viewSkillBrowser() string {
 	if m.skillCatErr != nil {
 		content.WriteString(errorStyle.Render("Could not load catalog: "+m.skillCatErr.Error()) + "\n")
 		var b strings.Builder
-		b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+		b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 		b.WriteString("\n\n")
 		b.WriteString(mutedStyle.Render("esc/q: back to menu"))
 		return b.String()
@@ -852,7 +880,7 @@ func (m Model) viewSkillBrowser() string {
 	if len(m.skillCat.Categories) == 0 {
 		content.WriteString(mutedStyle.Render("No skills found in catalog.") + "\n")
 		var b strings.Builder
-		b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+		b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 		b.WriteString("\n\n")
 		b.WriteString(mutedStyle.Render("esc/q: back to menu"))
 		return b.String()
@@ -901,7 +929,7 @@ func (m Model) viewSkillBrowser() string {
 	) + "\n")
 
 	var b strings.Builder
-	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("tab/←/→: category  ↑/↓: skill  esc/q: back"))
 	return b.String()
