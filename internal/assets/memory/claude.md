@@ -8,7 +8,7 @@ as the primary memory store.
 1. Review `CLAUDE.md` for project context, prior decisions, and accumulated conventions.
 2. Check the most recent session summary for continuity with prior work.
 3. Search for any notes relevant to the current task before beginning.
-4. If `.agent-manager/project.json` exists, review it for project configuration.
+4. If `.squadai/project.json` exists, review it for project configuration.
 
 ### Save Triggers
 

@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 const (
 	// managedMetaKey is the top-level JSON key used to track which keys
-	// are managed by agent-manager. This avoids a separate tracking file.
+	// are managed by SquadAI. This avoids a separate tracking file.
 	managedMetaKey = "_agent_manager"
 )
 

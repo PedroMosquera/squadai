@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/assets"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 const teamSectionID = "team"
@@ -32,7 +32,7 @@ func New(agents map[string]domain.AgentDef, cfg *domain.MergedConfig, projectDir
 	for name, def := range agents {
 		// Resolve prompt content from file if needed.
 		if def.Prompt == "" && def.PromptFile != "" && projectDir != "" {
-			filePath := filepath.Join(projectDir, ".agent-manager", def.PromptFile)
+			filePath := filepath.Join(projectDir, ".squadai", def.PromptFile)
 			data, err := os.ReadFile(filePath)
 			if err == nil {
 				def.Prompt = string(data)

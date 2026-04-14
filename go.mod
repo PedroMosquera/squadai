@@ -1,4 +1,4 @@
-module github.com/PedroMosquera/agent-manager-pro
+module github.com/PedroMosquera/squadai
 
 go 1.24.0
 

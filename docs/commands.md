@@ -1,6 +1,6 @@
 # Commands
 
-Complete reference for all Agent Manager Pro commands.
+Complete reference for all SquadAI commands.
 
 ## Global Flags
 
@@ -14,22 +14,22 @@ These flags are accepted by all mutating commands:
 
 ---
 
-## `agent-manager init`
+## `squadai init`
 
-Initialize a project for Agent Manager Pro.
+Initialize a project for SquadAI.
 
 ```sh
-agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]
+squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]
 ```
 
 Creates:
-- `.agent-manager/project.json` — project config with defaults
-- `.agent-manager/templates/team-standards.md` — language-specific team standards
-- `.agent-manager/skills/` — starter skill files (code-review, testing, pr-description, find-skills)
-- `~/.agent-manager/config.json` — user config (if it doesn't already exist)
+- `.squadai/project.json` — project config with defaults
+- `.squadai/templates/team-standards.md` — language-specific team standards
+- `.squadai/skills/` — starter skill files (code-review, testing, pr-description, find-skills)
+- `~/.squadai/config.json` — user config (if it doesn't already exist)
 
 With `--with-policy`:
-- `.agent-manager/policy.json` — team policy template with locked fields
+- `.squadai/policy.json` — team policy template with locked fields
 
 With `--methodology=<tdd|sdd|conventional>`:
 - Sets the development methodology in `project.json`
@@ -53,15 +53,15 @@ Existing files are never overwritten without `--force`. The command reports `exi
 **Example:**
 
 ```sh
-$ agent-manager init --methodology=tdd --with-policy
-  created .agent-manager/project.json
-  created .agent-manager/policy.json
-  created .agent-manager/templates/team-standards.md
-  created .agent-manager/skills/code-review.md
-  created .agent-manager/skills/testing.md
-  created .agent-manager/skills/pr-description.md
-  created .agent-manager/skills/find-skills.md
-  created /Users/you/.agent-manager/config.json
+$ squadai init --methodology=tdd --with-policy
+  created .squadai/project.json
+  created .squadai/policy.json
+  created .squadai/templates/team-standards.md
+  created .squadai/skills/code-review.md
+  created .squadai/skills/testing.md
+  created .squadai/skills/pr-description.md
+  created .squadai/skills/find-skills.md
+  created /Users/you/.squadai/config.json
 
 Detected:
   Language: Go
@@ -71,17 +71,17 @@ Detected:
   Team roles:  6
   MCP servers: context7
 
-Run 'agent-manager apply' to configure your environment.
+Run 'squadai apply' to configure your environment.
 ```
 
 ---
 
-## `agent-manager plan`
+## `squadai plan`
 
 Compute and display the action plan without making changes.
 
 ```sh
-agent-manager plan [--dry-run] [--json]
+squadai plan [--dry-run] [--json]
 ```
 
 The plan shows what `apply` would do. Each action is one of:
@@ -94,32 +94,32 @@ If a team policy is active, any overridden user/project values are reported unde
 **Example:**
 
 ```sh
-$ agent-manager plan
+$ squadai plan
 Mode: hybrid
 
 Planned actions (2):
   create   Install memory protocol for opencode         ~/.opencode/memory/protocol.md
   create   Write copilot instructions                   .github/copilot-instructions.md
 
-Use 'agent-manager apply' to execute.
+Use 'squadai apply' to execute.
 ```
 
 **JSON output:**
 
 ```sh
-agent-manager plan --json
+squadai plan --json
 ```
 
 Returns an array of `PlannedAction` objects.
 
 ---
 
-## `agent-manager diff`
+## `squadai diff`
 
 Preview what `apply` would change, rendered as unified diffs.
 
 ```sh
-agent-manager diff [--json]
+squadai diff [--json]
 ```
 
 Computes the same action plan as `plan`, but instead of listing actions, shows the exact content changes for each file. Useful for reviewing what will be written before committing to `apply`.
@@ -131,40 +131,40 @@ Computes the same action plan as `plan`, but instead of listing actions, shows t
 **Example:**
 
 ```sh
-$ agent-manager diff
+$ squadai diff
 --- AGENTS.md (current)
 +++ AGENTS.md (desired)
 @@ -1,3 +1,12 @@
-+<!-- agent-manager:memory-protocol -->
++<!-- squadai:memory-protocol -->
 +# Memory Protocol
 +...
-+<!-- /agent-manager:memory-protocol -->
++<!-- /squadai:memory-protocol -->
 
 --- .github/copilot-instructions.md (new file)
 +++ .github/copilot-instructions.md (desired)
 @@ -0,0 +1,8 @@
-+<!-- agent-manager:copilot -->
++<!-- squadai:copilot -->
 +# Project: my-project
 +...
-+<!-- /agent-manager:copilot -->
++<!-- /squadai:copilot -->
 ```
 
 **JSON output:**
 
 ```sh
-agent-manager diff --json
+squadai diff --json
 ```
 
 Returns an array of objects with `path`, `action`, and `diff` fields.
 
 ---
 
-## `agent-manager apply`
+## `squadai apply`
 
 Execute the action plan with backup safety.
 
 ```sh
-agent-manager apply [--dry-run] [--json]
+squadai apply [--dry-run] [--json]
 ```
 
 Steps:
@@ -178,19 +178,19 @@ Steps:
 **Example:**
 
 ```sh
-$ agent-manager apply
+$ squadai apply
 Backup: a1b2c3d4-e5f6-...
 
   [ok] Install memory protocol for opencode
   [ok] Write copilot instructions
 
-Apply complete. Use 'agent-manager verify' to check.
+Apply complete. Use 'squadai verify' to check.
 ```
 
 **Dry run:**
 
 ```sh
-$ agent-manager apply --dry-run
+$ squadai apply --dry-run
 Dry run: 2 action(s) would be executed.
   create   Install memory protocol for opencode
   create   Write copilot instructions
@@ -200,24 +200,24 @@ On failure, the output includes the backup ID and instructions for manual restor
 
 ---
 
-## `agent-manager sync`
+## `squadai sync`
 
 Idempotent reconciliation to desired state.
 
 ```sh
-agent-manager sync [--dry-run] [--json]
+squadai sync [--dry-run] [--json]
 ```
 
 Semantically identical to `apply`. The planner automatically skips actions where the current state matches the desired state, making repeated runs safe and no-op when everything is current.
 
 ---
 
-## `agent-manager verify`
+## `squadai verify`
 
 Run compliance checks and print a health report.
 
 ```sh
-agent-manager verify [--json]
+squadai verify [--json]
 ```
 
 Checks include:
@@ -228,7 +228,7 @@ Checks include:
 **Example:**
 
 ```sh
-$ agent-manager verify
+$ squadai verify
   [PASS] memory protocol exists for opencode
   [PASS] memory protocol content is current for opencode
   [PASS] copilot-instructions.md exists
@@ -241,12 +241,12 @@ Failed checks include a message explaining what's wrong.
 
 ---
 
-## `agent-manager status`
+## `squadai status`
 
 Show project health: detected adapters, enabled components, and managed file states.
 
 ```sh
-agent-manager status [--json]
+squadai status [--json]
 ```
 
 Provides an at-a-glance summary of the current project configuration and file state without computing a full plan or running compliance checks. Faster than `verify` for quick orientation.
@@ -254,7 +254,7 @@ Provides an at-a-glance summary of the current project configuration and file st
 **Example:**
 
 ```sh
-$ agent-manager status
+$ squadai status
 Project: my-project
 Language: Go
 Methodology: tdd
@@ -286,19 +286,19 @@ Team roles: 6 (orchestrator, brainstormer, planner, implementer, reviewer, debug
 **JSON output:**
 
 ```sh
-agent-manager status --json
+squadai status --json
 ```
 
 Returns a structured object with `project`, `adapters`, `components`, `files`, and `team` fields.
 
 ---
 
-## `agent-manager validate-policy`
+## `squadai validate-policy`
 
 Validate the team policy file for schema correctness and lock/required consistency.
 
 ```sh
-agent-manager validate-policy
+squadai validate-policy
 ```
 
 Checks:
@@ -310,18 +310,18 @@ Checks:
 **Example:**
 
 ```sh
-$ agent-manager validate-policy
+$ squadai validate-policy
 Policy is valid. No issues found.
 ```
 
 ---
 
-## `agent-manager backup create`
+## `squadai backup create`
 
 Manually snapshot all managed files.
 
 ```sh
-agent-manager backup create [--json]
+squadai backup create [--json]
 ```
 
 Creates a backup of every file that the planner identifies as managed, including files in `skip` state. Each backup gets a unique ID and timestamp.
@@ -329,7 +329,7 @@ Creates a backup of every file that the planner identifies as managed, including
 **Example:**
 
 ```sh
-$ agent-manager backup create
+$ squadai backup create
 Backup created: a1b2c3d4-e5f6-...
   Files: 2
   Time:  2026-04-12 15:30:00 UTC
@@ -337,18 +337,18 @@ Backup created: a1b2c3d4-e5f6-...
 
 ---
 
-## `agent-manager backup list`
+## `squadai backup list`
 
 List all available backups.
 
 ```sh
-agent-manager backup list [--json]
+squadai backup list [--json]
 ```
 
 **Example:**
 
 ```sh
-$ agent-manager backup list
+$ squadai backup list
 Backups (2):
 
   ID                                    COMMAND     FILES  STATUS
@@ -358,12 +358,12 @@ Backups (2):
 
 ---
 
-## `agent-manager backup delete`
+## `squadai backup delete`
 
 Delete a specific backup snapshot.
 
 ```sh
-agent-manager backup delete <backup-id>
+squadai backup delete <backup-id>
 ```
 
 Permanently removes a single backup by ID. The backup directory and all its stored file snapshots are deleted. This operation is irreversible.
@@ -371,25 +371,25 @@ Permanently removes a single backup by ID. The backup directory and all its stor
 **Example:**
 
 ```sh
-$ agent-manager backup delete a1b2c3d4-e5f6-...
+$ squadai backup delete a1b2c3d4-e5f6-...
 Deleted backup: a1b2c3d4-e5f6-...
 ```
 
 If the backup ID does not exist, the command exits with an error:
 
 ```sh
-$ agent-manager backup delete nonexistent
+$ squadai backup delete nonexistent
 Error: backup not found: nonexistent
 ```
 
 ---
 
-## `agent-manager backup prune`
+## `squadai backup prune`
 
 Remove old backups, keeping the N most recent.
 
 ```sh
-agent-manager backup prune [--keep=N] [--dry-run] [--json]
+squadai backup prune [--keep=N] [--dry-run] [--json]
 ```
 
 Sorts backups by creation time and deletes all but the most recent N. Default retention is 10 backups.
@@ -402,7 +402,7 @@ Sorts backups by creation time and deletes all but the most recent N. Default re
 **Example:**
 
 ```sh
-$ agent-manager backup prune --keep=3
+$ squadai backup prune --keep=3
 Pruned 5 backup(s), kept 3.
   deleted  20260401T120000Z-abc12345
   deleted  20260402T130000Z-def67890
@@ -414,7 +414,7 @@ Pruned 5 backup(s), kept 3.
 **Dry run:**
 
 ```sh
-$ agent-manager backup prune --keep=3 --dry-run
+$ squadai backup prune --keep=3 --dry-run
 Dry run: would prune 5 backup(s), keep 3.
   would delete  20260401T120000Z-abc12345
   would delete  20260402T130000Z-def67890
@@ -423,12 +423,12 @@ Dry run: would prune 5 backup(s), keep 3.
 
 ---
 
-## `agent-manager restore`
+## `squadai restore`
 
 Restore files from a backup snapshot.
 
 ```sh
-agent-manager restore <backup-id> [--dry-run] [--json]
+squadai restore <backup-id> [--dry-run] [--json]
 ```
 
 Behavior:
@@ -438,7 +438,7 @@ Behavior:
 **Dry run:**
 
 ```sh
-$ agent-manager restore a1b2c3d4 --dry-run
+$ squadai restore a1b2c3d4 --dry-run
 Dry run: would restore 2 file(s) from backup a1b2c3d4
   restore ~/.opencode/memory/protocol.md
   restore .github/copilot-instructions.md
@@ -446,12 +446,12 @@ Dry run: would restore 2 file(s) from backup a1b2c3d4
 
 ---
 
-## `agent-manager remove`
+## `squadai remove`
 
 Remove all managed files and strip marker blocks from shared files.
 
 ```sh
-agent-manager remove --force [--dry-run] [--json]
+squadai remove --force [--dry-run] [--json]
 ```
 
 The `--force` flag is required to prevent accidental removal. Without it, the command exits with an error.
@@ -459,12 +459,12 @@ The `--force` flag is required to prevent accidental removal. Without it, the co
 Behavior:
 - Files that are entirely managed (e.g., `.opencode/agents/orchestrator.md`, `.cursor/mcp.json`) are deleted
 - Files that contain both managed and user content (e.g., `AGENTS.md` with user notes outside markers) have only the managed marker blocks stripped; user content is preserved
-- The `.agent-manager/` config directory is not removed — only the generated output files
+- The `.squadai/` config directory is not removed — only the generated output files
 
 **Example:**
 
 ```sh
-$ agent-manager remove --force
+$ squadai remove --force
   removed  .opencode/agents/orchestrator.md
   removed  .opencode/agents/brainstormer.md
   removed  .cursor/mcp.json
@@ -478,7 +478,7 @@ Removed 4 files, stripped 2 files.
 **Dry run:**
 
 ```sh
-$ agent-manager remove --force --dry-run
+$ squadai remove --force --dry-run
 Dry run: would remove 4 files, strip 2 files.
   would remove  .opencode/agents/orchestrator.md
   would strip   AGENTS.md
@@ -488,19 +488,19 @@ Dry run: would remove 4 files, strip 2 files.
 **Without --force:**
 
 ```sh
-$ agent-manager remove
+$ squadai remove
 Error: --force is required to remove managed files.
 ```
 
 ---
 
-## `agent-manager version`
+## `squadai version`
 
 Print the version.
 
 ```sh
-$ agent-manager version
-agent-manager v0.1.0
+$ squadai version
+squadai v0.1.0
 ```
 
 The version is set at build time via Go ldflags.
@@ -509,7 +509,7 @@ The version is set at build time via Go ldflags.
 
 ## Interactive TUI
 
-When invoked with no arguments, `agent-manager` launches a terminal UI with nine screens:
+When invoked with no arguments, `squadai` launches a terminal UI with nine screens:
 
 1. **Intro** — tool name, version, current mode, detected adapters with delegation strategies
 2. **Menu** — Init/Setup, Plan (dry-run), Apply, Sync, Team Status, Verify, Restore backup, Quit

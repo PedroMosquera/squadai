@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/assets"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 // Installer implements domain.ComponentInstaller for skill definitions.
@@ -28,7 +28,7 @@ func New(skills map[string]domain.SkillDef, cfg *domain.MergedConfig, projectDir
 	for name, def := range skills {
 		// Resolve content from file if needed.
 		if def.Content == "" && def.ContentFile != "" && projectDir != "" {
-			filePath := filepath.Join(projectDir, ".agent-manager", def.ContentFile)
+			filePath := filepath.Join(projectDir, ".squadai", def.ContentFile)
 			data, err := os.ReadFile(filePath)
 			if err == nil {
 				def.Content = string(data)

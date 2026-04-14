@@ -1,6 +1,6 @@
 # V2 User Guide
 
-agent-manager-pro V2 adds sub-agent teams, methodology-driven workflows, MCP server management, and plugin integration. This guide covers the concepts and configuration needed to use these features.
+squadai V2 adds sub-agent teams, methodology-driven workflows, MCP server management, and plugin integration. This guide covers the concepts and configuration needed to use these features.
 
 ---
 
@@ -22,7 +22,7 @@ V1 standardized system prompts and settings across agents. V2 extends this with:
 Set the methodology during init:
 
 ```sh
-agent-manager init --methodology=tdd
+squadai init --methodology=tdd
 ```
 
 Each methodology defines a team composition. The orchestrator coordinates the workflow; sub-agents execute individual phases.
@@ -72,7 +72,7 @@ Best for: straightforward projects that want lightweight structure without a for
 
 ## Team Composition
 
-When you set a methodology, `init` writes the full team definition into `.agent-manager/project.json` under the `"team"` key and enables the `agents` and `commands` components:
+When you set a methodology, `init` writes the full team definition into `.squadai/project.json` under the `"team"` key and enables the `agents` and `commands` components:
 
 ```json
 {
@@ -133,10 +133,10 @@ Each file contains YAML frontmatter (description, mode) and the rendered templat
 Claude Code does not support named sub-agent files. Instead, the orchestrator template is injected into the project rules file (`CLAUDE.md`) using marker blocks:
 
 ```markdown
-<!-- agent-manager:team -->
+<!-- squadai:team -->
 ## TDD Orchestrator
 ...delegation rules using Task tool...
-<!-- agent-manager:end:team -->
+<!-- squadai:end:team -->
 ```
 
 The orchestrator instructions tell Claude Code to use the Task tool for delegation. Each sub-agent's role and skill are described inline in the prompt, so the Task tool receives the full context when invoked.
@@ -148,10 +148,10 @@ No separate sub-agent files are created. All team instructions live in `CLAUDE.m
 Solo agents cannot delegate to sub-agents at all. The orchestrator template is injected into the project rules file (`.instructions.md` for VS Code, `.windsurfrules` for Windsurf) using marker blocks:
 
 ```markdown
-<!-- agent-manager:team -->
+<!-- squadai:team -->
 ## TDD Orchestrator (Solo Mode)
 ...all phases executed sequentially inline...
-<!-- agent-manager:end:team -->
+<!-- squadai:end:team -->
 ```
 
 The solo template instructs the agent to execute all methodology phases sequentially within a single context. Phase boundaries are marked with section headers rather than sub-agent invocations.
@@ -170,7 +170,7 @@ The solo template instructs the agent to execute all methodology phases sequenti
 
 ## MCP Server Configuration
 
-MCP (Model Context Protocol) servers provide AI agents with live tool access. agent-manager-pro configures MCP servers in each agent's native format.
+MCP (Model Context Protocol) servers provide AI agents with live tool access. squadai configures MCP servers in each agent's native format.
 
 ### Default Server
 
@@ -212,15 +212,15 @@ By default, all recommended servers are included. Use `--mcp` to select specific
 
 ```sh
 # Include only context7
-agent-manager init --methodology=tdd --mcp=context7
+squadai init --methodology=tdd --mcp=context7
 
 # Include all defaults (same as omitting the flag)
-agent-manager init --methodology=tdd
+squadai init --methodology=tdd
 ```
 
 ### Adding Custom MCP Servers
 
-Edit `.agent-manager/project.json` to add servers:
+Edit `.squadai/project.json` to add servers:
 
 ```json
 {
@@ -257,13 +257,13 @@ Remote servers use `"url"` instead of `"command"`:
 }
 ```
 
-Run `agent-manager apply` to propagate changes to all agents.
+Run `squadai apply` to propagate changes to all agents.
 
 ---
 
 ## Plugin Catalog
 
-Plugins extend agent capabilities beyond what agent-manager-pro manages directly. The current catalog:
+Plugins extend agent capabilities beyond what squadai manages directly. The current catalog:
 
 | Plugin | Description | Supported Agents | Install Method | Constraints |
 |--------|-------------|-----------------|----------------|-------------|
@@ -277,7 +277,7 @@ Plugins extend agent capabilities beyond what agent-manager-pro manages directly
 Use `--plugins` during init:
 
 ```sh
-agent-manager init --methodology=sdd --plugins=code-review,code-simplifier
+squadai init --methodology=sdd --plugins=code-review,code-simplifier
 ```
 
 Or edit `project.json`:
@@ -307,7 +307,7 @@ Plugins are automatically filtered during init based on:
 
 ## Per-Agent File Breakdown
 
-`agent-manager apply` writes files to each detected agent. Here is what each agent receives:
+`squadai apply` writes files to each detected agent. Here is what each agent receives:
 
 ### OpenCode
 
@@ -452,9 +452,9 @@ Key facts:
 - The registry contains 91K+ skills across 40+ AI agents.
 - Skills are static markdown files with no runtime dependency.
 - `npx skills` requires Node.js but does not add project dependencies.
-- agent-manager-pro does not depend on this ecosystem. The AI agent runs these commands to extend its own capabilities.
+- squadai does not depend on this ecosystem. The AI agent runs these commands to extend its own capabilities.
 
-The `find-skills` skill is installed as a shared skill during `init` and written to `.agent-manager/skills/find-skills.md`.
+The `find-skills` skill is installed as a shared skill during `init` and written to `.squadai/skills/find-skills.md`.
 
 ---
 
@@ -470,9 +470,9 @@ Policy (locked fields)  >  Project config  >  User defaults
 
 | Layer | File | Scope |
 |-------|------|-------|
-| User defaults | `~/.agent-manager/config.json` | Personal preferences, backup paths |
-| Project config | `.agent-manager/project.json` | Per-repo: methodology, team, MCP, plugins |
-| Team policy | `.agent-manager/policy.json` | Locked fields that cannot be overridden |
+| User defaults | `~/.squadai/config.json` | Personal preferences, backup paths |
+| Project config | `.squadai/project.json` | Per-repo: methodology, team, MCP, plugins |
+| Team policy | `.squadai/policy.json` | Locked fields that cannot be overridden |
 
 When a project or user value conflicts with a policy-locked field, the policy value wins and the conflict is recorded as a violation (visible in `plan` output).
 
@@ -564,7 +564,7 @@ The `"meta"` block is auto-detected by `init` (language, project name) and used 
 
 ### Policy Locking
 
-Teams use `.agent-manager/policy.json` to enforce configuration:
+Teams use `.squadai/policy.json` to enforce configuration:
 
 ```json
 {
@@ -597,12 +597,12 @@ Locked fields cannot be overridden by project or user config. See [`docs/policy.
 
 ## CLI Reference (V2)
 
-### `agent-manager init`
+### `squadai init`
 
-Initialize `.agent-manager/project.json`. Detects installed agents, project language, and writes starter files.
+Initialize `.squadai/project.json`. Detects installed agents, project language, and writes starter files.
 
 ```sh
-agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]
+squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]
 ```
 
 | Flag | Description |
@@ -610,90 +610,90 @@ agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugi
 | `--methodology=<tdd\|sdd\|conventional>` | Set the development methodology. Generates team composition and enables agents/commands components. |
 | `--mcp=<csv>` | Comma-separated MCP server IDs to enable. Omit to include all recommended servers. |
 | `--plugins=<csv>` | Comma-separated plugin IDs to enable. Omit to skip plugin installation. |
-| `--with-policy` | Also create `.agent-manager/policy.json` with a starter template. |
+| `--with-policy` | Also create `.squadai/policy.json` with a starter template. |
 | `--force` | Overwrite existing template and skill files. |
 
 Examples:
 
 ```sh
-agent-manager init --methodology=tdd
-agent-manager init --methodology=sdd --mcp=context7 --plugins=code-review
-agent-manager init --with-policy --force
+squadai init --methodology=tdd
+squadai init --methodology=sdd --mcp=context7 --plugins=code-review
+squadai init --with-policy --force
 ```
 
-### `agent-manager plan`
+### `squadai plan`
 
 Compute the action plan without writing files.
 
 ```sh
-agent-manager plan [--dry-run] [--json]
+squadai plan [--dry-run] [--json]
 ```
 
 Covers all 9 components (memory, rules, settings, mcp, agents, skills, commands, plugins, workflows) across all 5 supported agents.
 
-### `agent-manager apply`
+### `squadai apply`
 
 Execute the plan with backup and rollback safety.
 
 ```sh
-agent-manager apply [--dry-run] [--json]
+squadai apply [--dry-run] [--json]
 ```
 
 All managed files are backed up before changes. If any step fails, all completed changes are rolled back. The backup ID is printed for manual recovery.
 
-### `agent-manager sync`
+### `squadai sync`
 
 Idempotent reconciliation. Identical to `apply` but emphasizes that running it multiple times produces the same result. Safe for CI.
 
 ```sh
-agent-manager sync [--dry-run] [--json]
+squadai sync [--dry-run] [--json]
 ```
 
-### `agent-manager verify`
+### `squadai verify`
 
 Run compliance checks against the current project configuration.
 
 ```sh
-agent-manager verify [--json]
+squadai verify [--json]
 ```
 
 Checks that all enabled components are correctly installed for each detected agent: expected files exist, marker blocks are present, settings are valid.
 
-### `agent-manager validate-policy`
+### `squadai validate-policy`
 
-Validate `.agent-manager/policy.json` schema and lock/required consistency.
+Validate `.squadai/policy.json` schema and lock/required consistency.
 
 ```sh
-agent-manager validate-policy
+squadai validate-policy
 ```
 
-### `agent-manager backup create`
+### `squadai backup create`
 
 Manually snapshot all managed files.
 
 ```sh
-agent-manager backup create [--json]
+squadai backup create [--json]
 ```
 
-### `agent-manager backup list`
+### `squadai backup list`
 
 List available backups.
 
 ```sh
-agent-manager backup list [--json]
+squadai backup list [--json]
 ```
 
-### `agent-manager restore <id>`
+### `squadai restore <id>`
 
 Restore files from a backup snapshot.
 
 ```sh
-agent-manager restore <backup-id> [--dry-run] [--json]
+squadai restore <backup-id> [--dry-run] [--json]
 ```
 
 ### Interactive TUI
 
-Run `agent-manager` with no arguments for a guided wizard:
+Run `squadai` with no arguments for a guided wizard:
 
 1. Intro screen with detected agents and mode
 2. Methodology selection (TDD / SDD / Conventional)
@@ -730,18 +730,18 @@ Templates are stored as embedded assets at `internal/assets/teams/{methodology}/
 
 ```sh
 cd my-project
-agent-manager init --methodology=tdd
+squadai init --methodology=tdd
 ```
 
 Output:
 
 ```
-  created .agent-manager/project.json
-  created .agent-manager/templates/team-standards.md
-  created .agent-manager/skills/code-review.md
-  created .agent-manager/skills/testing.md
-  created .agent-manager/skills/pr-description.md
-  created .agent-manager/skills/find-skills.md
+  created .squadai/project.json
+  created .squadai/templates/team-standards.md
+  created .squadai/skills/code-review.md
+  created .squadai/skills/testing.md
+  created .squadai/skills/pr-description.md
+  created .squadai/skills/find-skills.md
 
 Detected:
   Language: Go
@@ -751,27 +751,27 @@ Detected:
   Team roles:  6
   MCP servers: context7
 
-Run 'agent-manager apply' to configure your environment.
+Run 'squadai apply' to configure your environment.
 ```
 
 ### 2. Preview
 
 ```sh
-agent-manager plan
+squadai plan
 ```
 
 ### 3. Apply
 
 ```sh
-agent-manager apply
+squadai apply
 ```
 
 ### 4. Verify
 
 ```sh
-agent-manager verify
+squadai verify
 ```
 
 ### 5. Iterate
 
-Edit `.agent-manager/project.json` to add MCP servers, change team roles, or enable plugins. Run `agent-manager apply` again. The planner skips files that are already up to date.
+Edit `.squadai/project.json` to add MCP servers, change team roles, or enable plugins. Run `squadai apply` again. The planner skips files that are already up to date.

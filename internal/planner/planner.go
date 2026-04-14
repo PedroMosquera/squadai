@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/agents"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/commands"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/plugins"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/skills"
-	"github.com/PedroMosquera/agent-manager-pro/internal/components/workflows"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/components/agents"
+	"github.com/PedroMosquera/squadai/internal/components/commands"
+	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/mcp"
+	"github.com/PedroMosquera/squadai/internal/components/memory"
+	"github.com/PedroMosquera/squadai/internal/components/plugins"
+	"github.com/PedroMosquera/squadai/internal/components/rules"
+	"github.com/PedroMosquera/squadai/internal/components/settings"
+	"github.com/PedroMosquera/squadai/internal/components/skills"
+	"github.com/PedroMosquera/squadai/internal/components/workflows"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 // Planner computes the full action plan from merged config and detected adapters.
@@ -205,7 +205,7 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 			deleteActions = append(deleteActions, domain.PlannedAction{
 				ID:          fmt.Sprintf("%s-stale-cleanup-%s", adapterKey, sanitizePath(path)),
 				Agent:       adapter.ID(),
-				Component:   domain.ComponentID(""),
+				Component:   domain.ComponentCleanup,
 				Action:      domain.ActionDelete,
 				TargetPath:  path,
 				Description: fmt.Sprintf("remove stale file for disabled adapter %s: %s", adapterKey, path),
@@ -458,8 +458,8 @@ func (p *Planner) renderCopilot(action domain.PlannedAction, existing []byte, pr
 // Avoids a circular import since planner cannot import marker directly.
 // We replicate the logic inline rather than importing the marker package.
 func injectSection(document, sectionID, content string) string {
-	open := "<!-- agent-manager:" + sectionID + " -->"
-	close := "<!-- /agent-manager:" + sectionID + " -->"
+	open := "<!-- squadai:" + sectionID + " -->"
+	close := "<!-- /squadai:" + sectionID + " -->"
 
 	openIdx := indexOf(document, open)
 	closeIdx := indexOf(document, close)

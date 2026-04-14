@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // langDetector pairs a canonical language name with its detector function.

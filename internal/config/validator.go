@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ValidateUser checks a UserConfig for structural issues.

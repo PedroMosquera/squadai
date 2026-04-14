@@ -88,13 +88,13 @@ type ComponentInstaller interface {
 
 // ConfigLoader loads and merges configuration from the three-layer stack.
 type ConfigLoader interface {
-	// LoadUser loads ~/.agent-manager/config.json.
+	// LoadUser loads ~/.squadai/config.json.
 	LoadUser(homeDir string) (*UserConfig, error)
 
-	// LoadProject loads .agent-manager/project.json from projectDir.
+	// LoadProject loads .squadai/project.json from projectDir.
 	LoadProject(projectDir string) (*ProjectConfig, error)
 
-	// LoadPolicy loads .agent-manager/policy.json from projectDir.
+	// LoadPolicy loads .squadai/policy.json from projectDir.
 	LoadPolicy(projectDir string) (*PolicyConfig, error)
 
 	// Merge combines all three layers with precedence rules.

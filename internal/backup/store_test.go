@@ -81,13 +81,13 @@ func TestResolveBackupDir(t *testing.T) {
 			name:      "empty uses default",
 			backupDir: "",
 			homeDir:   "/Users/test",
-			want:      "/Users/test/.agent-manager/backups",
+			want:      "/Users/test/.squadai/backups",
 		},
 		{
 			name:      "tilde expansion",
-			backupDir: "~/.agent-manager/backups",
+			backupDir: "~/.squadai/backups",
 			homeDir:   "/Users/test",
-			want:      "/Users/test/.agent-manager/backups",
+			want:      "/Users/test/.squadai/backups",
 		},
 		{
 			name:      "absolute path unchanged",

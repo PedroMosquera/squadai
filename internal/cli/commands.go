@@ -12,20 +12,20 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/cursor"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/vscode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
-	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
-	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
-	"github.com/PedroMosquera/agent-manager-pro/internal/config"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
-	"github.com/PedroMosquera/agent-manager-pro/internal/pipeline"
-	"github.com/PedroMosquera/agent-manager-pro/internal/planner"
-	"github.com/PedroMosquera/agent-manager-pro/internal/verify"
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
+	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
+	"github.com/PedroMosquera/squadai/internal/assets"
+	"github.com/PedroMosquera/squadai/internal/backup"
+	"github.com/PedroMosquera/squadai/internal/config"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/pipeline"
+	"github.com/PedroMosquera/squadai/internal/planner"
+	"github.com/PedroMosquera/squadai/internal/verify"
 )
 
 // initResult is the JSON representation of a successful init run.
@@ -40,7 +40,7 @@ type initResult struct {
 	PolicyCreated bool            `json:"policy_created"`
 }
 
-// RunInit creates .agent-manager/project.json and optionally .agent-manager/policy.json
+// RunInit creates .squadai/project.json and optionally .squadai/policy.json
 // in the current working directory. It detects adapters, selects language-specific
 // standards, and writes starter skill files.
 func RunInit(args []string, stdout io.Writer) error {
@@ -76,9 +76,9 @@ func RunInit(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force] [--merge] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force] [--merge] [--json]")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Initialize .agent-manager/project.json in the current directory. Detects installed")
+			fmt.Fprintln(stdout, "Initialize .squadai/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
 			fmt.Fprintln(stdout, "project language, and writes language-specific team standards and starter skill files.")
 			fmt.Fprintln(stdout)
@@ -92,19 +92,19 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --plugins=<csv>")
 			fmt.Fprintln(stdout, "                 Comma-separated list of plugin IDs to enable (e.g. code-review).")
 			fmt.Fprintln(stdout, "                 Omit to skip plugin installation.")
-			fmt.Fprintln(stdout, "  --with-policy  Also create .agent-manager/policy.json with a starter template.")
+			fmt.Fprintln(stdout, "  --with-policy  Also create .squadai/policy.json with a starter template.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
 			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
 			fmt.Fprintln(stdout, "  --merge        Re-run init, merging new config on top of existing (preserves user customizations).")
 			fmt.Fprintln(stdout, "  --json         Output the init result as JSON instead of human-readable text.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager init")
-			fmt.Fprintln(stdout, "  agent-manager init --methodology=tdd --with-policy")
-			fmt.Fprintln(stdout, "  agent-manager init --methodology=sdd --mcp=context7 --plugins=code-review")
-			fmt.Fprintln(stdout, "  agent-manager init --force")
-			fmt.Fprintln(stdout, "  agent-manager init --merge")
-			fmt.Fprintln(stdout, "  agent-manager init --json")
+			fmt.Fprintln(stdout, "  squadai init")
+			fmt.Fprintln(stdout, "  squadai init --methodology=tdd --with-policy")
+			fmt.Fprintln(stdout, "  squadai init --methodology=sdd --mcp=context7 --plugins=code-review")
+			fmt.Fprintln(stdout, "  squadai init --force")
+			fmt.Fprintln(stdout, "  squadai init --merge")
+			fmt.Fprintln(stdout, "  squadai init --json")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for init", arg)
@@ -269,20 +269,20 @@ func RunInit(args []string, stdout io.Writer) error {
 
 	// Write .gitignore suggestion file.
 	agentManagerDir := filepath.Join(projectDir, config.ProjectConfigDir)
-	gitignoreSuggestion := `# Files to add to your .gitignore for agent-manager
+	gitignoreSuggestion := `# Files to add to your .gitignore for SquadAI
 # ================================================
 
 # Always ignore backups (contain file snapshots, can be large)
-.agent-manager/backups/
+.squadai/backups/
 
 # Ignore user-specific config (each developer has their own)
-.agent-manager/user.json
+.squadai/user.json
 
 # ------------------------------------------------
 # Files to COMMIT (team-shared configuration)
 # ------------------------------------------------
-# .agent-manager/project.json    — project-level agent config
-# .agent-manager/policy.json     — team policy enforcement
+# .squadai/project.json    — project-level agent config
+# .squadai/policy.json     — team policy enforcement
 # AGENTS.md                      — agent system prompt
 # CLAUDE.md                      — Claude Code system prompt
 # .cursorrules                   — Cursor rules
@@ -363,7 +363,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		fmt.Fprintln(stdout)
 	}
 
-	fmt.Fprintln(stdout, "Run 'agent-manager apply' to configure your environment.")
+	fmt.Fprintln(stdout, "Run 'squadai apply' to configure your environment.")
 	return nil
 }
 
@@ -736,7 +736,7 @@ type validatePolicyResult struct {
 	PolicyPath string   `json:"policy_path"`
 }
 
-// RunValidatePolicy validates .agent-manager/policy.json in the current directory.
+// RunValidatePolicy validates .squadai/policy.json in the current directory.
 func RunValidatePolicy(args []string, stdout io.Writer) error {
 	jsonOut := false
 	for _, arg := range args {
@@ -744,9 +744,9 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager validate-policy [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai validate-policy [--json]")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Validate .agent-manager/policy.json in the current directory. Checks that the")
+			fmt.Fprintln(stdout, "Validate .squadai/policy.json in the current directory. Checks that the")
 			fmt.Fprintln(stdout, "schema is well-formed, that all locked component IDs are valid, and that required")
 			fmt.Fprintln(stdout, "component constraints are internally consistent. Exits non-zero when issues are found.")
 			fmt.Fprintln(stdout)
@@ -754,8 +754,8 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --json  Output the validation result as JSON.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager validate-policy")
-			fmt.Fprintln(stdout, "  agent-manager validate-policy --json")
+			fmt.Fprintln(stdout, "  squadai validate-policy")
+			fmt.Fprintln(stdout, "  squadai validate-policy --json")
 			return nil
 		}
 	}
@@ -821,10 +821,10 @@ func RunPlan(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager plan [--dry-run] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai plan [--dry-run] [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Compute the set of actions needed to bring all detected agents into the desired")
-			fmt.Fprintln(stdout, "state described by .agent-manager/project.json. Covers all 9 components (memory,")
+			fmt.Fprintln(stdout, "state described by .squadai/project.json. Covers all 9 components (memory,")
 			fmt.Fprintln(stdout, "rules, settings, MCP, agents, skills, commands, plugins, workflows) across all 5")
 			fmt.Fprintln(stdout, "supported agents. No files are written — this is always a read-only preview.")
 			fmt.Fprintln(stdout)
@@ -833,8 +833,8 @@ func RunPlan(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --json     Output the planned actions as a JSON array.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager plan")
-			fmt.Fprintln(stdout, "  agent-manager plan --json")
+			fmt.Fprintln(stdout, "  squadai plan")
+			fmt.Fprintln(stdout, "  squadai plan --json")
 			return nil
 		}
 	}
@@ -890,7 +890,7 @@ func RunPlan(args []string, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "  %-8s %-40s %s\n", a.Action, a.Description, a.TargetPath)
 	}
 
-	fmt.Fprintln(stdout, "\nUse 'agent-manager apply' to execute.")
+	fmt.Fprintln(stdout, "\nUse 'squadai apply' to execute.")
 	return nil
 }
 
@@ -908,7 +908,7 @@ func RunApply(args []string, stdout io.Writer) error {
 		case "--force":
 			force = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager apply [--dry-run] [--json] [--force]")
+			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -924,10 +924,10 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --force    Apply with default config even when no project.json is found.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager apply")
-			fmt.Fprintln(stdout, "  agent-manager apply --dry-run")
-			fmt.Fprintln(stdout, "  agent-manager apply --json")
-			fmt.Fprintln(stdout, "  agent-manager apply --force")
+			fmt.Fprintln(stdout, "  squadai apply")
+			fmt.Fprintln(stdout, "  squadai apply --dry-run")
+			fmt.Fprintln(stdout, "  squadai apply --json")
+			fmt.Fprintln(stdout, "  squadai apply --force")
 			return nil
 		}
 	}
@@ -947,7 +947,7 @@ func RunApply(args []string, stdout io.Writer) error {
 	if _, statErr := os.Stat(projectConfigPath); os.IsNotExist(statErr) {
 		if !force {
 			fmt.Fprintln(stdout, "Error: No project.json found in current directory.")
-			fmt.Fprintln(stdout, "Run 'agent-manager init' to create one, or use --force to apply with defaults.")
+			fmt.Fprintln(stdout, "Run 'squadai init' to create one, or use --force to apply with defaults.")
 			return fmt.Errorf("no project.json found in current directory")
 		}
 		fmt.Fprintln(stdout, "Warning: No project.json found. Running with default config (--force).")
@@ -1000,7 +1000,7 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "CRITICAL: rollback failed — manual recovery may be needed.")
 			if report != nil && report.BackupID != "" {
 				fmt.Fprintf(stdout, "  Backup ID: %s\n", report.BackupID)
-				fmt.Fprintf(stdout, "  Try: agent-manager restore %s\n", report.BackupID)
+				fmt.Fprintf(stdout, "  Try: squadai restore %s\n", report.BackupID)
 			}
 			return execErr
 		}
@@ -1039,11 +1039,11 @@ func RunApply(args []string, stdout io.Writer) error {
 
 	if !report.Success {
 		fmt.Fprintf(stdout, "\nApply failed. All changes rolled back (backup: %s).\n", report.BackupID)
-		fmt.Fprintf(stdout, "Use 'agent-manager restore %s' to manually restore if needed.\n", report.BackupID)
+		fmt.Fprintf(stdout, "Use 'squadai restore %s' to manually restore if needed.\n", report.BackupID)
 		return fmt.Errorf("apply completed with failures")
 	}
 
-	fmt.Fprintln(stdout, "\nApply complete. Use 'agent-manager verify' to check.")
+	fmt.Fprintln(stdout, "\nApply complete. Use 'squadai verify' to check.")
 	return nil
 }
 
@@ -1052,7 +1052,7 @@ func RunSync(args []string, stdout io.Writer) error {
 	// Intercept help before delegating to apply.
 	for _, arg := range args {
 		if arg == "-h" || arg == "--help" {
-			fmt.Fprintln(stdout, "Usage: agent-manager sync [--dry-run] [--json] [--force]")
+			fmt.Fprintln(stdout, "Usage: squadai sync [--dry-run] [--json] [--force]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Idempotent reconciliation: plan and apply in one step. Identical to apply but")
 			fmt.Fprintln(stdout, "emphasizes idempotency — running sync multiple times produces the same result.")
@@ -1065,9 +1065,9 @@ func RunSync(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --force    Sync with default config even when no project.json is found.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager sync")
-			fmt.Fprintln(stdout, "  agent-manager sync --dry-run")
-			fmt.Fprintln(stdout, "  agent-manager sync --force")
+			fmt.Fprintln(stdout, "  squadai sync")
+			fmt.Fprintln(stdout, "  squadai sync --dry-run")
+			fmt.Fprintln(stdout, "  squadai sync --force")
 			return nil
 		}
 	}
@@ -1084,7 +1084,7 @@ func RunVerify(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager verify [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai verify [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Run compliance and health checks against the current project configuration.")
 			fmt.Fprintln(stdout, "Verifies that all enabled components are correctly installed for each detected")
@@ -1098,8 +1098,8 @@ func RunVerify(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --json  Output the full verification report as JSON.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager verify")
-			fmt.Fprintln(stdout, "  agent-manager verify --json")
+			fmt.Fprintln(stdout, "  squadai verify")
+			fmt.Fprintln(stdout, "  squadai verify --json")
 			return nil
 		}
 	}
@@ -1254,18 +1254,18 @@ func RunBackupCreate(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager backup create [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai backup create [--json]")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Create a manual snapshot of all files that agent-manager manages. The backup")
+			fmt.Fprintln(stdout, "Create a manual snapshot of all files that SquadAI manages. The backup")
 			fmt.Fprintln(stdout, "includes every file that would be written by apply, even those that are already")
-			fmt.Fprintln(stdout, "up to date. Backups are stored under ~/.agent-manager/backups by default.")
+			fmt.Fprintln(stdout, "up to date. Backups are stored under ~/.squadai/backups by default.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output the backup manifest as JSON (includes ID, timestamp, and file list).")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager backup create")
-			fmt.Fprintln(stdout, "  agent-manager backup create --json")
+			fmt.Fprintln(stdout, "  squadai backup create")
+			fmt.Fprintln(stdout, "  squadai backup create --json")
 			return nil
 		}
 	}
@@ -1327,18 +1327,18 @@ func RunBackupList(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager backup list [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai backup list [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "List all available backup snapshots. Shows the backup ID, the command that created")
 			fmt.Fprintln(stdout, "the backup (apply or manual), the number of files captured, and the status.")
-			fmt.Fprintln(stdout, "Use the ID with 'agent-manager restore <id>' to roll back to a specific snapshot.")
+			fmt.Fprintln(stdout, "Use the ID with 'squadai restore <id>' to roll back to a specific snapshot.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output the backup list as a JSON array.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager backup list")
-			fmt.Fprintln(stdout, "  agent-manager backup list --json")
+			fmt.Fprintln(stdout, "  squadai backup list")
+			fmt.Fprintln(stdout, "  squadai backup list --json")
 			return nil
 		}
 	}
@@ -1352,7 +1352,7 @@ func RunBackupList(args []string, stdout io.Writer) error {
 	if err != nil {
 		// If no project config, use default backup dir.
 		merged = &domain.MergedConfig{
-			Paths: domain.PathsConfig{BackupDir: "~/.agent-manager/backups"},
+			Paths: domain.PathsConfig{BackupDir: "~/.squadai/backups"},
 		}
 	}
 
@@ -1396,20 +1396,20 @@ func RunRestore(args []string, stdout io.Writer) error {
 		case "--dry-run":
 			dryRun = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager restore <backup-id> [--dry-run] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai restore <backup-id> [--dry-run] [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Restore managed files from a backup snapshot. Files that existed before the backup")
 			fmt.Fprintln(stdout, "are written back to their original content; files that did not exist before are")
 			fmt.Fprintln(stdout, "removed. The backup ID is printed after every apply and can be listed with")
-			fmt.Fprintln(stdout, "'agent-manager backup list'.")
+			fmt.Fprintln(stdout, "'squadai backup list'.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --dry-run  Show which files would be restored or removed without changing anything.")
 			fmt.Fprintln(stdout, "  --json     Output the restore result as JSON.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager restore 2024-01-15T10-30-00Z-abc123")
-			fmt.Fprintln(stdout, "  agent-manager restore <id> --dry-run")
+			fmt.Fprintln(stdout, "  squadai restore 2024-01-15T10-30-00Z-abc123")
+			fmt.Fprintln(stdout, "  squadai restore <id> --dry-run")
 			return nil
 		default:
 			if backupID == "" {
@@ -1421,7 +1421,7 @@ func RunRestore(args []string, stdout io.Writer) error {
 	}
 
 	if backupID == "" {
-		return fmt.Errorf("backup ID is required — usage: agent-manager restore <backup-id>")
+		return fmt.Errorf("backup ID is required — usage: squadai restore <backup-id>")
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -1432,7 +1432,7 @@ func RunRestore(args []string, stdout io.Writer) error {
 	merged, err := loadAndMerge(homeDir, "")
 	if err != nil {
 		merged = &domain.MergedConfig{
-			Paths: domain.PathsConfig{BackupDir: "~/.agent-manager/backups"},
+			Paths: domain.PathsConfig{BackupDir: "~/.squadai/backups"},
 		}
 	}
 
@@ -1495,18 +1495,18 @@ func RunStatus(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager status [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai status [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Show the current project configuration summary: detected agents, active components,")
 			fmt.Fprintln(stdout, "configured MCP servers, and the most recent backup. Reads the merged config from")
-			fmt.Fprintln(stdout, ".agent-manager/project.json without writing any files.")
+			fmt.Fprintln(stdout, ".squadai/project.json without writing any files.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output the status as JSON.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager status")
-			fmt.Fprintln(stdout, "  agent-manager status --json")
+			fmt.Fprintln(stdout, "  squadai status")
+			fmt.Fprintln(stdout, "  squadai status --json")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for status", arg)
@@ -1726,17 +1726,17 @@ func RunBackupDelete(args []string, stdout io.Writer) error {
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager backup delete <id> [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai backup delete <id> [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Delete a backup snapshot by its ID. The backup and all its files are permanently")
-			fmt.Fprintln(stdout, "removed. Use 'agent-manager backup list' to see available backup IDs.")
+			fmt.Fprintln(stdout, "removed. Use 'squadai backup list' to see available backup IDs.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output the result as JSON.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager backup delete 20240115T103000Z-abc123")
-			fmt.Fprintln(stdout, "  agent-manager backup delete <id> --json")
+			fmt.Fprintln(stdout, "  squadai backup delete 20240115T103000Z-abc123")
+			fmt.Fprintln(stdout, "  squadai backup delete <id> --json")
 			return nil
 		default:
 			if id == "" {
@@ -1748,7 +1748,7 @@ func RunBackupDelete(args []string, stdout io.Writer) error {
 	}
 
 	if id == "" {
-		return fmt.Errorf("backup ID is required — usage: agent-manager backup delete <id>")
+		return fmt.Errorf("backup ID is required — usage: squadai backup delete <id>")
 	}
 
 	projectDir, err := os.Getwd()
@@ -1764,7 +1764,7 @@ func RunBackupDelete(args []string, stdout io.Writer) error {
 	merged, err := loadAndMerge(homeDir, projectDir)
 	if err != nil {
 		merged = &domain.MergedConfig{
-			Paths: domain.PathsConfig{BackupDir: "~/.agent-manager/backups"},
+			Paths: domain.PathsConfig{BackupDir: "~/.squadai/backups"},
 		}
 	}
 
@@ -1807,10 +1807,10 @@ func RunBackupPrune(args []string, stdout io.Writer) error {
 		case arg == "--json":
 			jsonOut = true
 		case arg == "-h" || arg == "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager backup prune [--keep=N] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai backup prune [--keep=N] [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Remove all but the N most recent backup snapshots. Keeps the newest N backups")
-			fmt.Fprintln(stdout, "and permanently deletes the rest. Use 'agent-manager backup list' to see available")
+			fmt.Fprintln(stdout, "and permanently deletes the rest. Use 'squadai backup list' to see available")
 			fmt.Fprintln(stdout, "backups before pruning.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
@@ -1818,9 +1818,9 @@ func RunBackupPrune(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --json     Output the result as JSON.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager backup prune")
-			fmt.Fprintln(stdout, "  agent-manager backup prune --keep=5")
-			fmt.Fprintln(stdout, "  agent-manager backup prune --keep=3 --json")
+			fmt.Fprintln(stdout, "  squadai backup prune")
+			fmt.Fprintln(stdout, "  squadai backup prune --keep=5")
+			fmt.Fprintln(stdout, "  squadai backup prune --keep=3 --json")
 			return nil
 		case strings.HasPrefix(arg, "--keep="):
 			val := strings.TrimPrefix(arg, "--keep=")
@@ -1847,7 +1847,7 @@ func RunBackupPrune(args []string, stdout io.Writer) error {
 	merged, err := loadAndMerge(homeDir, projectDir)
 	if err != nil {
 		merged = &domain.MergedConfig{
-			Paths: domain.PathsConfig{BackupDir: "~/.agent-manager/backups"},
+			Paths: domain.PathsConfig{BackupDir: "~/.squadai/backups"},
 		}
 	}
 
@@ -1895,7 +1895,7 @@ type removeResult struct {
 	DryRun   bool     `json:"dry_run"`
 }
 
-// RunRemove removes all agent-manager managed files from the current project.
+// RunRemove removes all SquadAI managed files from the current project.
 // Files with marker blocks that also contain user content are stripped of
 // the managed sections while preserving user content.
 func RunRemove(args []string, stdout io.Writer) error {
@@ -1912,9 +1912,9 @@ func RunRemove(args []string, stdout io.Writer) error {
 		case "--force":
 			force = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager remove [--force] [--dry-run] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai remove [--force] [--dry-run] [--json]")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Remove all files managed by agent-manager from the current project. Files that")
+			fmt.Fprintln(stdout, "Remove all files managed by SquadAI from the current project. Files that")
 			fmt.Fprintln(stdout, "contain marker blocks alongside user content are stripped of the managed sections")
 			fmt.Fprintln(stdout, "only — user content is preserved. Fully managed files (no user content) are deleted.")
 			fmt.Fprintln(stdout)
@@ -1926,9 +1926,9 @@ func RunRemove(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --json     Output the result as JSON.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager remove --dry-run")
-			fmt.Fprintln(stdout, "  agent-manager remove --force")
-			fmt.Fprintln(stdout, "  agent-manager remove --force --json")
+			fmt.Fprintln(stdout, "  squadai remove --dry-run")
+			fmt.Fprintln(stdout, "  squadai remove --force")
+			fmt.Fprintln(stdout, "  squadai remove --force --json")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for remove", arg)
@@ -2199,7 +2199,7 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager diff [flags]")
+			fmt.Fprintln(stdout, "Usage: squadai diff [flags]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Preview what 'apply' would change without modifying any files.")
 			fmt.Fprintln(stdout, "Shows a unified diff for each file that would be created, modified, or deleted.")
@@ -2209,9 +2209,9 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 			fmt.Fprintln(stdout, "  --json        Output planned actions as JSON (for scripting and CI)")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  agent-manager diff                  Show what would change")
-			fmt.Fprintln(stdout, "  agent-manager diff --json           Machine-readable diff output")
-			fmt.Fprintln(stdout, "  agent-manager init && agent-manager diff    Preview after fresh init")
+			fmt.Fprintln(stdout, "  squadai diff                  Show what would change")
+			fmt.Fprintln(stdout, "  squadai diff --json           Machine-readable diff output")
+			fmt.Fprintln(stdout, "  squadai init && squadai diff    Preview after fresh init")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for diff", arg)

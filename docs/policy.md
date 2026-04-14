@@ -4,7 +4,7 @@ Team policy controls what configuration can and cannot be overridden by individu
 
 ## Overview
 
-A policy file (`.agent-manager/policy.json`) is optional. When present, it:
+A policy file (`.squadai/policy.json`) is optional. When present, it:
 
 1. Sets the operational mode to `team`
 2. Locks specific fields so they cannot be overridden
@@ -14,7 +14,7 @@ The policy file is committed to the repository and applies to all team members.
 
 ## Policy File
 
-Path: `.agent-manager/policy.json`
+Path: `.squadai/policy.json`
 
 ```json
 {
@@ -69,8 +69,8 @@ The following fields can be locked by policy:
 Configuration is resolved in three layers:
 
 1. **Policy locked fields** (highest priority) — cannot be overridden
-2. **Project config** (`.agent-manager/project.json`)
-3. **User config** (`~/.agent-manager/config.json`, lowest priority)
+2. **Project config** (`.squadai/project.json`)
+3. **User config** (`~/.squadai/config.json`, lowest priority)
 
 When a user or project config sets a value for a locked field, the policy value wins. The conflict is recorded as a violation and reported in the output of `plan` and `verify`.
 
@@ -79,7 +79,7 @@ When a user or project config sets a value for a locked field, the policy value 
 User config sets `adapters.opencode.enabled: false`, but policy locks it to `true`:
 
 ```
-$ agent-manager plan
+$ squadai plan
 Policy overrides:
   - field "adapters.opencode.enabled" locked to true, overriding false
 
@@ -101,21 +101,21 @@ When a policy file exists and sets `mode: "team"`, the mode is forced to `team` 
 
 ## Validation
 
-Run `agent-manager validate-policy` to check the policy file for:
+Run `squadai validate-policy` to check the policy file for:
 
 - **Schema correctness** — required fields present, valid types
 - **Lock consistency** — every entry in `locked` has a corresponding value in `required`
 - **Required values** — locked values are valid (e.g., boolean for `enabled` fields)
 
 ```sh
-$ agent-manager validate-policy
+$ squadai validate-policy
 Policy is valid. No issues found.
 ```
 
 If issues are found:
 
 ```sh
-$ agent-manager validate-policy
+$ squadai validate-policy
 Policy validation found 2 issue(s):
   1. locked field "adapters.unknown.enabled" has no corresponding required value
   2. required copilot.instructions_template is empty but field is locked
@@ -123,13 +123,13 @@ Policy validation found 2 issue(s):
 
 ## Creating a Policy
 
-Use `agent-manager init --with-policy` to generate a policy template:
+Use `squadai init --with-policy` to generate a policy template:
 
 ```sh
-agent-manager init --with-policy
+squadai init --with-policy
 ```
 
-This creates `.agent-manager/policy.json` with the default locked fields (OpenCode enabled, memory enabled, copilot instructions set to standard).
+This creates `.squadai/policy.json` with the default locked fields (OpenCode enabled, memory enabled, copilot instructions set to standard).
 
 Edit the file to match your team's requirements, then commit it to the repository.
 
@@ -137,7 +137,7 @@ Edit the file to match your team's requirements, then commit it to the repositor
 
 Policy only governs team-lane adapters and shared components. Personal-lane adapters (Claude Code, VS Code Copilot, Cursor, Windsurf) are controlled by the user config and are not affected by policy locks unless explicitly locked.
 
-A user can enable Claude Code, Cursor, or any other personal-lane adapter in their `~/.agent-manager/config.json` without affecting team compliance, as long as the team-required adapters and components remain enabled.
+A user can enable Claude Code, Cursor, or any other personal-lane adapter in their `~/.squadai/config.json` without affecting team compliance, as long as the team-required adapters and components remain enabled.
 
 ## Troubleshooting
 

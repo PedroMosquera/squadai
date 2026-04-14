@@ -63,8 +63,8 @@ func TestDefaultUserConfig_HasMemoryEnabled(t *testing.T) {
 
 func TestDefaultUserConfig_HasDefaultBackupDir(t *testing.T) {
 	cfg := DefaultUserConfig()
-	if cfg.Paths.BackupDir != "~/.agent-manager/backups" {
-		t.Errorf("BackupDir = %q, want %q", cfg.Paths.BackupDir, "~/.agent-manager/backups")
+	if cfg.Paths.BackupDir != "~/.squadai/backups" {
+		t.Errorf("BackupDir = %q, want %q", cfg.Paths.BackupDir, "~/.squadai/backups")
 	}
 }
 

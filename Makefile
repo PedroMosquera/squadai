@@ -1,7 +1,7 @@
-# Makefile for agent-manager-pro
+# Makefile for squadai
 
-BINARY     := agent-manager
-CMD_PATH   := ./cmd/agent-manager
+BINARY     := squadai
+CMD_PATH   := ./cmd/squadai
 VERSION    ?= dev
 LDFLAGS    := -s -w -X main.version=$(VERSION)
 
@@ -10,7 +10,7 @@ LDFLAGS    := -s -w -X main.version=$(VERSION)
 # Default target
 all: build
 
-## build: Compile the binary to ./agent-manager
+## build: Compile the binary to ./squadai
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD_PATH)
 

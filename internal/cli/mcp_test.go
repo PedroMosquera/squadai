@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ─── Mock adapter for filter tests ──────────────────────────────────────────

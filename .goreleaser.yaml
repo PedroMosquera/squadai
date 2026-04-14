@@ -5,9 +5,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: agent-manager
-    main: ./cmd/agent-manager
-    binary: agent-manager
+  - id: squadai
+    main: ./cmd/squadai
+    binary: squadai
     env:
       - CGO_ENABLED=0
     goos:
@@ -54,19 +54,19 @@ brews:
       name: homebrew-tap
       # HOMEBREW_TAP_TOKEN secret must be set in GitHub Actions for publishing.
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    name: agent-manager
-    homepage: "https://github.com/PedroMosquera/agent-manager-pro"
+    name: squadai
+    homepage: "https://github.com/PedroMosquera/squadai"
     description: "CLI tool that standardizes AI coding agent environments across a team"
     license: "MIT"
     install: |
-      bin.install "agent-manager"
+      bin.install "squadai"
     test: |
-      system "#{bin}/agent-manager", "version"
+      system "#{bin}/squadai", "version"
 
 release:
   github:
     owner: PedroMosquera
-    name: agent-manager-pro
+    name: squadai
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"

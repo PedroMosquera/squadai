@@ -40,7 +40,7 @@ available for the AI agent to load in future sessions.
 - The registry at skills.sh contains 91K+ community skills across 40+ AI agents.
 - Skills are static markdown files with structured instructions — no runtime dependency.
 - `npx skills` requires Node.js but does not add project dependencies.
-- agent-manager-pro does not depend on this ecosystem. The AI agent runs these
+- SquadAI does not depend on this ecosystem. The AI agent runs these
   commands at the user's request to extend its own capabilities.
 
 ## Protocol

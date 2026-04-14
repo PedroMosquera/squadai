@@ -8,6 +8,11 @@ var (
 			BorderForeground(lipgloss.Color("240")).
 			Padding(0, 1)
 
+	titleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("12")).
+			Bold(true).
+			Align(lipgloss.Center)
+
 	headingStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("6")).
 			Bold(true)

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 // Installer implements domain.ComponentInstaller for command definitions.

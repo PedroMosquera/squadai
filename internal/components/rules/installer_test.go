@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────
@@ -39,7 +39,7 @@ func TestNew_InlineContent(t *testing.T) {
 
 func TestNew_FileContent(t *testing.T) {
 	project := t.TempDir()
-	amDir := filepath.Join(project, ".agent-manager")
+	amDir := filepath.Join(project, ".squadai")
 	if err := os.MkdirAll(amDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestNew_FileContent(t *testing.T) {
 
 func TestNew_InlineTakesPrecedenceOverFile(t *testing.T) {
 	project := t.TempDir()
-	amDir := filepath.Join(project, ".agent-manager")
+	amDir := filepath.Join(project, ".squadai")
 	if err := os.MkdirAll(amDir, 0755); err != nil {
 		t.Fatal(err)
 	}

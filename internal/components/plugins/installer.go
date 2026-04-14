@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 // pluginSkillContent maps plugin names to their skill-file content.

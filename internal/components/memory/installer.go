@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/assets"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 const (

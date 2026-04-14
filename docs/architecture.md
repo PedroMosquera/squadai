@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the internal architecture of Agent Manager Pro.
+This document describes the internal architecture of SquadAI.
 
 ## Layers
 
@@ -18,9 +18,9 @@ The system is organized into six layers, each with a clear responsibility:
 ## Data Flow
 
 ```
-User Config (~/.agent-manager/config.json)
-Project Config (.agent-manager/project.json)
-Policy Config (.agent-manager/policy.json)
+User Config (~/.squadai/config.json)
+Project Config (.squadai/project.json)
+Policy Config (.squadai/policy.json)
               |
         config.Merge()
   (policy locked > project > user)
@@ -115,9 +115,9 @@ HTML comment-based marker block system for managing content in shared files:
 
 Marker format:
 ```
-<!-- agent-manager:SECTION_ID -->
+<!-- squadai:SECTION_ID -->
 managed content here
-<!-- /agent-manager:SECTION_ID -->
+<!-- /squadai:SECTION_ID -->
 ```
 
 Content outside markers is never modified.
@@ -136,9 +136,9 @@ Manages backup manifests and file snapshots on disk.
 
 Storage layout:
 ```
-~/.agent-manager/backups/<id>/manifest.json
-~/.agent-manager/backups/<id>/files/0
-~/.agent-manager/backups/<id>/files/1
+~/.squadai/backups/<id>/manifest.json
+~/.squadai/backups/<id>/files/0
+~/.squadai/backups/<id>/files/1
 ```
 
 Manifest fields: `id`, `timestamp`, `command`, `affected_files`, `status`.

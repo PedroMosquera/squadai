@@ -1,6 +1,6 @@
 # Build artifacts
 dist/
-agent-manager
+squadai
 
 # Go
 *.exe

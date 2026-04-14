@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/cli"
-	"github.com/PedroMosquera/agent-manager-pro/internal/tui"
+	"github.com/PedroMosquera/squadai/internal/cli"
+	"github.com/PedroMosquera/squadai/internal/tui"
 )
 
 // Version is set from main via ldflags at build time.
@@ -20,7 +20,7 @@ func Run(args []string, stdout, stderr io.Writer) error {
 
 	switch args[0] {
 	case "version", "--version", "-v":
-		fmt.Fprintf(stdout, "agent-manager %s\n", Version)
+		fmt.Fprintf(stdout, "SquadAI %s\n", Version)
 		return nil
 
 	case "help", "--help", "-h":
@@ -76,12 +76,12 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return cli.RunRemove(args[1:], stdout)
 
 	default:
-		return fmt.Errorf("unknown command %q — run 'agent-manager help' for available commands", args[0])
+		return fmt.Errorf("unknown command %q — run 'squadai help' for available commands", args[0])
 	}
 }
 
 func printBackupUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage: agent-manager backup <subcommand> [flags]
+	fmt.Fprint(w, `Usage: squadai backup <subcommand> [flags]
 
 Subcommands:
   create        Create a backup of all managed files
@@ -95,10 +95,10 @@ Flags:
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintf(w, `agent-manager %s — Team-consistent AI setup with safe local customization.
+	fmt.Fprintf(w, `SquadAI %s — Team-consistent AI setup with safe local customization.
 
 Usage:
-  agent-manager <command> [flags]
+  squadai <command> [flags]
 
 Commands:
   init               Initialize project config and optional policy template

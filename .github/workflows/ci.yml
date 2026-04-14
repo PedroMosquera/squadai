@@ -61,12 +61,12 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -o agent-manager ./cmd/agent-manager
+        run: go build -o squadai ./cmd/squadai
 
       - name: Validate sample policy
         run: |
-          mkdir -p .agent-manager
-          cat > .agent-manager/policy.json <<'EOF'
+          mkdir -p .squadai
+          cat > .squadai/policy.json <<'EOF'
           {
             "version": 1,
             "mode": "team",
@@ -88,7 +88,7 @@ jobs:
             }
           }
           EOF
-          ./agent-manager validate-policy
+          ./squadai validate-policy
 
   smoke-test:
     name: Smoke Test (${{ matrix.os }})

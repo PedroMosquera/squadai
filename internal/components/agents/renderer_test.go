@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 func TestRenderTemplate_ValidData(t *testing.T) {

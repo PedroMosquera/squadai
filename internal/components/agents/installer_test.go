@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/cursor"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/vscode"
-	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
-	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
+	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────
@@ -298,7 +298,7 @@ func TestVerify_NoAgents_ReturnsNil(t *testing.T) {
 
 func TestNew_ResolvesPromptFile(t *testing.T) {
 	project := t.TempDir()
-	amDir := filepath.Join(project, ".agent-manager")
+	amDir := filepath.Join(project, ".squadai")
 	if err := os.MkdirAll(amDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -683,10 +683,10 @@ func TestApplyTeamPrompt_InjectsMarkerBlock(t *testing.T) {
 		t.Fatalf("rules file not found: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "<!-- agent-manager:team -->") {
+	if !strings.Contains(content, "<!-- squadai:team -->") {
 		t.Error("should contain opening team marker")
 	}
-	if !strings.Contains(content, "<!-- /agent-manager:team -->") {
+	if !strings.Contains(content, "<!-- /squadai:team -->") {
 		t.Error("should contain closing team marker")
 	}
 }

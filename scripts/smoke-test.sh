@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/smoke-test.sh — End-to-end smoke test for agent-manager.
+# scripts/smoke-test.sh — End-to-end smoke test for squadai.
 #
 # Builds the binary, creates temp projects (Go, Node, Python), and runs
 # init -> apply -> verify through each scenario. Exits non-zero on first failure.
@@ -93,9 +93,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 
-log "Building agent-manager binary"
-BIN="$REPO_ROOT/agent-manager"
-go build -o "$BIN" ./cmd/agent-manager
+log "Building squadai binary"
+BIN="$REPO_ROOT/squadai"
+go build -o "$BIN" ./cmd/squadai
 if [[ ! -x "$BIN" ]]; then
   echo "FATAL: build failed" >&2
   exit 1
@@ -106,7 +106,7 @@ TMPROOT="$(mktemp -d)"
 FAKE_HOME="$TMPROOT/home"
 mkdir -p "$FAKE_HOME"
 
-# Override HOME so we don't touch the real ~/.agent-manager
+# Override HOME so we don't touch the real ~/.squadai
 export HOME="$FAKE_HOME"
 
 trap cleanup EXIT
@@ -133,38 +133,38 @@ EOF
 
 # -- init --
 cd "$GO_PROJECT"
-log "  Running: agent-manager init"
+log "  Running: squadai init"
 INIT_OUT=$("$BIN" init 2>&1) || true
 
-assert_file_exists "$GO_PROJECT/.agent-manager/project.json" "init creates project.json"
-assert_file_exists "$FAKE_HOME/.agent-manager/config.json" "init creates user config"
-assert_file_exists "$GO_PROJECT/.agent-manager/templates/team-standards.md" "init creates team standards"
-assert_file_exists "$GO_PROJECT/.agent-manager/skills/code-review.md" "init creates code-review skill"
-assert_file_exists "$GO_PROJECT/.agent-manager/skills/testing.md" "init creates testing skill"
-assert_file_exists "$GO_PROJECT/.agent-manager/skills/pr-description.md" "init creates pr-description skill"
-assert_file_contains "$GO_PROJECT/.agent-manager/project.json" '"language"' "project.json has language"
-assert_file_contains "$GO_PROJECT/.agent-manager/project.json" '"Go"' "project.json detects Go"
-assert_file_contains "$GO_PROJECT/.agent-manager/templates/team-standards.md" "Error Handling" "Go standards contain Error Handling"
+assert_file_exists "$GO_PROJECT/.squadai/project.json" "init creates project.json"
+assert_file_exists "$FAKE_HOME/.squadai/config.json" "init creates user config"
+assert_file_exists "$GO_PROJECT/.squadai/templates/team-standards.md" "init creates team standards"
+assert_file_exists "$GO_PROJECT/.squadai/skills/code-review.md" "init creates code-review skill"
+assert_file_exists "$GO_PROJECT/.squadai/skills/testing.md" "init creates testing skill"
+assert_file_exists "$GO_PROJECT/.squadai/skills/pr-description.md" "init creates pr-description skill"
+assert_file_contains "$GO_PROJECT/.squadai/project.json" '"language"' "project.json has language"
+assert_file_contains "$GO_PROJECT/.squadai/project.json" '"Go"' "project.json detects Go"
+assert_file_contains "$GO_PROJECT/.squadai/templates/team-standards.md" "Error Handling" "Go standards contain Error Handling"
 assert_output_contains "$INIT_OUT" "Go" "init output mentions Go"
 
 # -- apply --dry-run --
-log "  Running: agent-manager apply --dry-run"
+log "  Running: squadai apply --dry-run"
 DRY_OUT=$("$BIN" apply --dry-run 2>&1) || true
 assert_output_contains "$DRY_OUT" "action(s) would be executed" "dry run reports actions"
 
 # -- apply --
-log "  Running: agent-manager apply"
+log "  Running: squadai apply"
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 
 assert_file_exists "$GO_PROJECT/AGENTS.md" "apply creates AGENTS.md"
 assert_file_exists "$GO_PROJECT/.github/copilot-instructions.md" "apply creates copilot instructions"
-assert_file_contains "$GO_PROJECT/AGENTS.md" "agent-manager" "AGENTS.md has managed marker"
+assert_file_contains "$GO_PROJECT/AGENTS.md" "squadai" "AGENTS.md has managed marker"
 assert_file_contains "$GO_PROJECT/.github/copilot-instructions.md" "myapp" "copilot instructions contain project name"
 assert_output_contains "$APPLY_OUT" "written" "apply output contains 'written'"
 assert_output_contains "$APPLY_OUT" "Applied" "apply output contains summary line"
 
 # -- verify --
-log "  Running: agent-manager verify"
+log "  Running: squadai verify"
 VERIFY_OUT=$("$BIN" verify 2>&1) || true
 assert_output_contains "$VERIFY_OUT" "passed" "verify output contains 'passed'"
 assert_output_contains "$VERIFY_OUT" "checks" "verify output contains check summary"
@@ -179,7 +179,7 @@ log "  Testing user content preservation"
 echo -e "\n## My Custom Notes\n\nDo not delete this." >> "$GO_PROJECT/AGENTS.md"
 APPLY3_OUT=$("$BIN" apply 2>&1) || true
 assert_file_contains "$GO_PROJECT/AGENTS.md" "My Custom Notes" "user content preserved after apply"
-assert_file_contains "$GO_PROJECT/AGENTS.md" "agent-manager" "managed content still present"
+assert_file_contains "$GO_PROJECT/AGENTS.md" "squadai" "managed content still present"
 
 # -- init --force --
 log "  Testing init --force"
@@ -234,9 +234,9 @@ EOF
 
 cd "$NODE_PROJECT"
 INIT_OUT=$("$BIN" init 2>&1) || true
-assert_file_exists "$NODE_PROJECT/.agent-manager/project.json" "node: init creates project.json"
-assert_file_contains "$NODE_PROJECT/.agent-manager/project.json" '"TypeScript"' "node: detects TypeScript"
-assert_file_contains "$NODE_PROJECT/.agent-manager/templates/team-standards.md" "TypeScript" "node: JS/TS standards selected"
+assert_file_exists "$NODE_PROJECT/.squadai/project.json" "node: init creates project.json"
+assert_file_contains "$NODE_PROJECT/.squadai/project.json" '"TypeScript"' "node: detects TypeScript"
+assert_file_contains "$NODE_PROJECT/.squadai/templates/team-standards.md" "TypeScript" "node: JS/TS standards selected"
 
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 assert_file_exists "$NODE_PROJECT/AGENTS.md" "node: apply creates AGENTS.md"
@@ -267,9 +267,9 @@ EOF
 
 cd "$PYTHON_PROJECT"
 INIT_OUT=$("$BIN" init 2>&1) || true
-assert_file_exists "$PYTHON_PROJECT/.agent-manager/project.json" "python: init creates project.json"
-assert_file_contains "$PYTHON_PROJECT/.agent-manager/project.json" '"Python"' "python: detects Python"
-assert_file_contains "$PYTHON_PROJECT/.agent-manager/templates/team-standards.md" "Type Hints" "python: Python standards selected"
+assert_file_exists "$PYTHON_PROJECT/.squadai/project.json" "python: init creates project.json"
+assert_file_contains "$PYTHON_PROJECT/.squadai/project.json" '"Python"' "python: detects Python"
+assert_file_contains "$PYTHON_PROJECT/.squadai/templates/team-standards.md" "Type Hints" "python: Python standards selected"
 
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 assert_file_exists "$PYTHON_PROJECT/AGENTS.md" "python: apply creates AGENTS.md"
@@ -286,8 +286,8 @@ mkdir -p "$EMPTY_PROJECT"
 
 cd "$EMPTY_PROJECT"
 INIT_OUT=$("$BIN" init 2>&1) || true
-assert_file_exists "$EMPTY_PROJECT/.agent-manager/project.json" "empty: init creates project.json"
-assert_file_contains "$EMPTY_PROJECT/.agent-manager/templates/team-standards.md" "Code Quality" "empty: generic standards selected"
+assert_file_exists "$EMPTY_PROJECT/.squadai/project.json" "empty: init creates project.json"
+assert_file_contains "$EMPTY_PROJECT/.squadai/templates/team-standards.md" "Code Quality" "empty: generic standards selected"
 
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 assert_file_exists "$EMPTY_PROJECT/AGENTS.md" "empty: apply creates AGENTS.md"
@@ -316,18 +316,18 @@ printf 'package main\nfunc main() {}\n' > "$TDD_PROJECT/main.go"
 cd "$TDD_PROJECT"
 INIT_OUT=$("$BIN" init --methodology=tdd 2>&1) || true
 
-assert_file_exists "$TDD_PROJECT/.agent-manager/project.json" "scenario6: project.json created"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"tdd"' "scenario6: methodology is tdd"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"orchestrator"' "scenario6: orchestrator role"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"brainstormer"' "scenario6: brainstormer role"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"planner"' "scenario6: planner role"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"implementer"' "scenario6: implementer role"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"reviewer"' "scenario6: reviewer role"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"debugger"' "scenario6: debugger role"
-assert_file_contains "$TDD_PROJECT/.agent-manager/project.json" '"context7"' "scenario6: context7 MCP server"
+assert_file_exists "$TDD_PROJECT/.squadai/project.json" "scenario6: project.json created"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"tdd"' "scenario6: methodology is tdd"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"orchestrator"' "scenario6: orchestrator role"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"brainstormer"' "scenario6: brainstormer role"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"planner"' "scenario6: planner role"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"implementer"' "scenario6: implementer role"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"reviewer"' "scenario6: reviewer role"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"debugger"' "scenario6: debugger role"
+assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"context7"' "scenario6: context7 MCP server"
 
 # -- apply --
-log "  Running: agent-manager apply (TDD)"
+log "  Running: squadai apply (TDD)"
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 
 assert_file_exists "$TDD_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario6: find-skills skill installed"
@@ -346,17 +346,17 @@ printf '[project]\nname = "sdd-test"\nversion = "0.1.0"\n' > "$SDD_PROJECT/pypro
 cd "$SDD_PROJECT"
 INIT_OUT=$("$BIN" init --methodology=sdd 2>&1) || true
 
-assert_file_exists "$SDD_PROJECT/.agent-manager/project.json" "scenario7: project.json created"
-assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"sdd"' "scenario7: methodology is sdd"
-assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"explorer"' "scenario7: explorer role"
-assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"proposer"' "scenario7: proposer role"
-assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"spec-writer"' "scenario7: spec-writer role"
-assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"designer"' "scenario7: designer role"
-assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"task-planner"' "scenario7: task-planner role"
-assert_file_contains "$SDD_PROJECT/.agent-manager/project.json" '"verifier"' "scenario7: verifier role"
+assert_file_exists "$SDD_PROJECT/.squadai/project.json" "scenario7: project.json created"
+assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"sdd"' "scenario7: methodology is sdd"
+assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"explorer"' "scenario7: explorer role"
+assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"proposer"' "scenario7: proposer role"
+assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"spec-writer"' "scenario7: spec-writer role"
+assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"designer"' "scenario7: designer role"
+assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"task-planner"' "scenario7: task-planner role"
+assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"verifier"' "scenario7: verifier role"
 
 # -- apply --
-log "  Running: agent-manager apply (SDD)"
+log "  Running: squadai apply (SDD)"
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 
 assert_file_exists "$SDD_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario7: find-skills skill installed"
@@ -375,14 +375,14 @@ printf '{"compilerOptions": {"target": "es2020"}}\n' > "$CONV_PROJECT/tsconfig.j
 cd "$CONV_PROJECT"
 INIT_OUT=$("$BIN" init --methodology=conventional 2>&1) || true
 
-assert_file_exists "$CONV_PROJECT/.agent-manager/project.json" "scenario8: project.json created"
-assert_file_contains "$CONV_PROJECT/.agent-manager/project.json" '"conventional"' "scenario8: methodology is conventional"
-assert_file_contains "$CONV_PROJECT/.agent-manager/project.json" '"tester"' "scenario8: tester role"
+assert_file_exists "$CONV_PROJECT/.squadai/project.json" "scenario8: project.json created"
+assert_file_contains "$CONV_PROJECT/.squadai/project.json" '"conventional"' "scenario8: methodology is conventional"
+assert_file_contains "$CONV_PROJECT/.squadai/project.json" '"tester"' "scenario8: tester role"
 
 # Apply
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 assert_file_exists "$CONV_PROJECT/AGENTS.md" "scenario8: AGENTS.md created after apply"
-assert_file_contains "$CONV_PROJECT/AGENTS.md" "agent-manager" "scenario8: AGENTS.md has marker"
+assert_file_contains "$CONV_PROJECT/AGENTS.md" "squadai" "scenario8: AGENTS.md has marker"
 assert_output_contains "$APPLY_OUT" "written" "scenario8: apply reports written files"
 assert_file_exists "$CONV_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario8: find-skills skill installed"
 assert_file_exists "$CONV_PROJECT/.opencode/commands/review.md" "scenario8: review command installed"
@@ -407,8 +407,8 @@ mkdir -p "$FAKE_HOME/.codeium/windsurf"
 cd "$MULTI_PROJECT"
 INIT_OUT=$("$BIN" init --methodology=conventional 2>&1) || true
 
-assert_file_exists "$MULTI_PROJECT/.agent-manager/project.json" "scenario9: project.json created"
-assert_file_contains "$MULTI_PROJECT/.agent-manager/project.json" '"opencode"' "scenario9: opencode adapter in config"
+assert_file_exists "$MULTI_PROJECT/.squadai/project.json" "scenario9: project.json created"
+assert_file_contains "$MULTI_PROJECT/.squadai/project.json" '"opencode"' "scenario9: opencode adapter in config"
 
 # ── Scenario 10: MCP config verification after apply ───────────────────────
 
@@ -422,17 +422,17 @@ cd "$MCP_PROJECT"
 "$BIN" init --methodology=tdd >/dev/null 2>&1 || true
 
 # Verify project.json was created with MCP servers and team roles
-assert_file_exists "$MCP_PROJECT/.agent-manager/project.json" "scenario10: project.json created"
-assert_file_contains "$MCP_PROJECT/.agent-manager/project.json" '"context7"' "scenario10: context7 MCP server in project.json"
-assert_file_contains "$MCP_PROJECT/.agent-manager/project.json" '"tdd"' "scenario10: tdd methodology in project.json"
+assert_file_exists "$MCP_PROJECT/.squadai/project.json" "scenario10: project.json created"
+assert_file_contains "$MCP_PROJECT/.squadai/project.json" '"context7"' "scenario10: context7 MCP server in project.json"
+assert_file_contains "$MCP_PROJECT/.squadai/project.json" '"tdd"' "scenario10: tdd methodology in project.json"
 
 # Enable MCP component so apply creates opencode.json
 if ! command -v jq &>/dev/null; then
   echo "  ⚠ jq not found, skipping MCP JSON edit test"
 else
   jq '.components.mcp = {"enabled": true} | .components.agents = {"enabled": true}' \
-    .agent-manager/project.json > .agent-manager/project.json.tmp \
-    && mv .agent-manager/project.json.tmp .agent-manager/project.json
+    .squadai/project.json > .squadai/project.json.tmp \
+    && mv .squadai/project.json.tmp .squadai/project.json
 fi
 
 APPLY_OUT=$("$BIN" apply 2>&1) || true

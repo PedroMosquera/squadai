@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // Merge combines user, project, and policy configs with precedence:
@@ -24,7 +24,7 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		Adapters:   make(map[string]domain.AdapterConfig),
 		Components: make(map[string]domain.ComponentConfig),
 		Paths: domain.PathsConfig{
-			BackupDir: "~/.agent-manager/backups",
+			BackupDir: "~/.squadai/backups",
 		},
 	}
 

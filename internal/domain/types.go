@@ -50,6 +50,9 @@ const (
 	ComponentCommands  ComponentID = "commands"
 	ComponentPlugins   ComponentID = "plugins"
 	ComponentWorkflows ComponentID = "workflows"
+	// ComponentCleanup is used for stale-file deletion actions that are not
+	// associated with a specific installable component.
+	ComponentCleanup ComponentID = "cleanup"
 )
 
 // OperationalMode determines config precedence behavior.
