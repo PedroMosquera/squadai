@@ -2,8 +2,8 @@
 # install.sh — Downloads the latest agent-manager binary to /usr/local/bin.
 # Usage: curl -sSL https://raw.githubusercontent.com/PedroMosquera/agent-manager-pro/main/scripts/install.sh | sh
 #
-# Requirements: curl (pre-installed on macOS)
-# Supports: darwin/arm64 (Apple Silicon), darwin/amd64 (Intel)
+# Requirements: curl
+# Supports: darwin/arm64, darwin/amd64, linux/arm64, linux/amd64
 
 set -e
 
@@ -30,8 +30,9 @@ detect_os() {
     os=$(uname -s | tr '[:upper:]' '[:lower:]')
     case "$os" in
         darwin) echo "darwin" ;;
+        linux)  echo "linux" ;;
         *)
-            echo "Error: unsupported OS: $os (only macOS is supported)" >&2
+            echo "Error: unsupported OS: $os (only macOS and Linux are supported)" >&2
             exit 1
             ;;
     esac

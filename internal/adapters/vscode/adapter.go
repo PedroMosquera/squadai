@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -48,7 +49,9 @@ func (a *Adapter) Lane() domain.AdapterLane {
 }
 
 // Detect checks whether the code binary is on PATH and whether
-// the config directory (~/Library/Application Support/Code/User) exists.
+// the config directory exists for the current OS.
+// macOS: ~/Library/Application Support/Code/User
+// Linux: ~/.config/Code/User
 func (a *Adapter) Detect(_ context.Context, homeDir string) (installed bool, configFound bool, err error) {
 	_, lookErr := a.lookPath("code")
 	if lookErr == nil {
@@ -68,22 +71,28 @@ func (a *Adapter) Detect(_ context.Context, homeDir string) (installed bool, con
 	return installed, configFound, nil
 }
 
-// GlobalConfigDir returns ~/Library/Application Support/Code/User.
+// GlobalConfigDir returns the VS Code user config directory for the current OS.
+// macOS: ~/Library/Application Support/Code/User
+// Linux: ~/.config/Code/User
 func (a *Adapter) GlobalConfigDir(homeDir string) string {
 	return ConfigDir(homeDir)
 }
 
-// SystemPromptFile returns ~/Library/Application Support/Code/User/.instructions.md.
+// SystemPromptFile returns the path to the Copilot instructions file.
+// macOS: ~/Library/Application Support/Code/User/.instructions.md
+// Linux: ~/.config/Code/User/.instructions.md
 func (a *Adapter) SystemPromptFile(homeDir string) string {
 	return filepath.Join(ConfigDir(homeDir), ".instructions.md")
 }
 
-// SkillsDir returns ~/.copilot/skills.
+// SkillsDir returns ~/.copilot/skills (same on all platforms).
 func (a *Adapter) SkillsDir(homeDir string) string {
 	return filepath.Join(homeDir, ".copilot", "skills")
 }
 
-// SettingsPath returns ~/Library/Application Support/Code/User/settings.json.
+// SettingsPath returns the VS Code settings.json path for the current OS.
+// macOS: ~/Library/Application Support/Code/User/settings.json
+// Linux: ~/.config/Code/User/settings.json
 func (a *Adapter) SettingsPath(homeDir string) string {
 	return filepath.Join(ConfigDir(homeDir), "settings.json")
 }
@@ -150,6 +159,11 @@ func (a *Adapter) WorkflowsDir(_ string) string {
 }
 
 // ConfigDir returns the root config directory for VS Code Copilot.
+// On macOS it is ~/Library/Application Support/Code/User.
+// On Linux it is ~/.config/Code/User.
 func ConfigDir(homeDir string) string {
+	if runtime.GOOS == "linux" {
+		return filepath.Join(homeDir, ".config", "Code", "User")
+	}
 	return filepath.Join(homeDir, "Library", "Application Support", "Code", "User")
 }

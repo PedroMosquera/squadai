@@ -10,6 +10,8 @@ agent-manager
 *.dylib
 *.test
 *.out
+coverage.out
+coverage.html
 vendor/
 
 # IDE

@@ -12,6 +12,7 @@ builds:
       - CGO_ENABLED=0
     goos:
       - darwin
+      - linux
     goarch:
       - amd64
       - arm64
@@ -38,22 +39,23 @@ changelog:
       - "^test:"
       - "^chore:"
 
-# TODO(v2): Enable Homebrew tap publishing
-# Requires HOMEBREW_TAP_GITHUB_TOKEN secret and PedroMosquera/homebrew-tap repo.
-#
-# brews:
-#   - repository:
-#       owner: PedroMosquera
-#       name: homebrew-tap
-#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-#     name: agent-manager-pro
-#     homepage: "https://github.com/PedroMosquera/agent-manager-pro"
-#     description: "CLI tool that standardizes AI coding agent environments across a team"
-#     license: "MIT"
-#     install: |
-#       bin.install "agent-manager"
-#     test: |
-#       system "#{bin}/agent-manager", "version"
+# Homebrew tap publishing.
+# Requires the HOMEBREW_TAP_TOKEN GitHub Actions secret and the
+# PedroMosquera/homebrew-tap repository to exist before this runs.
+brews:
+  - repository:
+      owner: PedroMosquera
+      name: homebrew-tap
+      # HOMEBREW_TAP_TOKEN secret must be set in GitHub Actions for publishing.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    name: agent-manager
+    homepage: "https://github.com/PedroMosquera/agent-manager-pro"
+    description: "CLI tool that standardizes AI coding agent environments across a team"
+    license: "MIT"
+    install: |
+      bin.install "agent-manager"
+    test: |
+      system "#{bin}/agent-manager", "version"
 
 release:
   github:

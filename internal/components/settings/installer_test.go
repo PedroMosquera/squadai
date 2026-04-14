@@ -89,7 +89,7 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	// Write existing file with matching content.
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"model": "anthropic/claude-sonnet-4-5",
+		"model":        "anthropic/claude-sonnet-4-5",
 		managedMetaKey: managedMeta{ManagedKeys: []string{"model"}},
 	})
 

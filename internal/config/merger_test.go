@@ -243,7 +243,7 @@ func TestMerge_NoViolation_WhenFieldNotLocked(t *testing.T) {
 		},
 	}
 	policy := &domain.PolicyConfig{
-		Mode: domain.ModeTeam,
+		Mode:   domain.ModeTeam,
 		Locked: []string{}, // nothing locked
 		Required: domain.RequiredBlock{
 			Adapters: map[string]domain.AdapterConfig{
