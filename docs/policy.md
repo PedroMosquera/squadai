@@ -56,7 +56,9 @@ The following fields can be locked by policy:
 |------------|----------|
 | `adapters.opencode.enabled` | Whether OpenCode adapter is active |
 | `adapters.claude-code.enabled` | Whether Claude Code adapter is active |
-| `adapters.codex.enabled` | Whether Codex adapter is active |
+| `adapters.vscode-copilot.enabled` | Whether VS Code Copilot adapter is active |
+| `adapters.cursor.enabled` | Whether Cursor adapter is active |
+| `adapters.windsurf.enabled` | Whether Windsurf adapter is active |
 | `components.memory.enabled` | Whether memory component is installed |
 | `copilot.instructions_template` | Which copilot instructions template is used |
 
@@ -133,9 +135,9 @@ Edit the file to match your team's requirements, then commit it to the repositor
 
 ## Personal Lane Compatibility
 
-Policy only governs team-lane adapters and shared components. Personal-lane adapters (Claude Code, Codex) are controlled by the user config and are not affected by policy locks unless explicitly locked.
+Policy only governs team-lane adapters and shared components. Personal-lane adapters (Claude Code, VS Code Copilot, Cursor, Windsurf) are controlled by the user config and are not affected by policy locks unless explicitly locked.
 
-A user can enable Claude Code or Codex in their `~/.agent-manager/config.json` without affecting team compliance, as long as the team-required adapters and components remain enabled.
+A user can enable Claude Code, Cursor, or any other personal-lane adapter in their `~/.agent-manager/config.json` without affecting team compliance, as long as the team-required adapters and components remain enabled.
 
 ## Troubleshooting
 
@@ -149,4 +151,4 @@ Every field listed in `locked` must have a corresponding value in `required`. Ad
 
 **Personal adapter not appearing**
 
-Personal-lane adapters (Claude Code, Codex) are only included when the binary or config directory is detected. They are not controlled by policy unless explicitly locked.
+Personal-lane adapters (Claude Code, VS Code Copilot, Cursor, Windsurf) are only included when the binary or config directory is detected. They are not controlled by policy unless explicitly locked.

@@ -26,7 +26,7 @@ Policy Config (.agent-manager/policy.json)
   (policy locked > project > user)
               |
         planner.Plan()
-  (iterates enabled adapters x components + copilot)
+  (iterates enabled adapters x components + copilot + methodology team)
               |
         backup.SnapshotFiles()
   (copies all target files before mutation)
@@ -45,9 +45,11 @@ Policy Config (.agent-manager/policy.json)
 
 Core types and interfaces with no filesystem dependencies. Defines:
 
-- **AgentID** — `opencode`, `claude-code`, `codex`
+- **AgentID** — `opencode`, `claude-code`, `vscode-copilot`, `cursor`, `windsurf`
 - **AdapterLane** — `team` (required) or `personal` (optional)
-- **ComponentID** — `memory` (V1)
+- **Methodology** — `tdd`, `sdd`, `conventional`
+- **DelegationStrategy** — `native` (OpenCode, Cursor), `prompt` (Claude Code), `solo` (VS Code, Windsurf)
+- **ComponentID** — `memory`, `rules`, `settings`, `mcp`, `agents`, `skills`, `commands`, `plugins`, `workflows`
 - **OperationalMode** — `team`, `personal`, `hybrid`
 - **PlannedAction** — a single step the planner produces
 - **StepResult** — outcome of executing one action
@@ -75,9 +77,11 @@ Three-layer configuration loading and merging.
 
 Each adapter is isolated in its own package and implements `domain.Adapter`. No path logic exists outside adapter packages.
 
-- `opencode/` — team baseline adapter (always included)
-- `claude/` — personal-lane adapter (included only when detected)
-- `codex/` — personal-lane adapter (included only when detected)
+- `opencode/` — team baseline adapter (always included), native delegation
+- `claude/` — personal-lane adapter, prompt-based delegation
+- `vscode/` — personal-lane adapter (VS Code Copilot), solo delegation
+- `cursor/` — personal-lane adapter, native delegation
+- `windsurf/` — personal-lane adapter, solo delegation
 
 ### `internal/components`
 
@@ -85,6 +89,14 @@ Component installers implement `domain.ComponentInstaller`.
 
 - `memory/` — installs memory protocol files for supported adapters
 - `copilot/` — manages `.github/copilot-instructions.md` with marker blocks
+- `rules/` — writes agent-specific rule/instruction files with team standards
+- `settings/` — manages agent-specific settings and preferences
+- `mcp/` — installs MCP server configurations for agents that support them
+- `agents/` — installs sub-agent definitions from methodology team composition
+- `skills/` — installs methodology-specific skill files
+- `commands/` — installs custom slash commands for agents that support them
+- `plugins/` — installs optional plugin configurations
+- `workflows/` — installs workflow definitions
 
 ### `internal/fileutil`
 
@@ -135,7 +147,7 @@ Each `FileSnapshot` records: `path`, `existed_before`, `checksum_before`, `backu
 
 ### `internal/verify`
 
-Aggregates verification checks from memory and copilot components, plus policy compliance. Returns a `VerifyReport` with individual check results.
+Aggregates verification checks from all component installers, plus policy compliance. Returns a `VerifyReport` with individual check results grouped by component.
 
 ### `internal/cli`
 
@@ -143,9 +155,16 @@ Command implementations. Each command function accepts `args` and `stdout`, load
 
 ### `internal/tui`
 
-Minimal bubbletea TUI with two screens:
-1. **Intro** — tool name, version, detected mode, adapter summary
-2. **Menu** — Plan, Apply, Sync, Verify, Restore backup, Quit
+Bubbletea TUI with nine screens:
+1. **Intro** — tool name, version, detected mode, adapter summary with delegation strategies
+2. **Menu** — Init/Setup, Plan, Apply, Sync, Team Status, Verify, Restore backup, Quit
+3. **Running** — progress indicator while a command executes
+4. **Result** — command output display
+5. **Init Methodology** — select TDD, SDD, or Conventional (shows role pipeline)
+6. **Team Status** — shows current methodology, team roles, MCP servers, and plugins
+7. **Init MCP** — toggle MCP servers (Context7 pre-selected)
+8. **Init Plugins** — toggle available plugins (filtered by agent and methodology)
+9. **Init Summary** — review all selections before confirming
 
 Delegates to the same command handlers used by CLI.
 

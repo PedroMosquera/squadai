@@ -19,27 +19,59 @@ These flags are accepted by all mutating commands:
 Initialize a project for Agent Manager Pro.
 
 ```sh
-agent-manager init [--with-policy]
+agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]
 ```
 
 Creates:
 - `.agent-manager/project.json` — project config with defaults
+- `.agent-manager/templates/team-standards.md` — language-specific team standards
+- `.agent-manager/skills/` — starter skill files (code-review, testing, pr-description, find-skills)
 - `~/.agent-manager/config.json` — user config (if it doesn't already exist)
 
 With `--with-policy`:
 - `.agent-manager/policy.json` — team policy template with locked fields
 
-Existing files are never overwritten. The command reports `exists` for files that are already present.
+With `--methodology=<tdd|sdd|conventional>`:
+- Sets the development methodology in `project.json`
+- Generates team composition (TDD: 6 roles, SDD: 8 roles, Conventional: 4 roles)
+- Enables the `agents` and `commands` components
+
+With `--mcp=<csv>`:
+- Comma-separated list of MCP server IDs to enable (e.g., `context7`)
+- Omit to include all recommended servers
+
+With `--plugins=<csv>`:
+- Comma-separated list of plugin IDs to enable (e.g., `code-review`)
+- Omit to skip plugin installation
+
+With `--force`:
+- Overwrites existing template and skill files
+- Overwrites `project.json` if it already exists
+
+Existing files are never overwritten without `--force`. The command reports `exists` for files that are already present.
 
 **Example:**
 
 ```sh
-$ agent-manager init --with-policy
+$ agent-manager init --methodology=tdd --with-policy
   created .agent-manager/project.json
   created .agent-manager/policy.json
+  created .agent-manager/templates/team-standards.md
+  created .agent-manager/skills/code-review.md
+  created .agent-manager/skills/testing.md
+  created .agent-manager/skills/pr-description.md
+  created .agent-manager/skills/find-skills.md
   created /Users/you/.agent-manager/config.json
 
-Done. Review the generated files and commit them to your repository.
+Detected:
+  Language: Go
+  Project:  my-project
+  Agents:   opencode, claude-code, cursor
+  Methodology: tdd
+  Team roles:  6
+  MCP servers: context7
+
+Run 'agent-manager apply' to configure your environment.
 ```
 
 ---
@@ -267,9 +299,18 @@ The version is set at build time via Go ldflags.
 
 ## Interactive TUI
 
-When invoked with no arguments, `agent-manager` launches a minimal terminal UI:
+When invoked with no arguments, `agent-manager` launches a terminal UI with nine screens:
 
-1. **Intro screen** — shows tool name, version, current mode, and detected adapters
-2. **Menu** — Plan (dry-run), Apply, Sync, Verify, Restore backup, Quit
+1. **Intro** — tool name, version, current mode, detected adapters with delegation strategies
+2. **Menu** — Init/Setup, Plan (dry-run), Apply, Sync, Team Status, Verify, Restore backup, Quit
+3. **Running** — progress indicator while a command executes
+4. **Result** — command output display
+5. **Init Methodology** — select TDD, SDD, or Conventional (shows role pipeline for each)
+6. **Team Status** — current methodology, team roles, MCP servers, and enabled plugins
+7. **Init MCP** — toggle MCP servers (Context7 pre-selected by default)
+8. **Init Plugins** — toggle available plugins (filtered by detected agents and methodology)
+9. **Init Summary** — review all selections before confirming
+
+The init wizard flow is: Methodology → MCP → Plugins → Summary → Apply.
 
 The TUI delegates to the same command handlers as the CLI.

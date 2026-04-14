@@ -25,12 +25,25 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/verify"
 )
 
+// initResult is the JSON representation of a successful init run.
+type initResult struct {
+	ProjectDir    string          `json:"project_dir"`
+	Methodology   string          `json:"methodology"`
+	Adapters      []string        `json:"adapters"`
+	Components    map[string]bool `json:"components"`
+	SkillsWritten []string        `json:"skills_written"`
+	MCPServers    []string        `json:"mcp_servers"`
+	Plugins       []string        `json:"plugins"`
+	PolicyCreated bool            `json:"policy_created"`
+}
+
 // RunInit creates .agent-manager/project.json and optionally .agent-manager/policy.json
 // in the current working directory. It detects adapters, selects language-specific
 // standards, and writes starter skill files.
 func RunInit(args []string, stdout io.Writer) error {
 	withPolicy := false
 	force := false
+	jsonOut := false
 	var methodology string
 	var mcpFlag string
 	var pluginsFlag string
@@ -52,14 +65,36 @@ func RunInit(args []string, stdout io.Writer) error {
 			withPolicy = true
 		case "--force":
 			force = true
+		case "--json":
+			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]")
-			fmt.Fprintln(stdout, "  Creates .agent-manager/project.json in the current directory.")
-			fmt.Fprintln(stdout, "  --methodology  Set the development methodology (tdd, sdd, conventional).")
-			fmt.Fprintln(stdout, "  --mcp          Comma-separated list of MCP server IDs to enable.")
-			fmt.Fprintln(stdout, "  --plugins      Comma-separated list of plugin IDs to enable.")
-			fmt.Fprintln(stdout, "  --with-policy  Also create a team policy template.")
-			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files.")
+			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force] [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Initialize .agent-manager/project.json in the current directory. Detects installed")
+			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
+			fmt.Fprintln(stdout, "project language, and writes language-specific team standards and starter skill files.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --methodology=<tdd|sdd|conventional>")
+			fmt.Fprintln(stdout, "                 Set the development methodology. Generates a team composition")
+			fmt.Fprintln(stdout, "                 (TDD: 6 roles, SDD: 8 roles, Conventional: 4 roles) and enables")
+			fmt.Fprintln(stdout, "                 the agents and commands components.")
+			fmt.Fprintln(stdout, "  --mcp=<csv>    Comma-separated list of MCP server IDs to enable (e.g. context7).")
+			fmt.Fprintln(stdout, "                 Omit to include all recommended servers.")
+			fmt.Fprintln(stdout, "  --plugins=<csv>")
+			fmt.Fprintln(stdout, "                 Comma-separated list of plugin IDs to enable (e.g. code-review).")
+			fmt.Fprintln(stdout, "                 Omit to skip plugin installation.")
+			fmt.Fprintln(stdout, "  --with-policy  Also create .agent-manager/policy.json with a starter template.")
+			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
+			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
+			fmt.Fprintln(stdout, "  --json         Output the init result as JSON instead of human-readable text.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager init")
+			fmt.Fprintln(stdout, "  agent-manager init --methodology=tdd --with-policy")
+			fmt.Fprintln(stdout, "  agent-manager init --methodology=sdd --mcp=context7 --plugins=code-review")
+			fmt.Fprintln(stdout, "  agent-manager init --force")
+			fmt.Fprintln(stdout, "  agent-manager init --json")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for init", arg)
@@ -119,34 +154,43 @@ func RunInit(args []string, stdout io.Writer) error {
 		detectedAdapters = DetectAdapters(homeDir)
 	}
 
+	// When --json is set, suppress all human-readable writes to stdout by
+	// redirecting the human output writer to a discard sink.
+	humanOut := stdout
+	if jsonOut {
+		humanOut = io.Discard
+	}
+
 	// Create project config.
 	projectPath := config.ProjectConfigPath(projectDir)
 	_, projectExists := os.Stat(projectPath)
 	if projectExists == nil && !force {
-		fmt.Fprintf(stdout, "  exists  %s\n", relPath(projectDir, projectPath))
+		fmt.Fprintf(humanOut, "  exists  %s\n", relPath(projectDir, projectPath))
 	} else {
 		proj := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
 		if projectExists == nil && force {
-			fmt.Fprintf(stdout, "  overwritten %s\n", relPath(projectDir, projectPath))
+			fmt.Fprintf(humanOut, "  overwritten %s\n", relPath(projectDir, projectPath))
 		} else {
-			fmt.Fprintf(stdout, "  created %s\n", relPath(projectDir, projectPath))
+			fmt.Fprintf(humanOut, "  created %s\n", relPath(projectDir, projectPath))
 		}
 	}
 
 	// Create policy config if requested.
+	policyCreated := false
 	if withPolicy {
 		policyPath := config.PolicyConfigPath(projectDir)
 		if _, err := os.Stat(policyPath); err == nil {
-			fmt.Fprintf(stdout, "  exists  %s\n", relPath(projectDir, policyPath))
+			fmt.Fprintf(humanOut, "  exists  %s\n", relPath(projectDir, policyPath))
 		} else {
 			pol := domain.DefaultPolicyConfig()
 			if err := config.WriteJSON(policyPath, pol); err != nil {
 				return fmt.Errorf("write policy config: %w", err)
 			}
-			fmt.Fprintf(stdout, "  created %s\n", relPath(projectDir, policyPath))
+			fmt.Fprintf(humanOut, "  created %s\n", relPath(projectDir, policyPath))
+			policyCreated = true
 		}
 	}
 
@@ -156,7 +200,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		if _, statErr := os.Stat(userPath); statErr != nil {
 			userCfg := domain.DefaultUserConfig()
 			if writeErr := config.WriteJSON(userPath, userCfg); writeErr == nil {
-				fmt.Fprintf(stdout, "  created %s\n", userPath)
+				fmt.Fprintf(humanOut, "  created %s\n", userPath)
 			}
 		}
 	}
@@ -164,7 +208,7 @@ func RunInit(args []string, stdout io.Writer) error {
 	// Write language-specific team standards.
 	standardsContent := selectStandards(meta.Language)
 	standardsPath := filepath.Join(projectDir, config.ProjectConfigDir, "templates", "team-standards.md")
-	writeInitFile(stdout, projectDir, standardsPath, standardsContent, force)
+	writeInitFile(humanOut, projectDir, standardsPath, standardsContent, force)
 
 	// Write starter skill files.
 	skillFiles := []struct {
@@ -176,9 +220,56 @@ func RunInit(args []string, stdout io.Writer) error {
 		{"skills/shared/pr-description/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "pr-description.md")},
 		{"skills/shared/find-skills/SKILL.md", filepath.Join(projectDir, config.ProjectConfigDir, "skills", "find-skills.md")},
 	}
+	skillNames := make([]string, 0, len(skillFiles))
 	for _, sf := range skillFiles {
 		content := assets.MustRead(sf.name)
-		writeInitFile(stdout, projectDir, sf.path, content, force)
+		writeInitFile(humanOut, projectDir, sf.path, content, force)
+		skillNames = append(skillNames, sf.name)
+	}
+
+	if jsonOut {
+		// Build adapter ID list.
+		adapterIDs := make([]string, 0, len(detectedAdapters))
+		for _, a := range detectedAdapters {
+			adapterIDs = append(adapterIDs, string(a.ID()))
+		}
+
+		// Build component/MCP/plugin state from the written project config.
+		proj := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
+
+		componentMap := make(map[string]bool, len(proj.Components))
+		for k, v := range proj.Components {
+			componentMap[k] = v.Enabled
+		}
+
+		mcpIDs := make([]string, 0, len(proj.MCP))
+		for k := range proj.MCP {
+			mcpIDs = append(mcpIDs, k)
+		}
+		sort.Strings(mcpIDs)
+
+		pluginIDs := make([]string, 0, len(proj.Plugins))
+		for k := range proj.Plugins {
+			pluginIDs = append(pluginIDs, k)
+		}
+		sort.Strings(pluginIDs)
+
+		result := initResult{
+			ProjectDir:    projectDir,
+			Methodology:   string(meth),
+			Adapters:      adapterIDs,
+			Components:    componentMap,
+			SkillsWritten: skillNames,
+			MCPServers:    mcpIDs,
+			Plugins:       pluginIDs,
+			PolicyCreated: policyCreated,
+		}
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal init result: %w", err)
+		}
+		fmt.Fprintln(stdout, string(data))
+		return nil
 	}
 
 	// Print summary.
@@ -389,12 +480,33 @@ func relPath(base, target string) string {
 	return rel
 }
 
+// validatePolicyResult is the JSON representation of a validate-policy run.
+type validatePolicyResult struct {
+	Valid      bool     `json:"valid"`
+	Violations []string `json:"violations"`
+	PolicyPath string   `json:"policy_path"`
+}
+
 // RunValidatePolicy validates .agent-manager/policy.json in the current directory.
 func RunValidatePolicy(args []string, stdout io.Writer) error {
+	jsonOut := false
 	for _, arg := range args {
-		if arg == "-h" || arg == "--help" {
-			fmt.Fprintln(stdout, "Usage: agent-manager validate-policy")
-			fmt.Fprintln(stdout, "  Validates .agent-manager/policy.json schema and lock consistency.")
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager validate-policy [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Validate .agent-manager/policy.json in the current directory. Checks that the")
+			fmt.Fprintln(stdout, "schema is well-formed, that all locked component IDs are valid, and that required")
+			fmt.Fprintln(stdout, "component constraints are internally consistent. Exits non-zero when issues are found.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output the validation result as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager validate-policy")
+			fmt.Fprintln(stdout, "  agent-manager validate-policy --json")
 			return nil
 		}
 	}
@@ -404,15 +516,39 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
 
+	policyPath := config.PolicyConfigPath(projectDir)
+
 	policy, err := config.LoadPolicy(projectDir)
 	if err != nil {
 		if errors.Is(err, domain.ErrConfigNotFound) {
-			return fmt.Errorf("no policy file found at %s", config.PolicyConfigPath(projectDir))
+			return fmt.Errorf("no policy file found at %s", policyPath)
 		}
 		return fmt.Errorf("load policy: %w", err)
 	}
 
 	issues := config.ValidatePolicy(policy)
+
+	if jsonOut {
+		violations := issues
+		if violations == nil {
+			violations = []string{}
+		}
+		result := validatePolicyResult{
+			Valid:      len(issues) == 0,
+			Violations: violations,
+			PolicyPath: policyPath,
+		}
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal validate-policy result: %w", err)
+		}
+		fmt.Fprintln(stdout, string(data))
+		if len(issues) > 0 {
+			return fmt.Errorf("policy validation failed with %d issue(s)", len(issues))
+		}
+		return nil
+	}
+
 	if len(issues) == 0 {
 		fmt.Fprintln(stdout, "Policy is valid. No issues found.")
 		return nil
@@ -437,6 +573,19 @@ func RunPlan(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: agent-manager plan [--dry-run] [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Compute the set of actions needed to bring all detected agents into the desired")
+			fmt.Fprintln(stdout, "state described by .agent-manager/project.json. Covers all 9 components (memory,")
+			fmt.Fprintln(stdout, "rules, settings, MCP, agents, skills, commands, plugins, workflows) across all 5")
+			fmt.Fprintln(stdout, "supported agents. No files are written — this is always a read-only preview.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --dry-run  Accepted for consistency with apply; plan is inherently read-only.")
+			fmt.Fprintln(stdout, "  --json     Output the planned actions as a JSON array.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager plan")
+			fmt.Fprintln(stdout, "  agent-manager plan --json")
 			return nil
 		}
 	}
@@ -508,6 +657,23 @@ func RunApply(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: agent-manager apply [--dry-run] [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
+			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
+			fmt.Fprintln(stdout, "detected agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode).")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "All managed files are backed up automatically before any changes are written.")
+			fmt.Fprintln(stdout, "If any step fails, all completed changes are rolled back using the backup.")
+			fmt.Fprintln(stdout, "The backup ID is printed so you can restore manually if needed.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --dry-run  Preview the actions that would be executed without writing any files.")
+			fmt.Fprintln(stdout, "  --json     Output the execution report as JSON (includes backup ID and step results).")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager apply")
+			fmt.Fprintln(stdout, "  agent-manager apply --dry-run")
+			fmt.Fprintln(stdout, "  agent-manager apply --json")
 			return nil
 		}
 	}
@@ -618,6 +784,26 @@ func RunApply(args []string, stdout io.Writer) error {
 
 // RunSync performs idempotent reconciliation (same as apply — plan then execute).
 func RunSync(args []string, stdout io.Writer) error {
+	// Intercept help before delegating to apply.
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			fmt.Fprintln(stdout, "Usage: agent-manager sync [--dry-run] [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Idempotent reconciliation: plan and apply in one step. Identical to apply but")
+			fmt.Fprintln(stdout, "emphasizes idempotency — running sync multiple times produces the same result.")
+			fmt.Fprintln(stdout, "Actions are skipped automatically when the target file already matches the desired")
+			fmt.Fprintln(stdout, "state, so it is safe to run on a schedule or in CI.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --dry-run  Preview the actions that would be executed without writing any files.")
+			fmt.Fprintln(stdout, "  --json     Output the execution report as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager sync")
+			fmt.Fprintln(stdout, "  agent-manager sync --dry-run")
+			return nil
+		}
+	}
 	// Sync is semantically identical to apply — it plans and executes.
 	// The idempotency comes from the planner returning Skip for up-to-date items.
 	return RunApply(args, stdout)
@@ -632,6 +818,21 @@ func RunVerify(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: agent-manager verify [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Run compliance and health checks against the current project configuration.")
+			fmt.Fprintln(stdout, "Verifies that all enabled components are correctly installed for each detected")
+			fmt.Fprintln(stdout, "agent: expected files exist, marker blocks are present, and settings are valid.")
+			fmt.Fprintln(stdout, "Exits non-zero if any check fails.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Each check is reported as PASS, FAIL, or WARN. Warnings do not cause a non-zero")
+			fmt.Fprintln(stdout, "exit. Results are grouped by component when there are more than 5 checks.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output the full verification report as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager verify")
+			fmt.Fprintln(stdout, "  agent-manager verify --json")
 			return nil
 		}
 	}
@@ -787,7 +988,17 @@ func RunBackupCreate(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: agent-manager backup create [--json]")
-			fmt.Fprintln(stdout, "  Creates a snapshot of all managed files.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Create a manual snapshot of all files that agent-manager manages. The backup")
+			fmt.Fprintln(stdout, "includes every file that would be written by apply, even those that are already")
+			fmt.Fprintln(stdout, "up to date. Backups are stored under ~/.agent-manager/backups by default.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output the backup manifest as JSON (includes ID, timestamp, and file list).")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager backup create")
+			fmt.Fprintln(stdout, "  agent-manager backup create --json")
 			return nil
 		}
 	}
@@ -850,6 +1061,17 @@ func RunBackupList(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: agent-manager backup list [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "List all available backup snapshots. Shows the backup ID, the command that created")
+			fmt.Fprintln(stdout, "the backup (apply or manual), the number of files captured, and the status.")
+			fmt.Fprintln(stdout, "Use the ID with 'agent-manager restore <id>' to roll back to a specific snapshot.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output the backup list as a JSON array.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager backup list")
+			fmt.Fprintln(stdout, "  agent-manager backup list --json")
 			return nil
 		}
 	}
@@ -908,7 +1130,19 @@ func RunRestore(args []string, stdout io.Writer) error {
 			dryRun = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: agent-manager restore <backup-id> [--dry-run] [--json]")
-			fmt.Fprintln(stdout, "  Restores managed files from a backup snapshot.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Restore managed files from a backup snapshot. Files that existed before the backup")
+			fmt.Fprintln(stdout, "are written back to their original content; files that did not exist before are")
+			fmt.Fprintln(stdout, "removed. The backup ID is printed after every apply and can be listed with")
+			fmt.Fprintln(stdout, "'agent-manager backup list'.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --dry-run  Show which files would be restored or removed without changing anything.")
+			fmt.Fprintln(stdout, "  --json     Output the restore result as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager restore 2024-01-15T10-30-00Z-abc123")
+			fmt.Fprintln(stdout, "  agent-manager restore <id> --dry-run")
 			return nil
 		default:
 			if backupID == "" {
