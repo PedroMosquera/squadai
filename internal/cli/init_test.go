@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -1711,5 +1712,288 @@ func TestRunInit_HelpIncludesModelTier(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "--model-tier") {
 		t.Error("help output should mention --model-tier flag")
+	}
+}
+
+// ─── filterAdapters ──────────────────────────────────────────────────────────
+
+// filterTestAdapter is a minimal domain.Adapter stub for filterAdapters tests.
+type filterTestAdapter struct {
+	id domain.AgentID
+}
+
+func (a *filterTestAdapter) ID() domain.AgentID       { return a.id }
+func (a *filterTestAdapter) Lane() domain.AdapterLane { return domain.LanePersonal }
+func (a *filterTestAdapter) Detect(_ context.Context, _ string) (bool, bool, error) {
+	return true, true, nil
+}
+func (a *filterTestAdapter) GlobalConfigDir(_ string) string             { return "" }
+func (a *filterTestAdapter) SystemPromptFile(_ string) string            { return "" }
+func (a *filterTestAdapter) SkillsDir(_ string) string                   { return "" }
+func (a *filterTestAdapter) SettingsPath(_ string) string                { return "" }
+func (a *filterTestAdapter) SupportsComponent(_ domain.ComponentID) bool { return false }
+func (a *filterTestAdapter) ProjectConfigFile(_ string) string           { return "" }
+func (a *filterTestAdapter) ProjectRulesFile(_ string) string            { return "" }
+func (a *filterTestAdapter) ProjectAgentsDir(_ string) string            { return "" }
+func (a *filterTestAdapter) ProjectSkillsDir(_ string) string            { return "" }
+func (a *filterTestAdapter) ProjectCommandsDir(_ string) string          { return "" }
+func (a *filterTestAdapter) DelegationStrategy() domain.DelegationStrategy {
+	return domain.DelegationSoloAgent
+}
+func (a *filterTestAdapter) SupportsSubAgents() bool      { return false }
+func (a *filterTestAdapter) SubAgentsDir(_ string) string { return "" }
+func (a *filterTestAdapter) SupportsWorkflows() bool      { return false }
+func (a *filterTestAdapter) WorkflowsDir(_ string) string { return "" }
+
+func makeFilterAdapters(ids ...domain.AgentID) []domain.Adapter {
+	result := make([]domain.Adapter, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, &filterTestAdapter{id: id})
+	}
+	return result
+}
+
+func TestFilterAdapters_EmptySelections_ReturnsAll(t *testing.T) {
+	detected := makeFilterAdapters(domain.AgentOpenCode, domain.AgentCursor, domain.AgentClaudeCode)
+	result := filterAdapters(detected, nil)
+	if len(result) != len(detected) {
+		t.Errorf("filterAdapters(nil) = %d adapters, want %d (all)", len(result), len(detected))
+	}
+}
+
+func TestFilterAdapters_SelectSubset(t *testing.T) {
+	detected := makeFilterAdapters(
+		domain.AgentOpenCode,
+		domain.AgentCursor,
+		domain.AgentClaudeCode,
+		domain.AgentWindsurf,
+	)
+	result := filterAdapters(detected, []string{"opencode", "cursor"})
+	if len(result) != 2 {
+		t.Errorf("filterAdapters([opencode,cursor]) = %d, want 2", len(result))
+	}
+	ids := make(map[string]bool)
+	for _, a := range result {
+		ids[string(a.ID())] = true
+	}
+	if !ids["opencode"] {
+		t.Error("opencode should be in filtered result")
+	}
+	if !ids["cursor"] {
+		t.Error("cursor should be in filtered result")
+	}
+	if ids["claude-code"] {
+		t.Error("claude-code should NOT be in filtered result")
+	}
+	if ids["windsurf"] {
+		t.Error("windsurf should NOT be in filtered result")
+	}
+}
+
+func TestFilterAdapters_AlwaysIncludesOpenCode(t *testing.T) {
+	detected := makeFilterAdapters(domain.AgentOpenCode, domain.AgentCursor)
+	// Selections without opencode explicitly listed.
+	result := filterAdapters(detected, []string{"cursor"})
+	ids := make(map[string]bool)
+	for _, a := range result {
+		ids[string(a.ID())] = true
+	}
+	if !ids["opencode"] {
+		t.Error("opencode should always be included even when not in selections")
+	}
+	if !ids["cursor"] {
+		t.Error("cursor should be included when in selections")
+	}
+}
+
+func TestFilterAdapters_UnknownAgentIgnored(t *testing.T) {
+	detected := makeFilterAdapters(domain.AgentOpenCode, domain.AgentCursor)
+	result := filterAdapters(detected, []string{"nonexistent"})
+	// Only opencode should be present (always required); "nonexistent" is not detected.
+	if len(result) != 1 {
+		t.Errorf("filterAdapters([nonexistent]) = %d, want 1 (only opencode)", len(result))
+	}
+	if result[0].ID() != domain.AgentOpenCode {
+		t.Errorf("expected opencode, got %q", result[0].ID())
+	}
+}
+
+// ─── --agents= flag integration ──────────────────────────────────────────────
+
+func TestRunInit_AgentsFlag_FiltersTwoAgents(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--agents=opencode,cursor"}, &buf); err != nil {
+		t.Fatalf("RunInit --agents=opencode,cursor error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project: %v", err)
+	}
+
+	// Only opencode should definitely be present (cursor may or may not be
+	// detected on the real system, but opencode is always included).
+	if _, ok := proj.Adapters["opencode"]; !ok {
+		t.Error("opencode adapter should always be in project config")
+	}
+}
+
+func TestRunInit_AgentsFlag_EmptyBehavesLikeNoFlag(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var bufNoFlag, bufEmptyFlag bytes.Buffer
+	// Run without --agents
+	if err := RunInit(nil, &bufNoFlag); err != nil {
+		t.Fatalf("RunInit without --agents error: %v", err)
+	}
+	projNoFlag, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project (no flag): %v", err)
+	}
+
+	// Remove project.json to run again fresh
+	if err := os.Remove(filepath.Join(dir, config.ProjectConfigDir, "project.json")); err != nil {
+		t.Fatalf("remove project.json: %v", err)
+	}
+
+	// Run with --agents= (empty value)
+	if err := RunInit([]string{"--agents="}, &bufEmptyFlag); err != nil {
+		t.Fatalf("RunInit --agents= error: %v", err)
+	}
+	projEmptyFlag, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project (empty flag): %v", err)
+	}
+
+	// Both should have same adapter count.
+	if len(projNoFlag.Adapters) != len(projEmptyFlag.Adapters) {
+		t.Errorf("adapter count differs: no-flag=%d empty-flag=%d — should be equal",
+			len(projNoFlag.Adapters), len(projEmptyFlag.Adapters))
+	}
+}
+
+func TestRunInit_AgentsFlag_ForceIncludesOpenCode(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	// Specify only cursor (opencode not listed); opencode must still be in config.
+	if err := RunInit([]string{"--agents=cursor"}, &buf); err != nil {
+		t.Fatalf("RunInit --agents=cursor error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project: %v", err)
+	}
+
+	if _, ok := proj.Adapters["opencode"]; !ok {
+		t.Error("opencode should always be included even when not in --agents= list")
+	}
+}
+
+func TestRunInit_AgentsFlag_InvalidAgentIgnored(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--agents=opencode,bogus"}, &buf); err != nil {
+		t.Fatalf("RunInit --agents=opencode,bogus should not error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project: %v", err)
+	}
+
+	if _, ok := proj.Adapters["opencode"]; !ok {
+		t.Error("opencode should be present")
+	}
+	if _, ok := proj.Adapters["bogus"]; ok {
+		t.Error("bogus agent should not appear in project config")
+	}
+}
+
+func TestRunInit_HelpIncludesAgentsFlag(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--agents") {
+		t.Error("help output should mention --agents flag")
+	}
+}
+
+// ─── --preset= flag ──────────────────────────────────────────────────────────
+
+func TestRunInit_PresetFlag_FullSquadSetsMethodology(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--preset=full-squad"}, &buf); err != nil {
+		t.Fatalf("RunInit --preset=full-squad error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project: %v", err)
+	}
+
+	if proj.Methodology != domain.MethodologySDD {
+		t.Errorf("Methodology = %q, want sdd for full-squad preset", proj.Methodology)
+	}
+	if proj.ModelTier != domain.ModelTierBalanced {
+		t.Errorf("ModelTier = %q, want balanced for full-squad preset", proj.ModelTier)
+	}
+}
+
+func TestRunInit_PresetFlag_InvalidReturnsError(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunInit([]string{"--preset=bogus"}, &buf)
+	if err == nil {
+		t.Fatal("expected error for unknown preset, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown preset") {
+		t.Errorf("error = %q, want to contain 'unknown preset'", err.Error())
 	}
 }

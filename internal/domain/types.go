@@ -20,6 +20,15 @@ const (
 	MethodologyConventional Methodology = "conventional"
 )
 
+// SetupPreset identifies a named setup configuration shortcut.
+type SetupPreset string
+
+const (
+	PresetFullSquad SetupPreset = "full-squad"
+	PresetLean      SetupPreset = "lean"
+	PresetCustom    SetupPreset = "custom"
+)
+
 // ModelTier identifies the AI model cost/quality preset for agent configuration.
 type ModelTier string
 
