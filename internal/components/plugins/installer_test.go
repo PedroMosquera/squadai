@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/claude"
@@ -378,6 +379,153 @@ func TestVerify_SkillFiles_FailsWhenMissing(t *testing.T) {
 	}
 	if results[0].Passed {
 		t.Error("should fail when skill file missing")
+	}
+}
+
+// ─── effectiveInstallMethod ─────────────────────────────────────────────────
+
+func TestEffectiveInstallMethod(t *testing.T) {
+	claudeAdapter := claude.New()
+	openCodeAdapter := opencode.New()
+
+	tests := []struct {
+		name    string
+		plugin  domain.PluginDef
+		adapter domain.Adapter
+		want    string
+	}{
+		{
+			name:    "claude_plugin on Claude Code stays claude_plugin",
+			plugin:  domain.PluginDef{InstallMethod: "claude_plugin"},
+			adapter: claudeAdapter,
+			want:    "claude_plugin",
+		},
+		{
+			name:    "claude_plugin on OpenCode falls back to skill_files",
+			plugin:  domain.PluginDef{InstallMethod: "claude_plugin"},
+			adapter: openCodeAdapter,
+			want:    "skill_files",
+		},
+		{
+			name:    "skill_files on Claude Code stays skill_files",
+			plugin:  domain.PluginDef{InstallMethod: "skill_files"},
+			adapter: claudeAdapter,
+			want:    "skill_files",
+		},
+		{
+			name:    "skill_files on OpenCode stays skill_files",
+			plugin:  domain.PluginDef{InstallMethod: "skill_files"},
+			adapter: openCodeAdapter,
+			want:    "skill_files",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := effectiveInstallMethod(tc.plugin, tc.adapter)
+			if got != tc.want {
+				t.Errorf("effectiveInstallMethod() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// ─── OpenCode + claude_plugin fallback ──────────────────────────────────────
+
+// TestPluginInstaller_OpenCode_ClaudePlugin_FallsToSkillFiles verifies that a
+// plugin with InstallMethod "claude_plugin" is treated as "skill_files" when
+// the adapter is OpenCode. This prevents the installer from writing an
+// "enabledPlugins" key that OpenCode does not recognise.
+func TestPluginInstaller_OpenCode_ClaudePlugin_FallsToSkillFiles(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	plugins := map[string]domain.PluginDef{
+		"superpowers": {
+			Enabled:         true,
+			SupportedAgents: []string{"opencode", "claude-code"},
+			InstallMethod:   "claude_plugin",
+			PluginID:        "superpowers@claude-plugins-official",
+		},
+	}
+	inst := New(plugins, &domain.MergedConfig{})
+
+	actions, err := inst.Plan(adapter, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+
+	action := actions[0]
+
+	// Must use the skill_files description prefix, not claude_plugin.
+	if !strings.HasPrefix(action.Description, "plugin:skill:") {
+		t.Errorf("Description = %q, want prefix plugin:skill:", action.Description)
+	}
+
+	// Target path must be inside the project skills dir, not a settings.json.
+	expectedPath := filepath.Join(project, ".opencode", "skills", "superpowers", "SKILL.md")
+	if action.TargetPath != expectedPath {
+		t.Errorf("TargetPath = %q, want %q", action.TargetPath, expectedPath)
+	}
+
+	// Applying the action must NOT write "enabledPlugins" anywhere.
+	if action.Action != domain.ActionSkip {
+		if err := inst.Apply(action); err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		// Confirm the settings file was NOT created.
+		settingsPath := adapter.SettingsPath(home)
+		if _, err := os.Stat(settingsPath); err == nil {
+			t.Errorf("settings file %q should not have been created for OpenCode", settingsPath)
+		}
+		// Confirm the skill file was created instead.
+		if _, err := os.Stat(action.TargetPath); err != nil {
+			t.Errorf("skill file %q should have been created: %v", action.TargetPath, err)
+		}
+	}
+}
+
+// TestPluginInstaller_ClaudeCode_ClaudePlugin_Unchanged verifies that a plugin
+// with InstallMethod "claude_plugin" is still handled as claude_plugin when the
+// adapter is Claude Code.
+func TestPluginInstaller_ClaudeCode_ClaudePlugin_Unchanged(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := claude.New()
+
+	plugins := map[string]domain.PluginDef{
+		"superpowers": {
+			Enabled:         true,
+			SupportedAgents: []string{"claude-code"},
+			InstallMethod:   "claude_plugin",
+			PluginID:        "superpowers@claude-plugins-official",
+		},
+	}
+	inst := New(plugins, &domain.MergedConfig{})
+
+	actions, err := inst.Plan(adapter, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+
+	action := actions[0]
+
+	// Must retain the claude_plugin description prefix.
+	if !strings.HasPrefix(action.Description, "plugin:claude:") {
+		t.Errorf("Description = %q, want prefix plugin:claude:", action.Description)
+	}
+
+	// Target path must point to Claude Code's settings.json.
+	expectedPath := adapter.SettingsPath(home)
+	if action.TargetPath != expectedPath {
+		t.Errorf("TargetPath = %q, want %q", action.TargetPath, expectedPath)
 	}
 }
 

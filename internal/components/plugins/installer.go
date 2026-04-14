@@ -72,7 +72,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 			continue
 		}
 
-		switch plugin.InstallMethod {
+		switch effectiveInstallMethod(plugin, adapter) {
 		case "claude_plugin":
 			a, err := i.planClaudePlugin(adapter, name, plugin, homeDir)
 			if err != nil {
@@ -288,7 +288,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 			continue
 		}
 
-		switch plugin.InstallMethod {
+		switch effectiveInstallMethod(plugin, adapter) {
 		case "claude_plugin":
 			r := i.verifyClaudePlugin(adapter, name, plugin, homeDir)
 			results = append(results, r)
@@ -429,6 +429,15 @@ func (i *Installer) renderClaudePluginContent(action domain.PlannedAction) ([]by
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+// effectiveInstallMethod returns the install method to use for a plugin on a given adapter.
+// claude_plugin is only valid for Claude Code; other agents fall back to skill_files.
+func effectiveInstallMethod(plugin domain.PluginDef, adapter domain.Adapter) string {
+	if plugin.InstallMethod == "claude_plugin" && adapter.ID() != domain.AgentClaudeCode {
+		return "skill_files"
+	}
+	return plugin.InstallMethod
+}
 
 // isAgentSupported checks if agentID is in the supported agents list.
 func isAgentSupported(agentID string, supported []string) bool {
