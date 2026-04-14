@@ -1,6 +1,7 @@
 package marker
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -130,6 +131,78 @@ func TestHasSection_True(t *testing.T) {
 func TestHasSection_False(t *testing.T) {
 	if HasSection("no markers", "memory") {
 		t.Error("expected HasSection=false")
+	}
+}
+
+// ─── StripAll ───────────────────────────────────────────────────────────────
+
+func TestStripAll_NoMarkers(t *testing.T) {
+	doc := "# My Config\n\nSome user content.\n"
+	got, found := StripAll(doc)
+	if found {
+		t.Error("expected found=false for document with no markers")
+	}
+	if got != doc {
+		t.Errorf("expected original document returned unchanged\ngot:  %q\nwant: %q", got, doc)
+	}
+}
+
+func TestStripAll_SingleSection(t *testing.T) {
+	doc := "<!-- agent-manager:memory -->\nmanaged content\n<!-- /agent-manager:memory -->\n"
+	got, found := StripAll(doc)
+	if !found {
+		t.Error("expected found=true")
+	}
+	assertNotContains(t, got, "<!-- agent-manager:memory -->")
+	assertNotContains(t, got, "<!-- /agent-manager:memory -->")
+	assertNotContains(t, got, "managed content")
+}
+
+func TestStripAll_MultipleSections(t *testing.T) {
+	doc := "<!-- agent-manager:memory -->\nmem\n<!-- /agent-manager:memory -->\n\n<!-- agent-manager:rules -->\nrules\n<!-- /agent-manager:rules -->\n"
+	got, found := StripAll(doc)
+	if !found {
+		t.Error("expected found=true")
+	}
+	assertNotContains(t, got, "<!-- agent-manager:memory -->")
+	assertNotContains(t, got, "<!-- /agent-manager:memory -->")
+	assertNotContains(t, got, "<!-- agent-manager:rules -->")
+	assertNotContains(t, got, "<!-- /agent-manager:rules -->")
+	assertNotContains(t, got, "mem")
+	assertNotContains(t, got, "rules")
+}
+
+func TestStripAll_PreservesUserContent(t *testing.T) {
+	doc := "# Title\n\nUser paragraph.\n\n<!-- agent-manager:memory -->\nmanaged\n<!-- /agent-manager:memory -->\n\nTrailing user text.\n"
+	got, found := StripAll(doc)
+	if !found {
+		t.Error("expected found=true")
+	}
+	assertContains(t, got, "# Title")
+	assertContains(t, got, "User paragraph.")
+	assertContains(t, got, "Trailing user text.")
+	assertNotContains(t, got, "<!-- agent-manager:memory -->")
+	assertNotContains(t, got, "managed")
+}
+
+func TestStripAll_EmptyDocument(t *testing.T) {
+	got, found := StripAll("")
+	if found {
+		t.Error("expected found=false for empty document")
+	}
+	if got != "" {
+		t.Errorf("expected empty string, got %q", got)
+	}
+}
+
+func TestStripAll_OnlyMarkers(t *testing.T) {
+	doc := "<!-- agent-manager:memory -->\nmanaged\n<!-- /agent-manager:memory -->"
+	got, found := StripAll(doc)
+	if !found {
+		t.Error("expected found=true")
+	}
+	if strings.TrimSpace(got) != "" {
+		t.Errorf("expected empty/whitespace-only result, got %q", got)
 	}
 }
 

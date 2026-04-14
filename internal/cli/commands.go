@@ -20,6 +20,8 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/backup"
 	"github.com/PedroMosquera/agent-manager-pro/internal/config"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
+	"github.com/PedroMosquera/agent-manager-pro/internal/fileutil"
+	"github.com/PedroMosquera/agent-manager-pro/internal/marker"
 	"github.com/PedroMosquera/agent-manager-pro/internal/pipeline"
 	"github.com/PedroMosquera/agent-manager-pro/internal/planner"
 	"github.com/PedroMosquera/agent-manager-pro/internal/verify"
@@ -1318,6 +1320,523 @@ func RunRestore(args []string, stdout io.Writer) error {
 		} else {
 			fmt.Fprintf(stdout, "  removed  %s\n", f.Path)
 		}
+	}
+	return nil
+}
+
+// RunStatus shows the current project configuration summary.
+func RunStatus(args []string, stdout io.Writer) error {
+	jsonOut := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager status [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Show the current project configuration summary: detected agents, active components,")
+			fmt.Fprintln(stdout, "configured MCP servers, and the most recent backup. Reads the merged config from")
+			fmt.Fprintln(stdout, ".agent-manager/project.json without writing any files.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output the status as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager status")
+			fmt.Fprintln(stdout, "  agent-manager status --json")
+			return nil
+		default:
+			return fmt.Errorf("unknown flag %q for status", arg)
+		}
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	mergedCfg, err := loadAndMerge(homeDir, projectDir)
+	if err != nil {
+		return err
+	}
+
+	adapters := DetectAdapters(homeDir)
+
+	p := planner.New()
+	actions, err := p.Plan(mergedCfg, adapters, homeDir, projectDir)
+	if err != nil {
+		return fmt.Errorf("plan: %w", err)
+	}
+
+	// Count managed files per component (non-skip actions grouped by component).
+	type compEntry struct {
+		id    string
+		paths map[string]bool
+	}
+	compOrder := make([]string, 0)
+	compMap := make(map[string]map[string]bool)
+	for _, a := range actions {
+		if a.Action == domain.ActionSkip {
+			continue
+		}
+		if a.TargetPath == "" {
+			continue
+		}
+		comp := string(a.Component)
+		if _, exists := compMap[comp]; !exists {
+			compMap[comp] = make(map[string]bool)
+			compOrder = append(compOrder, comp)
+		}
+		compMap[comp][a.TargetPath] = true
+	}
+
+	// Also include components that only have skip actions (already managed).
+	for _, a := range actions {
+		if a.TargetPath == "" {
+			continue
+		}
+		comp := string(a.Component)
+		if _, exists := compMap[comp]; !exists {
+			compMap[comp] = make(map[string]bool)
+			compOrder = append(compOrder, comp)
+		}
+		compMap[comp][a.TargetPath] = true
+	}
+
+	// Deduplicate compOrder preserving first appearance.
+	seenComp := make(map[string]bool)
+	deduped := make([]string, 0, len(compOrder))
+	for _, c := range compOrder {
+		if !seenComp[c] {
+			seenComp[c] = true
+			deduped = append(deduped, c)
+		}
+	}
+	compOrder = deduped
+	sort.Strings(compOrder)
+
+	// Get MCP server names.
+	mcpNames := make([]string, 0, len(mergedCfg.MCP))
+	for name := range mergedCfg.MCP {
+		mcpNames = append(mcpNames, name)
+	}
+	sort.Strings(mcpNames)
+
+	// Get most recent backup.
+	backupDir := backup.ResolveBackupDir(mergedCfg.Paths.BackupDir, homeDir)
+	store := backup.NewStore(backupDir)
+	manifests, listErr := store.List()
+	var lastManifest *backup.Manifest
+	if listErr == nil && len(manifests) > 0 {
+		lastManifest = &manifests[0]
+	}
+
+	if jsonOut {
+		type adapterStatus struct {
+			ID         string `json:"id"`
+			Delegation string `json:"delegation,omitempty"`
+		}
+		type componentStatus struct {
+			ID           string `json:"id"`
+			ManagedFiles int    `json:"managed_files"`
+		}
+		type backupInfo struct {
+			ID        string `json:"id"`
+			Timestamp string `json:"timestamp"`
+			Files     int    `json:"files"`
+		}
+		type statusResult struct {
+			ProjectDir  string            `json:"project_dir"`
+			Language    string            `json:"language,omitempty"`
+			Methodology string            `json:"methodology,omitempty"`
+			Mode        string            `json:"mode,omitempty"`
+			Adapters    []adapterStatus   `json:"adapters"`
+			Components  []componentStatus `json:"components"`
+			MCPServers  []string          `json:"mcp_servers"`
+			LastBackup  *backupInfo       `json:"last_backup,omitempty"`
+		}
+
+		adapterList := make([]adapterStatus, 0, len(adapters))
+		for _, a := range adapters {
+			adapterList = append(adapterList, adapterStatus{
+				ID:         string(a.ID()),
+				Delegation: string(a.DelegationStrategy()),
+			})
+		}
+
+		componentList := make([]componentStatus, 0, len(compOrder))
+		for _, comp := range compOrder {
+			componentList = append(componentList, componentStatus{
+				ID:           comp,
+				ManagedFiles: len(compMap[comp]),
+			})
+		}
+
+		var lastBackupJSON *backupInfo
+		if lastManifest != nil {
+			lastBackupJSON = &backupInfo{
+				ID:        lastManifest.ID,
+				Timestamp: lastManifest.Timestamp.Format("2006-01-02T15:04:05Z"),
+				Files:     len(lastManifest.AffectedFiles),
+			}
+		}
+
+		result := statusResult{
+			ProjectDir:  projectDir,
+			Language:    mergedCfg.Meta.Language,
+			Methodology: string(mergedCfg.Methodology),
+			Mode:        string(mergedCfg.Mode),
+			Adapters:    adapterList,
+			Components:  componentList,
+			MCPServers:  mcpNames,
+			LastBackup:  lastBackupJSON,
+		}
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal status result: %w", err)
+		}
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	// Human-readable output.
+	language := mergedCfg.Meta.Language
+	if language == "" {
+		language = "unknown"
+	}
+	methodology := string(mergedCfg.Methodology)
+	if methodology == "" {
+		methodology = "none"
+	}
+	mode := string(mergedCfg.Mode)
+	if mode == "" {
+		mode = "standard"
+	}
+
+	fmt.Fprintf(stdout, "Project: %s (%s)\n", filepath.Base(projectDir), language)
+	fmt.Fprintf(stdout, "Methodology: %s\n", methodology)
+	fmt.Fprintf(stdout, "Mode: %s\n", mode)
+	fmt.Fprintln(stdout)
+
+	fmt.Fprintf(stdout, "Agents (%d enabled):\n", len(adapters))
+	for _, a := range adapters {
+		fmt.Fprintf(stdout, "  %-20s %-12s %s\n", string(a.ID()), string(a.Lane()), string(a.DelegationStrategy()))
+	}
+	fmt.Fprintln(stdout)
+
+	fmt.Fprintf(stdout, "Components (%d active):\n", len(compOrder))
+	for _, comp := range compOrder {
+		fmt.Fprintf(stdout, "  %-20s %d files managed\n", comp, len(compMap[comp]))
+	}
+	fmt.Fprintln(stdout)
+
+	mcpDisplay := "none"
+	if len(mcpNames) > 0 {
+		mcpDisplay = strings.Join(mcpNames, ", ")
+	}
+	fmt.Fprintf(stdout, "MCP servers: %s\n", mcpDisplay)
+	fmt.Fprintln(stdout)
+
+	if lastManifest != nil {
+		fmt.Fprintf(stdout, "Last backup: %s (%d files)\n",
+			lastManifest.Timestamp.Format("2006-01-02 15:04:05 UTC"),
+			len(lastManifest.AffectedFiles))
+	} else {
+		fmt.Fprintln(stdout, "Last backup: none")
+	}
+
+	return nil
+}
+
+// RunBackupDelete removes a backup by ID.
+func RunBackupDelete(args []string, stdout io.Writer) error {
+	jsonOut := false
+	var id string
+
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager backup delete <id> [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Delete a backup snapshot by its ID. The backup and all its files are permanently")
+			fmt.Fprintln(stdout, "removed. Use 'agent-manager backup list' to see available backup IDs.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output the result as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager backup delete 20240115T103000Z-abc123")
+			fmt.Fprintln(stdout, "  agent-manager backup delete <id> --json")
+			return nil
+		default:
+			if id == "" {
+				id = arg
+			} else {
+				return fmt.Errorf("unexpected argument %q", arg)
+			}
+		}
+	}
+
+	if id == "" {
+		return fmt.Errorf("backup ID is required — usage: agent-manager backup delete <id>")
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	merged, err := loadAndMerge(homeDir, projectDir)
+	if err != nil {
+		merged = &domain.MergedConfig{
+			Paths: domain.PathsConfig{BackupDir: "~/.agent-manager/backups"},
+		}
+	}
+
+	backupDir := backup.ResolveBackupDir(merged.Paths.BackupDir, homeDir)
+	store := backup.NewStore(backupDir)
+
+	manifest, err := store.Get(id)
+	if err != nil {
+		return fmt.Errorf("load backup: %w", err)
+	}
+
+	fileCount := len(manifest.AffectedFiles)
+
+	if err := store.Delete(id); err != nil {
+		return fmt.Errorf("delete backup: %w", err)
+	}
+
+	if jsonOut {
+		result := map[string]interface{}{
+			"backup_id": id,
+			"status":    "deleted",
+			"files":     fileCount,
+		}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	fmt.Fprintf(stdout, "Deleted backup %s (%d files).\n", id, fileCount)
+	return nil
+}
+
+// removeResult is the JSON representation of a successful remove run.
+type removeResult struct {
+	BackupID string   `json:"backup_id"`
+	Deleted  []string `json:"deleted"`
+	Stripped []string `json:"stripped"`
+	DryRun   bool     `json:"dry_run"`
+}
+
+// RunRemove removes all agent-manager managed files from the current project.
+// Files with marker blocks that also contain user content are stripped of
+// the managed sections while preserving user content.
+func RunRemove(args []string, stdout io.Writer) error {
+	dryRun := false
+	jsonOut := false
+	force := false
+
+	for _, arg := range args {
+		switch arg {
+		case "--dry-run":
+			dryRun = true
+		case "--json":
+			jsonOut = true
+		case "--force":
+			force = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: agent-manager remove [--force] [--dry-run] [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Remove all files managed by agent-manager from the current project. Files that")
+			fmt.Fprintln(stdout, "contain marker blocks alongside user content are stripped of the managed sections")
+			fmt.Fprintln(stdout, "only — user content is preserved. Fully managed files (no user content) are deleted.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "A backup is created automatically before any files are removed.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --force    Required to confirm removal (without it, the command errors).")
+			fmt.Fprintln(stdout, "  --dry-run  Preview which files would be removed or stripped without changing anything.")
+			fmt.Fprintln(stdout, "  --json     Output the result as JSON.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  agent-manager remove --dry-run")
+			fmt.Fprintln(stdout, "  agent-manager remove --force")
+			fmt.Fprintln(stdout, "  agent-manager remove --force --json")
+			return nil
+		default:
+			return fmt.Errorf("unknown flag %q for remove", arg)
+		}
+	}
+
+	// Without --force or --dry-run, refuse to proceed.
+	if !force && !dryRun {
+		return fmt.Errorf("refusing to remove without confirmation — use --force to confirm or --dry-run to preview")
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	mergedCfg, err := loadAndMerge(homeDir, projectDir)
+	if err != nil {
+		return err
+	}
+
+	adapters := DetectAdapters(homeDir)
+	p := planner.New()
+	actions, err := p.Plan(mergedCfg, adapters, homeDir, projectDir)
+	if err != nil {
+		return fmt.Errorf("plan: %w", err)
+	}
+
+	// Collect ALL target paths (including skip actions — remove wants to clean
+	// up everything managed, even files currently in sync).
+	paths := collectAllTargetPaths(actions)
+
+	if dryRun {
+		result := removeResult{
+			BackupID: "",
+			Deleted:  []string{},
+			Stripped: []string{},
+			DryRun:   true,
+		}
+
+		// Classify each path as would-delete or would-strip.
+		for _, path := range paths {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return fmt.Errorf("read %s: %w", path, err)
+			}
+			stripped, hasMarkers := marker.StripAll(string(data))
+			if hasMarkers && strings.TrimSpace(stripped) != "" {
+				result.Stripped = append(result.Stripped, path)
+			} else {
+				result.Deleted = append(result.Deleted, path)
+			}
+		}
+
+		if jsonOut {
+			data, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				return fmt.Errorf("marshal remove result: %w", err)
+			}
+			fmt.Fprintln(stdout, string(data))
+			return nil
+		}
+
+		if len(result.Deleted) == 0 && len(result.Stripped) == 0 {
+			fmt.Fprintln(stdout, "Dry run: no managed files found.")
+			return nil
+		}
+		fmt.Fprintf(stdout, "Dry run: would remove %d file(s), strip %d file(s).\n", len(result.Deleted), len(result.Stripped))
+		for _, p := range result.Deleted {
+			fmt.Fprintf(stdout, "  delete:  %s\n", p)
+		}
+		for _, p := range result.Stripped {
+			fmt.Fprintf(stdout, "  strip:   %s (user content preserved)\n", p)
+		}
+		return nil
+	}
+
+	// Create a backup before removing anything.
+	backupDir := backup.ResolveBackupDir(mergedCfg.Paths.BackupDir, homeDir)
+	store := backup.NewStore(backupDir)
+
+	var backupID string
+	if len(paths) > 0 {
+		manifest, err := store.SnapshotFiles(paths, "remove")
+		if err != nil {
+			return fmt.Errorf("create backup: %w", err)
+		}
+		backupID = manifest.ID
+	}
+
+	var deleted []string
+	var stripped []string
+
+	for _, path := range paths {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				// File already gone — skip silently.
+				continue
+			}
+			return fmt.Errorf("read %s: %w", path, readErr)
+		}
+
+		strippedContent, hasMarkers := marker.StripAll(string(data))
+
+		if hasMarkers && strings.TrimSpace(strippedContent) != "" {
+			// File has markers AND user content — write back the stripped version.
+			if _, writeErr := fileutil.WriteAtomic(path, []byte(strippedContent), 0644); writeErr != nil {
+				return fmt.Errorf("write stripped %s: %w", path, writeErr)
+			}
+			stripped = append(stripped, path)
+		} else {
+			// Fully managed file (either: markers with no user content, or no markers
+			// at all meaning the whole file is ours) — delete it.
+			if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+				return fmt.Errorf("remove %s: %w", path, removeErr)
+			}
+			deleted = append(deleted, path)
+		}
+	}
+
+	// Normalise nil slices to empty slices for consistent JSON output.
+	if deleted == nil {
+		deleted = []string{}
+	}
+	if stripped == nil {
+		stripped = []string{}
+	}
+
+	if jsonOut {
+		result := removeResult{
+			BackupID: backupID,
+			Deleted:  deleted,
+			Stripped: stripped,
+			DryRun:   false,
+		}
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal remove result: %w", err)
+		}
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	if backupID != "" {
+		fmt.Fprintf(stdout, "Backup created: %s\n", backupID)
+	}
+	fmt.Fprintf(stdout, "Removed %d files, stripped markers from %d files.\n", len(deleted), len(stripped))
+	for _, p := range deleted {
+		fmt.Fprintf(stdout, "  deleted: %s\n", p)
+	}
+	for _, p := range stripped {
+		fmt.Fprintf(stdout, "  stripped: %s (user content preserved)\n", p)
 	}
 	return nil
 }
