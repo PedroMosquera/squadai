@@ -141,6 +141,67 @@ type packageJSON struct {
 	Scripts map[string]string `json:"scripts"`
 }
 
+// detectPackageManager inspects the project directory for lock files.
+// Priority: pnpm-lock.yaml > bun.lockb > yarn.lock > package-lock.json
+// Default: "pnpm" when no lock file found.
+// Only the project root is checked; monorepos with mixed package managers are not supported.
+func detectPackageManager(projectDir string) string {
+	checks := []struct {
+		lockFile string
+		pm       string
+	}{
+		{"pnpm-lock.yaml", "pnpm"},
+		{"bun.lockb", "bun"},
+		{"yarn.lock", "yarn"},
+		{"package-lock.json", "npm"},
+	}
+	for _, c := range checks {
+		if _, err := os.Stat(filepath.Join(projectDir, c.lockFile)); err == nil {
+			return c.pm
+		}
+	}
+	return "pnpm"
+}
+
+func testCmd(pm string) string {
+	switch pm {
+	case "bun":
+		return "bun test"
+	case "pnpm":
+		return "pnpm test"
+	case "yarn":
+		return "yarn test"
+	default:
+		return "npm test"
+	}
+}
+
+func buildCmd(pm string) string {
+	switch pm {
+	case "bun":
+		return "bun run build"
+	case "pnpm":
+		return "pnpm run build"
+	case "yarn":
+		return "yarn run build"
+	default:
+		return "npm run build"
+	}
+}
+
+func lintCmd(pm string) string {
+	switch pm {
+	case "bun":
+		return "bun run lint"
+	case "pnpm":
+		return "pnpm run lint"
+	case "yarn":
+		return "yarn run lint"
+	default:
+		return "npm run lint"
+	}
+}
+
 // detectNode reads package.json to extract name, language, and scripts.
 func detectNode(projectDir string, meta *domain.ProjectMeta) bool {
 	pkgPath := filepath.Join(projectDir, "package.json")
@@ -164,17 +225,20 @@ func detectNode(projectDir string, meta *domain.ProjectMeta) bool {
 		meta.Language = "TypeScript"
 	}
 
-	// Extract commands from scripts.
+	pm := detectPackageManager(projectDir)
+	meta.PackageManager = pm
+
+	// Extract commands from scripts using the detected package manager.
 	if cmd, ok := pkg.Scripts["test"]; ok && meta.TestCommand == "" {
-		meta.TestCommand = "npm test"
-		// If the test script is just "jest" or "vitest", keep npm test as wrapper.
+		meta.TestCommand = testCmd(pm)
+		// If the test script is just "jest" or "vitest", keep pm test as wrapper.
 		_ = cmd
 	}
 	if _, ok := pkg.Scripts["build"]; ok && meta.BuildCommand == "" {
-		meta.BuildCommand = "npm run build"
+		meta.BuildCommand = buildCmd(pm)
 	}
 	if _, ok := pkg.Scripts["lint"]; ok && meta.LintCommand == "" {
-		meta.LintCommand = "npm run lint"
+		meta.LintCommand = lintCmd(pm)
 	}
 
 	return true

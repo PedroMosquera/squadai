@@ -98,6 +98,10 @@ func TestDetectProjectMeta_NodeProject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), data, 0644); err != nil {
 		t.Fatal(err)
 	}
+	// Add package-lock.json so the npm expectations are satisfied.
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	meta := DetectProjectMeta(dir)
 
@@ -785,5 +789,323 @@ func TestDetectProjectMeta_Scala_NotDetected(t *testing.T) {
 		if l == "Scala" {
 			t.Errorf("Languages %v should not contain 'Scala' when build.sbt is absent", meta.Languages)
 		}
+	}
+}
+
+// ─── Package manager detection ─────────────────────────────────────────────
+
+func TestDetectPackageManager_PnpmLock(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte("lockfileVersion: '6.0'\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "pnpm" {
+		t.Errorf("detectPackageManager = %q, want %q", got, "pnpm")
+	}
+}
+
+func TestDetectPackageManager_BunLockb(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "bun.lockb"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "bun" {
+		t.Errorf("detectPackageManager = %q, want %q", got, "bun")
+	}
+}
+
+func TestDetectPackageManager_YarnLock(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "yarn.lock"), []byte("# yarn lockfile v1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "yarn" {
+		t.Errorf("detectPackageManager = %q, want %q", got, "yarn")
+	}
+}
+
+func TestDetectPackageManager_PackageLockJson(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "npm" {
+		t.Errorf("detectPackageManager = %q, want %q", got, "npm")
+	}
+}
+
+func TestDetectPackageManager_NoLockFile_DefaultsPnpm(t *testing.T) {
+	dir := t.TempDir()
+	if got := detectPackageManager(dir); got != "pnpm" {
+		t.Errorf("detectPackageManager = %q, want %q (default)", got, "pnpm")
+	}
+}
+
+func TestDetectPackageManager_PriorityPnpmOverBun(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bun.lockb"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "pnpm" {
+		t.Errorf("detectPackageManager = %q, want %q (pnpm > bun)", got, "pnpm")
+	}
+}
+
+func TestDetectPackageManager_PriorityPnpmOverYarn(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "yarn.lock"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "pnpm" {
+		t.Errorf("detectPackageManager = %q, want %q (pnpm > yarn)", got, "pnpm")
+	}
+}
+
+func TestDetectPackageManager_PriorityPnpmOverNpm(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "pnpm" {
+		t.Errorf("detectPackageManager = %q, want %q (pnpm > npm)", got, "pnpm")
+	}
+}
+
+func TestDetectPackageManager_PriorityBunOverYarn(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "bun.lockb"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "yarn.lock"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "bun" {
+		t.Errorf("detectPackageManager = %q, want %q (bun > yarn)", got, "bun")
+	}
+}
+
+func TestDetectPackageManager_PriorityYarnOverNpm(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "yarn.lock"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectPackageManager(dir); got != "yarn" {
+		t.Errorf("detectPackageManager = %q, want %q (yarn > npm)", got, "yarn")
+	}
+}
+
+// ─── Node integration tests with package manager ───────────────────────────
+
+// writePackageJSON is a helper that writes a package.json with the given scripts.
+func writePackageJSON(t *testing.T, dir string, scripts map[string]string) {
+	t.Helper()
+	pkg := map[string]interface{}{
+		"name":    "test-project",
+		"scripts": scripts,
+	}
+	data, err := json.Marshal(pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDetectNode_PnpmProject_Commands(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "vitest", "build": "tsc", "lint": "eslint ."})
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.TestCommand != "pnpm test" {
+		t.Errorf("TestCommand = %q, want %q", meta.TestCommand, "pnpm test")
+	}
+	if meta.BuildCommand != "pnpm run build" {
+		t.Errorf("BuildCommand = %q, want %q", meta.BuildCommand, "pnpm run build")
+	}
+	if meta.LintCommand != "pnpm run lint" {
+		t.Errorf("LintCommand = %q, want %q", meta.LintCommand, "pnpm run lint")
+	}
+}
+
+func TestDetectNode_BunProject_TestCmd(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "bun test"})
+	if err := os.WriteFile(filepath.Join(dir, "bun.lockb"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.TestCommand != "bun test" {
+		t.Errorf("TestCommand = %q, want %q", meta.TestCommand, "bun test")
+	}
+}
+
+func TestDetectNode_BunProject_BuildLintCmd(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "bun test", "build": "bun build", "lint": "eslint ."})
+	if err := os.WriteFile(filepath.Join(dir, "bun.lockb"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.BuildCommand != "bun run build" {
+		t.Errorf("BuildCommand = %q, want %q", meta.BuildCommand, "bun run build")
+	}
+	if meta.LintCommand != "bun run lint" {
+		t.Errorf("LintCommand = %q, want %q", meta.LintCommand, "bun run lint")
+	}
+}
+
+func TestDetectNode_YarnProject_Commands(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "jest", "build": "webpack", "lint": "eslint ."})
+	if err := os.WriteFile(filepath.Join(dir, "yarn.lock"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.TestCommand != "yarn test" {
+		t.Errorf("TestCommand = %q, want %q", meta.TestCommand, "yarn test")
+	}
+	if meta.BuildCommand != "yarn run build" {
+		t.Errorf("BuildCommand = %q, want %q", meta.BuildCommand, "yarn run build")
+	}
+	if meta.LintCommand != "yarn run lint" {
+		t.Errorf("LintCommand = %q, want %q", meta.LintCommand, "yarn run lint")
+	}
+}
+
+func TestDetectNode_NpmProject_Commands(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "jest", "build": "tsc", "lint": "eslint ."})
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.TestCommand != "npm test" {
+		t.Errorf("TestCommand = %q, want %q", meta.TestCommand, "npm test")
+	}
+	if meta.BuildCommand != "npm run build" {
+		t.Errorf("BuildCommand = %q, want %q", meta.BuildCommand, "npm run build")
+	}
+	if meta.LintCommand != "npm run lint" {
+		t.Errorf("LintCommand = %q, want %q", meta.LintCommand, "npm run lint")
+	}
+}
+
+func TestDetectNode_NoLockFile_DefaultsPnpm(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "jest"})
+	// No lock file — should default to pnpm.
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.TestCommand != "pnpm test" {
+		t.Errorf("TestCommand = %q, want %q (default pnpm)", meta.TestCommand, "pnpm test")
+	}
+}
+
+func TestDetectNode_PackageManagerStoredInMeta(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "vitest"})
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.PackageManager != "pnpm" {
+		t.Errorf("PackageManager = %q, want %q", meta.PackageManager, "pnpm")
+	}
+}
+
+func TestDetectNode_PackageManager_EmptyForGo(t *testing.T) {
+	dir := t.TempDir()
+	goMod := "module github.com/example/go-only\n\ngo 1.24\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.PackageManager != "" {
+		t.Errorf("PackageManager = %q, want empty for Go project", meta.PackageManager)
+	}
+}
+
+func TestDetectNode_NoScripts_CommandsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	// package.json with no scripts section.
+	pkg := map[string]interface{}{"name": "no-scripts"}
+	data, _ := json.Marshal(pkg)
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.TestCommand != "" {
+		t.Errorf("TestCommand = %q, want empty (no scripts)", meta.TestCommand)
+	}
+	if meta.BuildCommand != "" {
+		t.Errorf("BuildCommand = %q, want empty (no scripts)", meta.BuildCommand)
+	}
+	if meta.LintCommand != "" {
+		t.Errorf("LintCommand = %q, want empty (no scripts)", meta.LintCommand)
+	}
+	// PackageManager should still be detected.
+	if meta.PackageManager != "pnpm" {
+		t.Errorf("PackageManager = %q, want %q even without scripts", meta.PackageManager, "pnpm")
+	}
+}
+
+func TestDetectNode_Monorepo_RootLockFileWins(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, map[string]string{"test": "jest", "build": "tsc"})
+	// Root has pnpm-lock.yaml — this is what wins.
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// A nested package might have a yarn.lock, but we only check root.
+	nested := filepath.Join(dir, "packages", "ui")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "yarn.lock"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := DetectProjectMeta(dir)
+
+	if meta.PackageManager != "pnpm" {
+		t.Errorf("PackageManager = %q, want %q (root lock file wins)", meta.PackageManager, "pnpm")
+	}
+	if meta.TestCommand != "pnpm test" {
+		t.Errorf("TestCommand = %q, want %q", meta.TestCommand, "pnpm test")
 	}
 }
