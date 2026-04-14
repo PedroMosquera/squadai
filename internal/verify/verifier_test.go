@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
@@ -874,6 +875,225 @@ func TestVerify_JSONOutput_HasSeverityAndComponent(t *testing.T) {
 		}
 		if r.Component == "" {
 			t.Errorf("result[%d] %q lost component after JSON round-trip", i, r.Check)
+		}
+	}
+}
+
+// ─── Plugins verification ────────────────────────────────────────────────────
+
+func TestVerify_Plugins_FailsWhenSkillFileMissing(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"plugins": {Enabled: true},
+		},
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Enabled:         true,
+				SupportedAgents: []string{"opencode"},
+				InstallMethod:   "skill_files",
+			},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.AllPass {
+		t.Error("should fail when plugin skill file is missing")
+	}
+
+	found := false
+	for _, r := range report.Results {
+		if r.Component == "plugins" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected plugins component in verify results")
+	}
+}
+
+func TestVerify_Plugins_PassesWhenSkillFilePresent(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	// Write the expected skill file content.
+	skillsDir := filepath.Join(project, ".opencode", "skills", "superpowers")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := "# Superpowers\n\nEnhanced coding capabilities with advanced code generation, refactoring, and analysis tools.\n"
+	if err := os.WriteFile(filepath.Join(skillsDir, "SKILL.md"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"plugins": {Enabled: true},
+		},
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Enabled:         true,
+				SupportedAgents: []string{"opencode"},
+				InstallMethod:   "skill_files",
+			},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, r := range report.Results {
+		if r.Component == "plugins" && !r.Passed {
+			t.Errorf("plugins check %q should pass when skill file is present: %s", r.Check, r.Message)
+		}
+	}
+}
+
+func TestVerify_Plugins_DisabledComponent_Skipped(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"plugins": {Enabled: false},
+		},
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Enabled:         true,
+				SupportedAgents: []string{"opencode"},
+				InstallMethod:   "skill_files",
+			},
+		},
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.AllPass {
+		t.Error("disabled plugins component should not cause failures")
+	}
+	for _, r := range report.Results {
+		if r.Component == "plugins" {
+			t.Errorf("should not have plugins results when component is disabled, got check %q", r.Check)
+		}
+	}
+}
+
+// ─── Workflows verification ──────────────────────────────────────────────────
+
+func TestVerify_Workflows_FailsWhenWorkflowFileMissing(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModePersonal,
+		Adapters: map[string]domain.AdapterConfig{
+			"windsurf": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: true},
+		},
+		Methodology: domain.MethodologyTDD,
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.AllPass {
+		t.Error("should fail when workflow file is missing")
+	}
+
+	found := false
+	for _, r := range report.Results {
+		if r.Component == "workflows" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected workflows component in verify results")
+	}
+}
+
+func TestVerify_Workflows_DisabledComponent_Skipped(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModePersonal,
+		Adapters: map[string]domain.AdapterConfig{
+			"windsurf": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: false},
+		},
+		Methodology: domain.MethodologyTDD,
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.AllPass {
+		t.Error("disabled workflows component should not cause failures")
+	}
+	for _, r := range report.Results {
+		if r.Component == "workflows" {
+			t.Errorf("should not have workflows results when component is disabled, got check %q", r.Check)
+		}
+	}
+}
+
+func TestVerify_Workflows_SkippedForNonWorkflowAdapter(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New() // OpenCode does NOT support workflows.
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: true},
+		},
+		Methodology: domain.MethodologyTDD,
+	}
+
+	v := New()
+	report, err := v.Verify(cfg, []domain.Adapter{adapter}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// OpenCode returns nil from Verify (no workflow support), so no failures.
+	for _, r := range report.Results {
+		if r.Component == "workflows" {
+			t.Errorf("opencode should not produce workflows results, got check %q", r.Check)
 		}
 	}
 }

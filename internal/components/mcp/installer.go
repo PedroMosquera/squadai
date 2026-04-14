@@ -28,12 +28,18 @@ type mcpDirProvider interface {
 	MCPDir(homeDir string) string
 }
 
+// mcpServersKey is the top-level JSON key used by the MCPConfigFile strategy.
+// VS Code Copilot, Cursor, and Windsurf use "mcpServers" instead of "mcp".
+const mcpServersKey = "mcpServers"
+
 // Installer implements domain.ComponentInstaller for MCP server configuration.
-// It supports two strategies:
+// It supports three strategies:
 //   - MergeIntoSettings: merges all servers into a single config file's "mcp" key
-//     (used by OpenCode, VS Code Copilot, Cursor, Windsurf).
+//     (used by OpenCode).
 //   - SeparateMCPFiles: writes one JSON file per server in an mcp/ directory
 //     (used by Claude Code via the mcpDirProvider interface).
+//   - MCPConfigFile: writes all servers into a dedicated MCP config file's "mcpServers" key
+//     (used by VS Code Copilot, Cursor, Windsurf).
 type Installer struct {
 	// servers is the desired MCP server configuration.
 	servers map[string]domain.MCPServerDef
@@ -71,11 +77,17 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, nil
 	}
 
-	// Use separate MCP files strategy if adapter supports it.
+	// Strategy 1: SeparateMCPFiles (Claude Code).
 	if provider, ok := adapter.(mcpDirProvider); ok {
 		return i.planSeparateFiles(adapter, provider.MCPDir(homeDir))
 	}
 
+	// Strategy 2: MCPConfigFile (VS Code, Cursor, Windsurf) — uses "mcpServers" key.
+	if isMCPConfigFileAdapter(adapter) {
+		return i.planMCPConfigFile(adapter, projectDir)
+	}
+
+	// Strategy 3: MergeIntoSettings (OpenCode) — uses "mcp" key.
 	return i.planMergedConfig(adapter, projectDir)
 }
 
@@ -195,6 +207,11 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return nil
 	}
 
+	// MCPConfigFile actions have a "mcp:configfile:" prefix.
+	if strings.HasPrefix(action.Description, "mcp:configfile:") {
+		return i.applyMCPConfigFile(action)
+	}
+
 	// Check if this is a separate MCP file (path ends with /{name}.json in an mcp/ dir).
 	if i.isSeparateFileAction(action) {
 		return i.applySeparateFile(action)
@@ -276,6 +293,188 @@ func (i *Installer) applySeparateFile(action domain.PlannedAction) error {
 	return nil
 }
 
+// isMCPConfigFileAdapter checks if the adapter uses the MCPConfigFile strategy.
+// VS Code Copilot, Cursor, and Windsurf use a dedicated MCP config file with "mcpServers" key.
+func isMCPConfigFileAdapter(adapter domain.Adapter) bool {
+	switch adapter.ID() {
+	case domain.AgentVSCodeCopilot, domain.AgentCursor, domain.AgentWindsurf:
+		return true
+	}
+	return false
+}
+
+// mcpConfigFilePath returns the path to the MCP config file for MCPConfigFile adapters.
+// VS Code uses a separate mcp.json; Cursor and Windsurf use their ProjectConfigFile.
+func mcpConfigFilePath(adapter domain.Adapter, projectDir string) string {
+	switch adapter.ID() {
+	case domain.AgentVSCodeCopilot:
+		return filepath.Join(projectDir, ".vscode", "mcp.json")
+	default:
+		return adapter.ProjectConfigFile(projectDir)
+	}
+}
+
+// planMCPConfigFile plans actions for the MCPConfigFile strategy.
+// All servers are merged into a dedicated MCP config file under the "mcpServers" key.
+func (i *Installer) planMCPConfigFile(adapter domain.Adapter, projectDir string) ([]domain.PlannedAction, error) {
+	targetPath := mcpConfigFilePath(adapter, projectDir)
+	if targetPath == "" {
+		return nil, nil
+	}
+
+	actionID := fmt.Sprintf("%s-mcp", adapter.ID())
+
+	existing, err := readJSONFile(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read MCP config file: %w", err)
+	}
+
+	if existing == nil {
+		return []domain.PlannedAction{
+			{
+				ID:          actionID,
+				Agent:       adapter.ID(),
+				Component:   domain.ComponentMCP,
+				Action:      domain.ActionCreate,
+				TargetPath:  targetPath,
+				Description: fmt.Sprintf("mcp:configfile:create MCP config with mcpServers"),
+			},
+		}, nil
+	}
+
+	// Check if mcpServers key matches desired state.
+	if mcpServersKeyMatches(existing, i.servers) {
+		return []domain.PlannedAction{
+			{
+				ID:          actionID,
+				Agent:       adapter.ID(),
+				Component:   domain.ComponentMCP,
+				Action:      domain.ActionSkip,
+				TargetPath:  targetPath,
+				Description: fmt.Sprintf("mcp:configfile:MCP server configuration already up to date"),
+			},
+		}, nil
+	}
+
+	return []domain.PlannedAction{
+		{
+			ID:          actionID,
+			Agent:       adapter.ID(),
+			Component:   domain.ComponentMCP,
+			Action:      domain.ActionUpdate,
+			TargetPath:  targetPath,
+			Description: fmt.Sprintf("mcp:configfile:update MCP server configuration"),
+		},
+	}, nil
+}
+
+// applyMCPConfigFile writes all servers into the "mcpServers" key of a dedicated MCP config file.
+func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
+	// Read existing file or start empty.
+	existing, err := readJSONFile(action.TargetPath)
+	if err != nil {
+		return fmt.Errorf("read MCP config: %w", err)
+	}
+	if existing == nil {
+		existing = make(map[string]interface{})
+	}
+
+	// Convert servers to a generic map for JSON serialization.
+	serversMap := make(map[string]interface{})
+	for name, def := range i.servers {
+		serversMap[name] = serverToMap(def)
+	}
+	existing[mcpServersKey] = serversMap
+
+	// Update _agent_manager metadata to include "mcpServers" in managed_keys.
+	updateManagedKeys(existing, mcpServersKey)
+
+	// Marshal with indentation.
+	data, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal MCP config: %w", err)
+	}
+	data = append(data, '\n')
+
+	// Ensure parent directory exists.
+	dir := filepath.Dir(action.TargetPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create MCP config dir: %w", err)
+	}
+
+	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
+		return fmt.Errorf("write MCP config: %w", err)
+	}
+
+	return nil
+}
+
+// verifyMCPConfigFile checks the MCPConfigFile strategy result.
+func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir string) ([]domain.VerifyResult, error) {
+	targetPath := mcpConfigFilePath(adapter, projectDir)
+	if targetPath == "" {
+		return nil, nil
+	}
+
+	var results []domain.VerifyResult
+
+	existing, err := readJSONFile(targetPath)
+	if err != nil || existing == nil {
+		results = append(results, domain.VerifyResult{
+			Check:     "mcp-configfile-exists",
+			Passed:    false,
+			Severity:  domain.SeverityError,
+			Component: "mcp",
+			Message:   fmt.Sprintf("MCP config file not found: %s", targetPath),
+		})
+		return results, nil
+	}
+	results = append(results, domain.VerifyResult{
+		Check:     "mcp-configfile-exists",
+		Passed:    true,
+		Severity:  domain.SeverityInfo,
+		Component: "mcp",
+	})
+
+	if mcpServersKeyMatches(existing, i.servers) {
+		results = append(results, domain.VerifyResult{
+			Check:     "mcp-configfile-servers-current",
+			Passed:    true,
+			Severity:  domain.SeverityInfo,
+			Component: "mcp",
+		})
+	} else {
+		results = append(results, domain.VerifyResult{
+			Check:     "mcp-configfile-servers-current",
+			Passed:    false,
+			Severity:  domain.SeverityError,
+			Component: "mcp",
+			Message:   "MCP server configuration does not match expected state",
+		})
+	}
+
+	return results, nil
+}
+
+// mcpServersKeyMatches checks whether the "mcpServers" key in the document matches
+// the expected server definitions.
+func mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef) bool {
+	mcpVal, exists := doc[mcpServersKey]
+	if !exists {
+		return false
+	}
+
+	// Compare via JSON serialization for deep equality.
+	expectedMap := make(map[string]interface{})
+	for name, def := range expected {
+		expectedMap[name] = serverToMap(def)
+	}
+
+	expectedJSON, _ := json.Marshal(expectedMap)
+	actualJSON, _ := json.Marshal(mcpVal)
+	return string(expectedJSON) == string(actualJSON)
+}
+
 // Verify checks post-apply state for the MCP component.
 func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) ([]domain.VerifyResult, error) {
 	if !adapter.SupportsComponent(domain.ComponentMCP) {
@@ -288,6 +487,10 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 
 	if provider, ok := adapter.(mcpDirProvider); ok {
 		return i.verifySeparateFiles(adapter, provider.MCPDir(homeDir))
+	}
+
+	if isMCPConfigFileAdapter(adapter) {
+		return i.verifyMCPConfigFile(adapter, projectDir)
 	}
 
 	return i.verifyMergedConfig(adapter, projectDir)

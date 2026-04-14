@@ -8,22 +8,26 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/plugins"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/skills"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/workflows"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
 // Planner computes the full action plan from merged config and detected adapters.
 type Planner struct {
-	memoryInstaller   *memory.Installer
-	rulesInstaller    *rules.Installer
-	settingsInstaller *settings.Installer
-	mcpInstaller      *mcp.Installer
-	agentsInstaller   *agents.Installer
-	skillsInstaller   *skills.Installer
-	commandsInstaller *commands.Installer
-	copilotManager    *copilot.Manager
+	memoryInstaller    *memory.Installer
+	rulesInstaller     *rules.Installer
+	settingsInstaller  *settings.Installer
+	mcpInstaller       *mcp.Installer
+	agentsInstaller    *agents.Installer
+	skillsInstaller    *skills.Installer
+	commandsInstaller  *commands.Installer
+	pluginsInstaller   *plugins.Installer
+	workflowsInstaller *workflows.Installer
+	copilotManager     *copilot.Manager
 }
 
 // New returns a Planner with default component installers.
@@ -53,6 +57,10 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 	p.agentsInstaller = agents.New(cfg.Agents, cfg, projectDir)
 	p.skillsInstaller = skills.New(cfg.Skills, cfg, projectDir)
 	p.commandsInstaller = commands.New(cfg.Commands)
+
+	// Create plugins/workflows installers (lazy init per plan call).
+	p.pluginsInstaller = plugins.New(cfg.Plugins, cfg)
+	p.workflowsInstaller = workflows.New(cfg)
 
 	// Collect component actions for each enabled adapter.
 	for _, adapter := range adapters {
@@ -123,6 +131,24 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 			}
 			actions = append(actions, cmdsActions...)
 		}
+
+		// Plugins component.
+		if pluginsCfg, ok := cfg.Components[string(domain.ComponentPlugins)]; ok && pluginsCfg.Enabled {
+			pluginsActions, err := p.pluginsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plugins plan: %w", err)
+			}
+			actions = append(actions, pluginsActions...)
+		}
+
+		// Workflows component.
+		if workflowsCfg, ok := cfg.Components[string(domain.ComponentWorkflows)]; ok && workflowsCfg.Enabled {
+			workflowsActions, err := p.workflowsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("workflows plan: %w", err)
+			}
+			actions = append(actions, workflowsActions...)
+		}
 	}
 
 	// Copilot instructions (project-level, not adapter-specific).
@@ -160,6 +186,12 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	}
 	if p.commandsInstaller != nil {
 		installers[domain.ComponentCommands] = p.commandsInstaller
+	}
+	if p.pluginsInstaller != nil {
+		installers[domain.ComponentPlugins] = p.pluginsInstaller
+	}
+	if p.workflowsInstaller != nil {
+		installers[domain.ComponentWorkflows] = p.workflowsInstaller
 	}
 	return installers
 }

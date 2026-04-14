@@ -10,9 +10,11 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/mcp"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/plugins"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/rules"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/settings"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/skills"
+	"github.com/PedroMosquera/agent-manager-pro/internal/components/workflows"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
@@ -70,6 +72,18 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 	var commandsInstaller *commands.Installer
 	if cmdsCfg, ok := cfg.Components[string(domain.ComponentCommands)]; ok && cmdsCfg.Enabled {
 		commandsInstaller = commands.New(cfg.Commands)
+	}
+
+	// Create plugins installer from merged config (lazy init per verify call).
+	var pluginsInstaller *plugins.Installer
+	if pluginsCfg, ok := cfg.Components[string(domain.ComponentPlugins)]; ok && pluginsCfg.Enabled {
+		pluginsInstaller = plugins.New(cfg.Plugins, cfg)
+	}
+
+	// Create workflows installer from merged config (lazy init per verify call).
+	var workflowsInstaller *workflows.Installer
+	if workflowsCfg, ok := cfg.Components[string(domain.ComponentWorkflows)]; ok && workflowsCfg.Enabled {
+		workflowsInstaller = workflows.New(cfg)
 	}
 
 	// Verify components for each enabled adapter.
@@ -146,6 +160,26 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 				return nil, err
 			}
 			tagResults(results, "commands")
+			collectResults(report, results)
+		}
+
+		// Plugins component.
+		if pluginsInstaller != nil {
+			results, err := pluginsInstaller.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			tagResults(results, "plugins")
+			collectResults(report, results)
+		}
+
+		// Workflows component.
+		if workflowsInstaller != nil {
+			results, err := workflowsInstaller.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			tagResults(results, "workflows")
 			collectResults(report, results)
 		}
 	}

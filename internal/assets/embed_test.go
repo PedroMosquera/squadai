@@ -432,6 +432,31 @@ func TestSkillRef_MatchesEmbeddedFiles(t *testing.T) {
 	}
 }
 
+// ─── Workflow asset files ────────────────────────────────────────────────────
+
+func TestWorkflowAssetsReadable(t *testing.T) {
+	files := []struct {
+		path     string
+		contains string
+	}{
+		{"workflows/tdd-pipeline.md", "TDD"},
+		{"workflows/sdd-pipeline.md", "SDD"},
+		{"workflows/conventional-pipeline.md", "Conventional"},
+	}
+
+	for _, f := range files {
+		t.Run(f.path, func(t *testing.T) {
+			content := MustRead(f.path)
+			if len(content) == 0 {
+				t.Errorf("%s: expected non-empty content", f.path)
+			}
+			if !strings.Contains(content, f.contains) {
+				t.Errorf("%s: expected to contain %q", f.path, f.contains)
+			}
+		})
+	}
+}
+
 // ─── Error handling ─────────────────────────────────────────────────────────
 
 func TestReadNonexistent(t *testing.T) {

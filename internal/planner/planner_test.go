@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/opencode"
+	"github.com/PedroMosquera/agent-manager-pro/internal/adapters/windsurf"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/copilot"
 	"github.com/PedroMosquera/agent-manager-pro/internal/components/memory"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
@@ -220,5 +221,299 @@ func TestPlan_UpToDate_AllSkip(t *testing.T) {
 		if a.Action != domain.ActionSkip {
 			t.Errorf("action %q should be skip, got %q", a.ID, a.Action)
 		}
+	}
+}
+
+// ─── Plugins component ───────────────────────────────────────────────────────
+
+func TestPlan_Plugins_IncludedWhenEnabled(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"plugins": {Enabled: true},
+		},
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Enabled:         true,
+				SupportedAgents: []string{"opencode"},
+				InstallMethod:   "skill_files",
+			},
+		},
+	}
+
+	adapters := []domain.Adapter{opencode.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	hasPlugins := false
+	for _, a := range actions {
+		if a.Component == domain.ComponentPlugins {
+			hasPlugins = true
+		}
+	}
+	if !hasPlugins {
+		t.Error("expected plugins action in plan when component is enabled")
+	}
+}
+
+func TestPlan_Plugins_SkippedWhenDisabled(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"plugins": {Enabled: false},
+		},
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Enabled:         true,
+				SupportedAgents: []string{"opencode"},
+				InstallMethod:   "skill_files",
+			},
+		},
+	}
+
+	adapters := []domain.Adapter{opencode.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, a := range actions {
+		if a.Component == domain.ComponentPlugins {
+			t.Error("should not plan plugins when component is disabled")
+		}
+	}
+}
+
+func TestPlan_Plugins_SkippedWhenNoPluginsDefined(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"plugins": {Enabled: true},
+		},
+		Plugins: nil, // no plugins configured
+	}
+
+	adapters := []domain.Adapter{opencode.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, a := range actions {
+		if a.Component == domain.ComponentPlugins {
+			t.Error("should not plan plugins when no plugins are defined")
+		}
+	}
+}
+
+// ─── Workflows component ─────────────────────────────────────────────────────
+
+func TestPlan_Workflows_IncludedWhenEnabled(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModePersonal,
+		Adapters: map[string]domain.AdapterConfig{
+			"windsurf": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: true},
+		},
+		Methodology: domain.MethodologyTDD,
+	}
+
+	adapters := []domain.Adapter{windsurf.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	hasWorkflows := false
+	for _, a := range actions {
+		if a.Component == domain.ComponentWorkflows {
+			hasWorkflows = true
+		}
+	}
+	if !hasWorkflows {
+		t.Error("expected workflows action in plan when component is enabled and adapter supports workflows")
+	}
+}
+
+func TestPlan_Workflows_SkippedWhenDisabled(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModePersonal,
+		Adapters: map[string]domain.AdapterConfig{
+			"windsurf": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: false},
+		},
+		Methodology: domain.MethodologyTDD,
+	}
+
+	adapters := []domain.Adapter{windsurf.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, a := range actions {
+		if a.Component == domain.ComponentWorkflows {
+			t.Error("should not plan workflows when component is disabled")
+		}
+	}
+}
+
+func TestPlan_Workflows_SkippedForAdapterWithoutWorkflowSupport(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	// OpenCode does NOT support workflows.
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: true},
+		},
+		Methodology: domain.MethodologyTDD,
+	}
+
+	adapters := []domain.Adapter{opencode.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, a := range actions {
+		if a.Component == domain.ComponentWorkflows {
+			t.Error("opencode does not support workflows — should not get workflows actions")
+		}
+	}
+}
+
+func TestPlan_Workflows_SkippedWhenNoMethodology(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModePersonal,
+		Adapters: map[string]domain.AdapterConfig{
+			"windsurf": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"workflows": {Enabled: true},
+		},
+		Methodology: "", // no methodology
+	}
+
+	adapters := []domain.Adapter{windsurf.New()}
+	p := New()
+
+	actions, err := p.Plan(cfg, adapters, home, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, a := range actions {
+		if a.Component == domain.ComponentWorkflows {
+			t.Error("should not plan workflows when no methodology is set")
+		}
+	}
+}
+
+// ─── ComponentInstallers — nil-safety ────────────────────────────────────────
+
+func TestComponentInstallers_BeforePlan_NoNilPanic(t *testing.T) {
+	p := New()
+	// Should not panic — pluginsInstaller and workflowsInstaller are nil before Plan().
+	installers := p.ComponentInstallers()
+
+	// memoryInstaller is always present.
+	if _, ok := installers[domain.ComponentMemory]; !ok {
+		t.Error("expected memory installer to always be present")
+	}
+
+	// plugins and workflows are absent before Plan() — that is correct.
+	if _, ok := installers[domain.ComponentPlugins]; ok {
+		t.Error("plugins installer should be absent before Plan() is called")
+	}
+	if _, ok := installers[domain.ComponentWorkflows]; ok {
+		t.Error("workflows installer should be absent before Plan() is called")
+	}
+}
+
+func TestComponentInstallers_AfterPlan_IncludesNewInstallers(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModePersonal,
+		Adapters: map[string]domain.AdapterConfig{
+			"windsurf": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"plugins":   {Enabled: true},
+			"workflows": {Enabled: true},
+		},
+		Methodology: domain.MethodologySDD,
+		Plugins: map[string]domain.PluginDef{
+			"superpowers": {
+				Enabled:         true,
+				SupportedAgents: []string{"windsurf"},
+				InstallMethod:   "skill_files",
+			},
+		},
+	}
+
+	p := New()
+	if _, err := p.Plan(cfg, []domain.Adapter{windsurf.New()}, home, project); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	installers := p.ComponentInstallers()
+
+	if _, ok := installers[domain.ComponentPlugins]; !ok {
+		t.Error("expected plugins installer after Plan()")
+	}
+	if _, ok := installers[domain.ComponentWorkflows]; !ok {
+		t.Error("expected workflows installer after Plan()")
 	}
 }
