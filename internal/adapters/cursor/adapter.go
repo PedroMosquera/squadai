@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -151,6 +152,14 @@ func (a *Adapter) WorkflowsDir(_ string) string {
 }
 
 // ConfigDir returns the root config directory for Cursor.
+// On Windows it is %APPDATA%\Cursor\User (falling back to homeDir\AppData\Roaming\Cursor\User).
+// On all other platforms it is ~/.cursor.
 func ConfigDir(homeDir string) string {
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Cursor", "User")
+		}
+		return filepath.Join(homeDir, "AppData", "Roaming", "Cursor", "User")
+	}
 	return filepath.Join(homeDir, ".cursor")
 }

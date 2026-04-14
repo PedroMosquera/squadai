@@ -1005,3 +1005,325 @@ func TestInitSummary_Enter_MultipleMCPSelectionsSorted(t *testing.T) {
 		t.Fatal("enter should produce a command")
 	}
 }
+
+// ─── Skill Browser: Menu Access ───────────────────────────────────────────────
+
+func TestMenu_ShowsBrowseSkills(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	view := m.View()
+	if !strings.Contains(view, "Browse Skills") {
+		t.Errorf("menu should contain 'Browse Skills', got:\n%s", view)
+	}
+}
+
+func TestMenu_SelectBrowseSkills_GoesToSkillBrowser(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+	// Navigate cursor to "Browse Skills".
+	for i, item := range menuItems {
+		if item.command == "skills" {
+			m.cursor = i
+			break
+		}
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenSkillBrowser {
+		t.Errorf("selecting 'Browse Skills' should go to screenSkillBrowser (%d), got screen %d",
+			screenSkillBrowser, model.screen)
+	}
+}
+
+// ─── Skill Browser: Rendering ─────────────────────────────────────────────────
+
+func TestSkillBrowser_ShowsTitle(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	view := m.View()
+	if !strings.Contains(view, "Community Skills") {
+		t.Errorf("skill browser should show 'Community Skills' title, got:\n%s", view)
+	}
+	if !strings.Contains(view, "skills.sh") {
+		t.Errorf("skill browser should mention 'skills.sh', got:\n%s", view)
+	}
+}
+
+func TestSkillBrowser_ShowsCategories(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	view := m.View()
+	// Catalog has categories; at least one should be visible.
+	if len(m.skillCat.Categories) == 0 {
+		t.Fatal("catalog should have at least one category")
+	}
+	firstCat := m.skillCat.Categories[0]
+	if !strings.Contains(view, firstCat.Name) {
+		t.Errorf("skill browser should show category %q, got:\n%s", firstCat.Name, view)
+	}
+}
+
+func TestSkillBrowser_ShowsSkillNames(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	view := m.View()
+	if len(m.skillCat.Categories) == 0 || len(m.skillCat.Categories[0].Skills) == 0 {
+		t.Fatal("catalog should have at least one skill in the first category")
+	}
+	firstSkill := m.skillCat.Categories[0].Skills[0]
+	if !strings.Contains(view, firstSkill.Name) {
+		t.Errorf("skill browser should show skill name %q, got:\n%s", firstSkill.Name, view)
+	}
+}
+
+func TestSkillBrowser_ShowsSkillDescriptions(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	view := m.View()
+	if len(m.skillCat.Categories) == 0 || len(m.skillCat.Categories[0].Skills) == 0 {
+		t.Fatal("catalog should have at least one skill in the first category")
+	}
+	firstSkill := m.skillCat.Categories[0].Skills[0]
+	if !strings.Contains(view, firstSkill.Description) {
+		t.Errorf("skill browser should show skill description, got:\n%s", view)
+	}
+}
+
+func TestSkillBrowser_ShowsInstallHint(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	view := m.View()
+	if !strings.Contains(view, "npx skills install") {
+		t.Errorf("skill browser should show install hint 'npx skills install', got:\n%s", view)
+	}
+}
+
+func TestSkillBrowser_ShowsFooterNavigation(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	view := m.View()
+	if !strings.Contains(view, "esc") {
+		t.Errorf("skill browser footer should mention 'esc', got:\n%s", view)
+	}
+}
+
+func TestSkillBrowser_ShowsCursorOnFirstSkill(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	// scrollIndex = 0 by default — first skill should be highlighted with "> ".
+	view := m.View()
+
+	if len(m.skillCat.Categories) == 0 || len(m.skillCat.Categories[0].Skills) == 0 {
+		t.Fatal("catalog should have at least one skill")
+	}
+	firstName := m.skillCat.Categories[0].Skills[0].Name
+	if !strings.Contains(view, "> "+firstName) {
+		t.Errorf("skill browser should show cursor on first skill '> %s', got:\n%s", firstName, view)
+	}
+}
+
+// ─── Skill Browser: Navigation ────────────────────────────────────────────────
+
+func TestSkillBrowser_EscReturnsToMenu(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenMenu {
+		t.Errorf("esc on skill browser should go to screenMenu (%d), got screen %d",
+			screenMenu, model.screen)
+	}
+}
+
+func TestSkillBrowser_QReturnsToMenu(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model := updated.(Model)
+
+	if model.screen != screenMenu {
+		t.Errorf("q on skill browser should go to screenMenu (%d), got screen %d",
+			screenMenu, model.screen)
+	}
+}
+
+func TestSkillBrowser_RightSwitchesCategory(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	if len(m.skillCat.Categories) < 2 {
+		t.Skip("need at least 2 categories to test switching")
+	}
+	initialCat := m.skillCatCursor // 0
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := updated.(Model)
+
+	if model.skillCatCursor == initialCat {
+		t.Errorf("right key should advance category cursor from %d", initialCat)
+	}
+}
+
+func TestSkillBrowser_LeftDoesNotGoNegative(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	m.skillCatCursor = 0
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	model := updated.(Model)
+
+	if model.skillCatCursor != 0 {
+		t.Errorf("left key at first category should stay at 0, got %d", model.skillCatCursor)
+	}
+}
+
+func TestSkillBrowser_RightDoesNotExceedMax(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	m.skillCatCursor = len(m.skillCat.Categories) - 1
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := updated.(Model)
+
+	want := len(m.skillCat.Categories) - 1
+	if model.skillCatCursor != want {
+		t.Errorf("right key at last category should stay at %d, got %d", want, model.skillCatCursor)
+	}
+}
+
+func TestSkillBrowser_TabWrapsCategories(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	if len(m.skillCat.Categories) == 0 {
+		t.Skip("need at least one category")
+	}
+	// Move to last category, then tab should wrap to 0.
+	m.skillCatCursor = len(m.skillCat.Categories) - 1
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model := updated.(Model)
+
+	if model.skillCatCursor != 0 {
+		t.Errorf("tab from last category should wrap to 0, got %d", model.skillCatCursor)
+	}
+}
+
+func TestSkillBrowser_DownScrollsSkills(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	if len(m.skillCat.Categories) == 0 || len(m.skillCat.Categories[0].Skills) < 2 {
+		t.Skip("need at least 2 skills to test scrolling")
+	}
+	m.skillScrollIndex = 0
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model := updated.(Model)
+
+	if model.skillScrollIndex != 1 {
+		t.Errorf("down key should advance skillScrollIndex to 1, got %d", model.skillScrollIndex)
+	}
+}
+
+func TestSkillBrowser_UpDoesNotGoNegative(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	m.skillScrollIndex = 0
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model := updated.(Model)
+
+	if model.skillScrollIndex != 0 {
+		t.Errorf("up key at first skill should stay at 0, got %d", model.skillScrollIndex)
+	}
+}
+
+func TestSkillBrowser_CategorySwitch_ResetsScrollIndex(t *testing.T) {
+	m := newSkillBrowserModel(t)
+	if len(m.skillCat.Categories) < 2 {
+		t.Skip("need at least 2 categories")
+	}
+	m.skillScrollIndex = 3 // simulate having scrolled down
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := updated.(Model)
+
+	if model.skillScrollIndex != 0 {
+		t.Errorf("switching category should reset skillScrollIndex to 0, got %d", model.skillScrollIndex)
+	}
+}
+
+func TestSkillBrowser_ErrorView_ShowsError(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenSkillBrowser
+	m.skillCatErr = fmt.Errorf("catalog unavailable")
+
+	view := m.View()
+	if !strings.Contains(view, "catalog unavailable") {
+		t.Errorf("skill browser error view should show error message, got:\n%s", view)
+	}
+}
+
+func TestSkillBrowser_EmptyCatalog_ShowsMessage(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenSkillBrowser
+	m.skillCat = skillCatalog{} // zero value: no categories
+	m.skillCatErr = nil
+
+	view := m.View()
+	if !strings.Contains(view, "No skills found") {
+		t.Errorf("skill browser with empty catalog should show 'No skills found', got:\n%s", view)
+	}
+}
+
+func TestSkillBrowser_InstallHint_IncludesSelectedSkill(t *testing.T) {
+	m := newSkillBrowserModel(t)
+
+	view := m.View()
+	if len(m.skillCat.Categories) == 0 || len(m.skillCat.Categories[0].Skills) == 0 {
+		t.Fatal("catalog should have skills")
+	}
+	selectedName := m.skillCat.Categories[0].Skills[0].Name
+	if !strings.Contains(view, "npx skills install "+selectedName) {
+		t.Errorf("install hint should include selected skill name %q, got:\n%s", selectedName, view)
+	}
+}
+
+// ─── Skill Browser: Menu Item Count ──────────────────────────────────────────
+
+func TestMenu_AllItemsIncludingSkills(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	view := m.View()
+	expected := []string{
+		"Init / Setup",
+		"Plan (dry-run)",
+		"Apply",
+		"Sync",
+		"Team Status",
+		"Browse Skills",
+		"Verify",
+		"Restore backup",
+		"Quit",
+	}
+	for _, label := range expected {
+		if !strings.Contains(view, label) {
+			t.Errorf("menu should contain %q, got:\n%s", label, view)
+		}
+	}
+}
+
+// ─── Skill Browser: helper ───────────────────────────────────────────────────
+
+// newSkillBrowserModel returns a Model on screenSkillBrowser with the real
+// embedded catalog loaded, failing the test if the catalog cannot be parsed.
+func newSkillBrowserModel(t *testing.T) Model {
+	t.Helper()
+	cat, err := loadSkillCatalog()
+	if err != nil {
+		t.Fatalf("loadSkillCatalog: %v", err)
+	}
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenSkillBrowser
+	m.skillCat = cat
+	m.skillCatErr = nil
+	m.skillCatCursor = 0
+	m.skillScrollIndex = 0
+	return m
+}

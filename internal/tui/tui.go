@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -9,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/PedroMosquera/agent-manager-pro/internal/assets"
 	"github.com/PedroMosquera/agent-manager-pro/internal/cli"
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
@@ -29,6 +31,7 @@ const (
 	screenInitMCP
 	screenInitPlugins
 	screenInitSummary
+	screenSkillBrowser
 )
 
 // menuItem is a selectable action.
@@ -43,9 +46,53 @@ var menuItems = []menuItem{
 	{label: "Apply", command: "apply"},
 	{label: "Sync", command: "sync"},
 	{label: "Team Status", command: "team-status"},
+	{label: "Browse Skills", command: "skills"},
 	{label: "Verify", command: "verify"},
 	{label: "Restore backup", command: "restore"},
 	{label: "Quit", command: "quit"},
+}
+
+// skillEntry is a single skill in the curated catalog.
+type skillEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+}
+
+// skillCategory groups related skills.
+type skillCategory struct {
+	Name   string       `json:"name"`
+	Skills []skillEntry `json:"skills"`
+}
+
+// skillCatalog is the top-level structure of skills/catalog.json.
+type skillCatalog struct {
+	Categories     []skillCategory `json:"categories"`
+	InstallCommand string          `json:"install_command"`
+	SearchCommand  string          `json:"search_command"`
+	BrowseURL      string          `json:"browse_url"`
+}
+
+// loadSkillCatalog reads and parses the embedded skills/catalog.json.
+func loadSkillCatalog() (skillCatalog, error) {
+	raw, err := assets.Read("skills/catalog.json")
+	if err != nil {
+		return skillCatalog{}, fmt.Errorf("load skill catalog: %w", err)
+	}
+	var cat skillCatalog
+	if err := json.Unmarshal([]byte(raw), &cat); err != nil {
+		return skillCatalog{}, fmt.Errorf("parse skill catalog: %w", err)
+	}
+	// Sort categories and their skills deterministically.
+	sort.Slice(cat.Categories, func(i, j int) bool {
+		return cat.Categories[i].Name < cat.Categories[j].Name
+	})
+	for ci := range cat.Categories {
+		sort.Slice(cat.Categories[ci].Skills, func(i, j int) bool {
+			return cat.Categories[ci].Skills[i].Name < cat.Categories[ci].Skills[j].Name
+		})
+	}
+	return cat, nil
 }
 
 // Model is the bubbletea model for the TUI.
@@ -66,6 +113,12 @@ type Model struct {
 	initCursor       int
 	mcpSelections    map[string]bool
 	pluginSelections map[string]bool
+
+	// Skill browser state.
+	skillCat         skillCatalog
+	skillCatErr      error
+	skillCatCursor   int // selected category index
+	skillScrollIndex int // first visible skill within the current category
 }
 
 // NewModel creates a TUI model with the given state.
@@ -138,6 +191,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "team-status":
 				m.screen = screenTeamStatus
+				return m, nil
+			case "skills":
+				cat, err := loadSkillCatalog()
+				m.skillCat = cat
+				m.skillCatErr = err
+				m.skillCatCursor = 0
+				m.skillScrollIndex = 0
+				m.screen = screenSkillBrowser
 				return m, nil
 			case "quit":
 				m.quitting = true
@@ -294,6 +355,39 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenInitPlugins
 			return m, nil
 		}
+
+	case screenSkillBrowser:
+		switch key {
+		case "left", "h":
+			if m.skillCatCursor > 0 {
+				m.skillCatCursor--
+				m.skillScrollIndex = 0
+			}
+		case "right", "l":
+			if len(m.skillCat.Categories) > 0 && m.skillCatCursor < len(m.skillCat.Categories)-1 {
+				m.skillCatCursor++
+				m.skillScrollIndex = 0
+			}
+		case "tab":
+			if len(m.skillCat.Categories) > 0 {
+				m.skillCatCursor = (m.skillCatCursor + 1) % len(m.skillCat.Categories)
+				m.skillScrollIndex = 0
+			}
+		case "up", "k":
+			if m.skillScrollIndex > 0 {
+				m.skillScrollIndex--
+			}
+		case "down", "j":
+			if len(m.skillCat.Categories) > 0 && m.skillCatCursor < len(m.skillCat.Categories) {
+				skills := m.skillCat.Categories[m.skillCatCursor].Skills
+				if m.skillScrollIndex < len(skills)-1 {
+					m.skillScrollIndex++
+				}
+			}
+		case "esc", "q":
+			m.screen = screenMenu
+			return m, nil
+		}
 	}
 
 	return m, nil
@@ -344,6 +438,8 @@ func (m Model) View() string {
 		return m.viewInitPlugins()
 	case screenInitSummary:
 		return m.viewInitSummary()
+	case screenSkillBrowser:
+		return m.viewSkillBrowser()
 	}
 	return ""
 }
@@ -691,6 +787,78 @@ func (m Model) viewInitSummary() string {
 	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("enter: confirm  esc: go back"))
+	return b.String()
+}
+
+// viewSkillBrowser renders the community skill browser screen.
+func (m Model) viewSkillBrowser() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Community Skills (skills.sh)") + "\n\n")
+
+	if m.skillCatErr != nil {
+		content.WriteString(errorStyle.Render("Could not load catalog: "+m.skillCatErr.Error()) + "\n")
+		var b strings.Builder
+		b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+		b.WriteString("\n\n")
+		b.WriteString(mutedStyle.Render("esc/q: back to menu"))
+		return b.String()
+	}
+
+	if len(m.skillCat.Categories) == 0 {
+		content.WriteString(mutedStyle.Render("No skills found in catalog.") + "\n")
+		var b strings.Builder
+		b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+		b.WriteString("\n\n")
+		b.WriteString(mutedStyle.Render("esc/q: back to menu"))
+		return b.String()
+	}
+
+	// Category tab bar.
+	for i, cat := range m.skillCat.Categories {
+		if i > 0 {
+			content.WriteString("  ")
+		}
+		if i == m.skillCatCursor {
+			content.WriteString(activeStyle.Render("[" + cat.Name + "]"))
+		} else {
+			content.WriteString(mutedStyle.Render(" " + cat.Name + " "))
+		}
+	}
+	content.WriteString("\n\n")
+
+	// Skills list for the selected category.
+	currentCat := m.skillCat.Categories[m.skillCatCursor]
+	for si, skill := range currentCat.Skills {
+		if si == m.skillScrollIndex {
+			content.WriteString(activeStyle.Render("> "+skill.Name) + "\n")
+		} else {
+			content.WriteString("  " + skill.Name + "\n")
+		}
+		content.WriteString(mutedStyle.Render("    "+skill.Description) + "\n")
+	}
+
+	// Install hint footer.
+	content.WriteString("\n")
+	installCmd := m.skillCat.InstallCommand
+	if installCmd == "" {
+		installCmd = "npx skills install"
+	}
+	browseURL := m.skillCat.BrowseURL
+	if browseURL == "" {
+		browseURL = "https://skills.sh"
+	}
+	selectedSkill := ""
+	if len(currentCat.Skills) > 0 && m.skillScrollIndex < len(currentCat.Skills) {
+		selectedSkill = " " + currentCat.Skills[m.skillScrollIndex].Name
+	}
+	content.WriteString(mutedStyle.Render(
+		"Install: "+installCmd+selectedSkill+"  |  Browse more: "+browseURL,
+	) + "\n")
+
+	var b strings.Builder
+	b.WriteString(panelStyle.Render(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("tab/←/→: category  ↑/↓: skill  esc/q: back"))
 	return b.String()
 }
 

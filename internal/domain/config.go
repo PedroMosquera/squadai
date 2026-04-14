@@ -132,12 +132,13 @@ type MCPServerDef struct {
 
 // ProjectMeta holds project metadata used for template rendering.
 type ProjectMeta struct {
-	Name         string `json:"name,omitempty"`
-	Language     string `json:"language,omitempty"`
-	Framework    string `json:"framework,omitempty"`
-	TestCommand  string `json:"test_command,omitempty"`
-	BuildCommand string `json:"build_command,omitempty"`
-	LintCommand  string `json:"lint_command,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	Language     string   `json:"language,omitempty"`
+	Languages    []string `json:"languages,omitempty"`
+	Framework    string   `json:"framework,omitempty"`
+	TestCommand  string   `json:"test_command,omitempty"`
+	BuildCommand string   `json:"build_command,omitempty"`
+	LintCommand  string   `json:"lint_command,omitempty"`
 }
 
 // PathsConfig holds user-overridable paths.

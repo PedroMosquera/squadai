@@ -13,6 +13,7 @@ type TemplateData struct {
 	Methodology        string
 	DelegationStrategy string
 	Language           string
+	Languages          []string
 	TestCommand        string
 	BuildCommand       string
 	LintCommand        string
@@ -45,6 +46,7 @@ func buildTemplateData(adapter domain.Adapter, cfg *domain.MergedConfig, homeDir
 		Methodology:        string(cfg.Methodology),
 		DelegationStrategy: string(adapter.DelegationStrategy()),
 		Language:           cfg.Meta.Language,
+		Languages:          cfg.Meta.Languages,
 		TestCommand:        cfg.Meta.TestCommand,
 		BuildCommand:       cfg.Meta.BuildCommand,
 		LintCommand:        cfg.Meta.LintCommand,

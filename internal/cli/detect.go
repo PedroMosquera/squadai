@@ -10,25 +10,75 @@ import (
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
 )
 
-// DetectProjectMeta inspects the project directory for common files and returns
-// populated ProjectMeta. Detection is best-effort; missing files are silently
-// skipped and the corresponding fields are left empty.
-func DetectProjectMeta(projectDir string) domain.ProjectMeta {
-	var meta domain.ProjectMeta
+// langDetector pairs a canonical language name with its detector function.
+type langDetector struct {
+	name string
+	fn   func(string, *domain.ProjectMeta) bool
+}
 
-	// Try Go project first, then Node, then Python.
-	if detectGo(projectDir, &meta) {
-		// Go project detected.
-	} else if detectNode(projectDir, &meta) {
-		// Node project detected.
-	} else {
-		detectPython(projectDir, &meta)
+// DetectProjectMeta inspects the project directory for common files and returns
+// populated ProjectMeta. All detectors run so that monorepos with multiple
+// language ecosystems are fully captured.
+//
+// meta.Language is the primary language (highest-priority match). Its
+// associated TestCommand/BuildCommand/LintCommand values are preserved.
+// meta.Languages lists every detected language; it has at least one entry
+// when any language is found.
+func DetectProjectMeta(projectDir string) domain.ProjectMeta {
+	// Priority order: Go, Node, Python, Rust, Java/Kotlin, Ruby, C#, PHP, Swift.
+	detectors := []langDetector{
+		{"Go", detectGo},
+		{"TypeScript/JavaScript", detectNode},
+		{"Python", detectPython},
+		{"Rust", detectRust},
+		{"Java", detectJava},
+		{"Ruby", detectRuby},
+		{"C#", detectCSharp},
+		{"PHP", detectPHP},
+		{"Swift", detectSwift},
+	}
+
+	var primaryMeta domain.ProjectMeta
+	var languages []string
+	primarySet := false
+
+	for _, d := range detectors {
+		// Each detector writes into a scratch copy so we can inspect what it
+		// set for Language without permanently overwriting primary values.
+		scratch := domain.ProjectMeta{}
+		if d.fn(projectDir, &scratch) {
+			// Use the language name the detector actually set (e.g. "TypeScript"
+			// vs "TypeScript/JavaScript", "Kotlin" vs "Java").
+			lang := scratch.Language
+			if lang == "" {
+				lang = d.name
+			}
+			languages = append(languages, lang)
+
+			if !primarySet {
+				// The first match wins: keep all its fields (Name, Language,
+				// TestCommand, BuildCommand, LintCommand, Framework, etc.).
+				primaryMeta = scratch
+				primarySet = true
+			} else {
+				// Subsequent matches: only promote Name if primary didn't set one.
+				if primaryMeta.Name == "" && scratch.Name != "" {
+					primaryMeta.Name = scratch.Name
+				}
+			}
+		}
+	}
+
+	// Attach the full language list.
+	if len(languages) > 0 {
+		primaryMeta.Languages = languages
 	}
 
 	// Detect build/test/lint commands from Makefile or Taskfile.
-	detectBuildSystem(projectDir, &meta)
+	// These override empty fields only, so the primary language's defaults win.
+	detectBuildSystem(projectDir, &primaryMeta)
 
-	return meta
+	return primaryMeta
 }
 
 // detectGo reads go.mod to extract module name and set language.
@@ -365,5 +415,234 @@ func pyprojectHasSection(projectDir, section string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// detectRust checks for Cargo.toml and extracts project name.
+func detectRust(projectDir string, meta *domain.ProjectMeta) bool {
+	cargoPath := filepath.Join(projectDir, "Cargo.toml")
+	f, err := os.Open(cargoPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	meta.Language = "Rust"
+
+	scanner := bufio.NewScanner(f)
+	inPackage := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "[package]" {
+			inPackage = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inPackage = false
+			continue
+		}
+
+		if inPackage && strings.HasPrefix(line, "name") {
+			if idx := strings.Index(line, "="); idx >= 0 {
+				val := strings.TrimSpace(line[idx+1:])
+				val = strings.Trim(val, "\"'")
+				if val != "" {
+					meta.Name = val
+				}
+			}
+		}
+	}
+
+	if meta.TestCommand == "" {
+		meta.TestCommand = "cargo test"
+	}
+	if meta.BuildCommand == "" {
+		meta.BuildCommand = "cargo build"
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "cargo clippy -- -D warnings"
+	}
+
+	return true
+}
+
+// detectJava checks for pom.xml, build.gradle, or build.gradle.kts.
+func detectJava(projectDir string, meta *domain.ProjectMeta) bool {
+	// Check Maven.
+	if _, err := os.Stat(filepath.Join(projectDir, "pom.xml")); err == nil {
+		meta.Language = "Java"
+		if meta.TestCommand == "" {
+			meta.TestCommand = "mvn test"
+		}
+		if meta.BuildCommand == "" {
+			meta.BuildCommand = "mvn package"
+		}
+		if meta.LintCommand == "" {
+			meta.LintCommand = "mvn checkstyle:check"
+		}
+		return true
+	}
+
+	// Check Gradle (Kotlin DSL first, then Groovy).
+	for _, name := range []string{"build.gradle.kts", "build.gradle"} {
+		if _, err := os.Stat(filepath.Join(projectDir, name)); err == nil {
+			meta.Language = "Java"
+			if name == "build.gradle.kts" {
+				// Kotlin DSL often indicates a Kotlin project.
+				meta.Language = "Kotlin"
+			}
+			if meta.TestCommand == "" {
+				meta.TestCommand = "./gradlew test"
+			}
+			if meta.BuildCommand == "" {
+				meta.BuildCommand = "./gradlew build"
+			}
+			if meta.LintCommand == "" {
+				meta.LintCommand = "./gradlew check"
+			}
+			return true
+		}
+	}
+
+	return false
+}
+
+// detectRuby checks for Gemfile.
+func detectRuby(projectDir string, meta *domain.ProjectMeta) bool {
+	if _, err := os.Stat(filepath.Join(projectDir, "Gemfile")); err != nil {
+		return false
+	}
+
+	meta.Language = "Ruby"
+
+	if meta.TestCommand == "" {
+		// Check for RSpec.
+		if _, err := os.Stat(filepath.Join(projectDir, "spec")); err == nil {
+			meta.TestCommand = "bundle exec rspec"
+		} else {
+			meta.TestCommand = "bundle exec rake test"
+		}
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "bundle exec rubocop"
+	}
+
+	return true
+}
+
+// detectCSharp checks for *.csproj or *.sln files.
+func detectCSharp(projectDir string, meta *domain.ProjectMeta) bool {
+	// Check for .sln first (solution file).
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return false
+	}
+
+	found := false
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".sln") || strings.HasSuffix(name, ".csproj") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false
+	}
+
+	meta.Language = "C#"
+
+	if meta.TestCommand == "" {
+		meta.TestCommand = "dotnet test"
+	}
+	if meta.BuildCommand == "" {
+		meta.BuildCommand = "dotnet build"
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "dotnet format --verify-no-changes"
+	}
+
+	return true
+}
+
+// detectPHP checks for composer.json.
+func detectPHP(projectDir string, meta *domain.ProjectMeta) bool {
+	composerPath := filepath.Join(projectDir, "composer.json")
+	data, err := os.ReadFile(composerPath)
+	if err != nil {
+		return false
+	}
+
+	meta.Language = "PHP"
+
+	// Try to extract project name from composer.json.
+	var composer struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &composer); err == nil && composer.Name != "" {
+		// Composer names are vendor/package; use the package part.
+		parts := strings.Split(composer.Name, "/")
+		if len(parts) > 1 {
+			meta.Name = parts[len(parts)-1]
+		} else {
+			meta.Name = composer.Name
+		}
+	}
+
+	if meta.TestCommand == "" {
+		meta.TestCommand = "./vendor/bin/phpunit"
+	}
+	if meta.BuildCommand == "" {
+		// PHP typically doesn't have a build step.
+	}
+	if meta.LintCommand == "" {
+		meta.LintCommand = "./vendor/bin/phpcs"
+	}
+
+	return true
+}
+
+// detectSwift checks for Package.swift or *.xcodeproj.
+func detectSwift(projectDir string, meta *domain.ProjectMeta) bool {
+	// Check for Swift Package Manager.
+	if _, err := os.Stat(filepath.Join(projectDir, "Package.swift")); err == nil {
+		meta.Language = "Swift"
+		if meta.TestCommand == "" {
+			meta.TestCommand = "swift test"
+		}
+		if meta.BuildCommand == "" {
+			meta.BuildCommand = "swift build"
+		}
+		if meta.LintCommand == "" {
+			meta.LintCommand = "swiftlint"
+		}
+		return true
+	}
+
+	// Check for Xcode project.
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".xcodeproj") {
+			meta.Language = "Swift"
+			if meta.TestCommand == "" {
+				meta.TestCommand = "xcodebuild test"
+			}
+			if meta.BuildCommand == "" {
+				meta.BuildCommand = "xcodebuild build"
+			}
+			if meta.LintCommand == "" {
+				meta.LintCommand = "swiftlint"
+			}
+			return true
+		}
+	}
+
 	return false
 }

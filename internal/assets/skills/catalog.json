@@ -1,0 +1,77 @@
+{
+  "categories": [
+    {
+      "name": "Cloud",
+      "skills": [
+        {"name": "aws-cdk", "description": "AWS CDK infrastructure-as-code patterns and best practices", "source": "vercel-labs/skills"},
+        {"name": "aws-lambda", "description": "AWS Lambda function development, packaging, and deployment", "source": "vercel-labs/skills"},
+        {"name": "azure-bicep", "description": "Azure Bicep templates and ARM resource management", "source": "vercel-labs/skills"},
+        {"name": "gcp-cloud-run", "description": "Google Cloud Run containerised service deployment patterns", "source": "vercel-labs/skills"},
+        {"name": "terraform", "description": "Terraform module authoring, state management, and workflows", "source": "vercel-labs/skills"}
+      ]
+    },
+    {
+      "name": "Code Quality",
+      "skills": [
+        {"name": "accessibility", "description": "WCAG 2.2 accessibility auditing and remediation patterns", "source": "vercel-labs/skills"},
+        {"name": "dependency-review", "description": "Audit third-party dependencies for vulnerabilities and licence issues", "source": "vercel-labs/skills"},
+        {"name": "performance-web", "description": "Core Web Vitals optimisation and Lighthouse performance tuning", "source": "vercel-labs/skills"},
+        {"name": "security-owasp", "description": "OWASP Top 10 review and secure coding guidance", "source": "vercel-labs/skills"},
+        {"name": "semantic-versioning", "description": "Conventional Commits and SemVer release workflows", "source": "vercel-labs/skills"}
+      ]
+    },
+    {
+      "name": "Databases",
+      "skills": [
+        {"name": "mongodb", "description": "MongoDB schema design, aggregation pipelines, and indexing", "source": "vercel-labs/skills"},
+        {"name": "postgres", "description": "PostgreSQL query optimisation, migrations, and indexing strategies", "source": "vercel-labs/skills"},
+        {"name": "prisma", "description": "Prisma ORM schema, migrations, and type-safe query patterns", "source": "vercel-labs/skills"},
+        {"name": "redis", "description": "Redis data structures, caching patterns, and pub/sub usage", "source": "vercel-labs/skills"},
+        {"name": "sqlalchemy", "description": "SQLAlchemy ORM models, sessions, and Alembic migrations", "source": "vercel-labs/skills"}
+      ]
+    },
+    {
+      "name": "DevOps",
+      "skills": [
+        {"name": "docker", "description": "Dockerfile authoring, multi-stage builds, and Compose configurations", "source": "vercel-labs/skills"},
+        {"name": "github-actions", "description": "GitHub Actions workflow authoring and reusable action patterns", "source": "vercel-labs/skills"},
+        {"name": "helm", "description": "Helm chart development, templating, and release management", "source": "vercel-labs/skills"},
+        {"name": "kubernetes", "description": "Kubernetes manifest authoring, RBAC, and deployment strategies", "source": "vercel-labs/skills"},
+        {"name": "opentelemetry", "description": "OpenTelemetry instrumentation, tracing, and observability pipelines", "source": "vercel-labs/skills"}
+      ]
+    },
+    {
+      "name": "Frameworks",
+      "skills": [
+        {"name": "django", "description": "Django models, views, URL routing, and REST Framework patterns", "source": "vercel-labs/skills"},
+        {"name": "fastapi", "description": "FastAPI endpoint design, dependency injection, and async patterns", "source": "vercel-labs/skills"},
+        {"name": "nextjs", "description": "Next.js App Router, Server Components, and deployment patterns", "source": "vercel-labs/skills"},
+        {"name": "rails", "description": "Ruby on Rails MVC patterns, Active Record, and convention-over-configuration", "source": "vercel-labs/skills"},
+        {"name": "react", "description": "React component patterns, hooks, and state management", "source": "vercel-labs/skills"},
+        {"name": "svelte", "description": "Svelte component syntax, stores, and SvelteKit routing", "source": "vercel-labs/skills"},
+        {"name": "vue", "description": "Vue 3 Composition API, Pinia state management, and Nuxt patterns", "source": "vercel-labs/skills"}
+      ]
+    },
+    {
+      "name": "Languages",
+      "skills": [
+        {"name": "golang", "description": "Go idioms, error handling, concurrency patterns, and module management", "source": "vercel-labs/skills"},
+        {"name": "rust", "description": "Rust ownership, lifetimes, error handling, and crate ecosystem", "source": "vercel-labs/skills"},
+        {"name": "typescript", "description": "TypeScript type patterns, generics, and strict-mode best practices", "source": "vercel-labs/skills"}
+      ]
+    },
+    {
+      "name": "Testing",
+      "skills": [
+        {"name": "contract-testing", "description": "Pact and consumer-driven contract testing between services", "source": "vercel-labs/skills"},
+        {"name": "e2e-playwright", "description": "Playwright end-to-end test authoring, page objects, and CI integration", "source": "vercel-labs/skills"},
+        {"name": "property-based-testing", "description": "Property-based testing with fast-check, Hypothesis, and QuickCheck", "source": "vercel-labs/skills"},
+        {"name": "snapshot-testing", "description": "Snapshot and visual regression testing patterns", "source": "vercel-labs/skills"},
+        {"name": "vitest", "description": "Vitest unit and integration testing with TypeScript and Vite projects", "source": "vercel-labs/skills"}
+      ]
+    }
+  ],
+  "install_command": "npx skills install",
+  "search_command": "npx skills find",
+  "browse_url": "https://skills.sh"
+}

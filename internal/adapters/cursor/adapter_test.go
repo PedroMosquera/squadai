@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
@@ -133,15 +135,28 @@ func TestPaths(t *testing.T) {
 	a := New()
 	home := "/Users/test"
 
+	// ConfigDir differs on Windows; compute the expected base so the test is
+	// portable across all CI platforms.
+	var wantConfigDir string
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			wantConfigDir = filepath.Join(appData, "Cursor", "User")
+		} else {
+			wantConfigDir = filepath.Join(home, "AppData", "Roaming", "Cursor", "User")
+		}
+	} else {
+		wantConfigDir = "/Users/test/.cursor"
+	}
+
 	tests := []struct {
 		name string
 		got  string
 		want string
 	}{
-		{"GlobalConfigDir", a.GlobalConfigDir(home), "/Users/test/.cursor"},
-		{"SystemPromptFile", a.SystemPromptFile(home), "/Users/test/.cursor/.cursorrules"},
-		{"SkillsDir", a.SkillsDir(home), "/Users/test/.cursor/skills"},
-		{"SettingsPath", a.SettingsPath(home), "/Users/test/.cursor/mcp.json"},
+		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
+		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, ".cursorrules")},
+		{"SkillsDir", a.SkillsDir(home), filepath.Join(wantConfigDir, "skills")},
+		{"SettingsPath", a.SettingsPath(home), filepath.Join(wantConfigDir, "mcp.json")},
 	}
 
 	for _, tt := range tests {
@@ -160,10 +175,10 @@ func TestProjectPaths(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/.cursor/mcp.json"},
-		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/.cursorrules"},
-		{"ProjectAgentsDir", a.ProjectAgentsDir(project), "/Users/test/myproject/.cursor/agents"},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), "/Users/test/myproject/.cursor/skills"},
+		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".cursor", "mcp.json")},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".cursorrules")},
+		{"ProjectAgentsDir", a.ProjectAgentsDir(project), filepath.Join(project, ".cursor", "agents")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".cursor", "skills")},
 	}
 
 	for _, tt := range tests {
@@ -237,9 +252,22 @@ func TestAdapter_SupportsSubAgents(t *testing.T) {
 
 func TestAdapter_SubAgentsDir(t *testing.T) {
 	a := New()
-	dir := a.SubAgentsDir("/Users/test")
-	if dir != "/Users/test/.cursor/agents" {
-		t.Errorf("SubAgentsDir = %q, want /Users/test/.cursor/agents", dir)
+	home := "/Users/test"
+
+	var wantConfigDir string
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			wantConfigDir = filepath.Join(appData, "Cursor", "User")
+		} else {
+			wantConfigDir = filepath.Join(home, "AppData", "Roaming", "Cursor", "User")
+		}
+	} else {
+		wantConfigDir = "/Users/test/.cursor"
+	}
+	want := filepath.Join(wantConfigDir, "agents")
+
+	if got := a.SubAgentsDir(home); got != want {
+		t.Errorf("SubAgentsDir = %q, want %q", got, want)
 	}
 }
 

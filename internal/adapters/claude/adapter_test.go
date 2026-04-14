@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
@@ -133,15 +134,19 @@ func TestPaths(t *testing.T) {
 	a := New()
 	home := "/Users/test"
 
+	// All Claude Code paths are home-relative with no OS branching;
+	// use filepath.Join so separators are correct on every CI platform.
+	wantConfigDir := filepath.Join(home, ".claude")
+
 	tests := []struct {
 		name string
 		got  string
 		want string
 	}{
-		{"GlobalConfigDir", a.GlobalConfigDir(home), "/Users/test/.claude"},
-		{"SystemPromptFile", a.SystemPromptFile(home), "/Users/test/.claude/CLAUDE.md"},
-		{"SkillsDir", a.SkillsDir(home), "/Users/test/.claude/skills"},
-		{"SettingsPath", a.SettingsPath(home), "/Users/test/.claude/settings.json"},
+		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
+		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, "CLAUDE.md")},
+		{"SkillsDir", a.SkillsDir(home), filepath.Join(wantConfigDir, "skills")},
+		{"SettingsPath", a.SettingsPath(home), filepath.Join(wantConfigDir, "settings.json")},
 	}
 
 	for _, tt := range tests {
@@ -160,10 +165,10 @@ func TestProjectPaths(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/CLAUDE.md"},
-		{"ProjectSettingsPath", a.ProjectSettingsPath(project), "/Users/test/myproject/.claude/settings.json"},
-		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/.claude/settings.json"},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), "/Users/test/myproject/.claude/skills"},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, "CLAUDE.md")},
+		{"ProjectSettingsPath", a.ProjectSettingsPath(project), filepath.Join(project, ".claude", "settings.json")},
+		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".claude", "settings.json")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".claude", "skills")},
 	}
 
 	for _, tt := range tests {
@@ -262,8 +267,9 @@ func TestAdapter_WorkflowsDir(t *testing.T) {
 
 func TestAdapter_MCPDir(t *testing.T) {
 	a := New()
-	dir := a.MCPDir("/Users/test")
-	if dir != "/Users/test/.claude/mcp" {
-		t.Errorf("MCPDir = %q, want /Users/test/.claude/mcp", dir)
+	home := "/Users/test"
+	want := filepath.Join(home, ".claude", "mcp")
+	if got := a.MCPDir(home); got != want {
+		t.Errorf("MCPDir = %q, want %q", got, want)
 	}
 }

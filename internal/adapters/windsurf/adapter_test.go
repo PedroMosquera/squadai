@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/PedroMosquera/agent-manager-pro/internal/domain"
@@ -133,15 +135,28 @@ func TestPaths(t *testing.T) {
 	a := New()
 	home := "/Users/test"
 
+	// ConfigDir differs on Windows; compute the expected base so the test is
+	// portable across all CI platforms.
+	var wantConfigDir string
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			wantConfigDir = filepath.Join(appData, "Windsurf", "User")
+		} else {
+			wantConfigDir = filepath.Join(home, "AppData", "Roaming", "Windsurf", "User")
+		}
+	} else {
+		wantConfigDir = "/Users/test/.codeium/windsurf"
+	}
+
 	tests := []struct {
 		name string
 		got  string
 		want string
 	}{
-		{"GlobalConfigDir", a.GlobalConfigDir(home), "/Users/test/.codeium/windsurf"},
-		{"SystemPromptFile", a.SystemPromptFile(home), "/Users/test/.codeium/windsurf/global_rules.md"},
-		{"SkillsDir", a.SkillsDir(home), "/Users/test/.codeium/windsurf/skills"},
-		{"SettingsPath", a.SettingsPath(home), "/Users/test/.codeium/windsurf/mcp_config.json"},
+		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
+		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, "global_rules.md")},
+		{"SkillsDir", a.SkillsDir(home), filepath.Join(wantConfigDir, "skills")},
+		{"SettingsPath", a.SettingsPath(home), filepath.Join(wantConfigDir, "mcp_config.json")},
 	}
 
 	for _, tt := range tests {
@@ -160,9 +175,9 @@ func TestProjectPaths(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/.windsurf/mcp_config.json"},
-		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/.windsurfrules"},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), "/Users/test/myproject/.windsurf/skills"},
+		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".windsurf", "mcp_config.json")},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".windsurfrules")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".windsurf", "skills")},
 	}
 
 	for _, tt := range tests {
@@ -260,7 +275,7 @@ func TestAdapter_SupportsWorkflows(t *testing.T) {
 
 func TestAdapter_WorkflowsDir(t *testing.T) {
 	a := New()
-	want := "/project/.windsurf/workflows"
+	want := filepath.Join("/project", ".windsurf", "workflows")
 	if got := a.WorkflowsDir("/project"); got != want {
 		t.Errorf("WorkflowsDir() = %q, want %q", got, want)
 	}

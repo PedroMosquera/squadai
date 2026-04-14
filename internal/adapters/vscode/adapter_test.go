@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -135,11 +136,20 @@ func TestPaths(t *testing.T) {
 	home := "/Users/test"
 
 	// ConfigDir differs by OS; compute the expected base so the test is
-	// portable between macOS CI runners and Linux CI runners.
+	// portable between macOS, Linux, and Windows CI runners.
 	var wantConfigDir string
-	if runtime.GOOS == "linux" {
+	switch runtime.GOOS {
+	case "linux":
 		wantConfigDir = "/Users/test/.config/Code/User"
-	} else {
+	case "windows":
+		// On Windows ConfigDir uses %APPDATA%; fall back to the homeDir path
+		// when APPDATA is unset (as it is in this test which passes a fake home).
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			wantConfigDir = filepath.Join(appData, "Code", "User")
+		} else {
+			wantConfigDir = filepath.Join("/Users/test", "AppData", "Roaming", "Code", "User")
+		}
+	default:
 		wantConfigDir = "/Users/test/Library/Application Support/Code/User"
 	}
 
@@ -149,9 +159,9 @@ func TestPaths(t *testing.T) {
 		want string
 	}{
 		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
-		{"SystemPromptFile", a.SystemPromptFile(home), wantConfigDir + "/.instructions.md"},
-		{"SkillsDir", a.SkillsDir(home), "/Users/test/.copilot/skills"},
-		{"SettingsPath", a.SettingsPath(home), wantConfigDir + "/settings.json"},
+		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, ".instructions.md")},
+		{"SkillsDir", a.SkillsDir(home), filepath.Join(home, ".copilot", "skills")},
+		{"SettingsPath", a.SettingsPath(home), filepath.Join(wantConfigDir, "settings.json")},
 	}
 
 	for _, tt := range tests {
@@ -170,9 +180,9 @@ func TestProjectPaths(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"ProjectConfigFile", a.ProjectConfigFile(project), "/Users/test/myproject/.vscode/settings.json"},
-		{"ProjectRulesFile", a.ProjectRulesFile(project), "/Users/test/myproject/.instructions.md"},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), "/Users/test/myproject/.copilot/skills"},
+		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".vscode", "settings.json")},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".instructions.md")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".copilot", "skills")},
 	}
 
 	for _, tt := range tests {
