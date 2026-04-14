@@ -46,13 +46,16 @@ type initResult struct {
 func RunInit(args []string, stdout io.Writer) error {
 	withPolicy := false
 	force := false
+	merge := false
 	jsonOut := false
 	var methodology string
+	methodologyExplicit := false
 	var mcpFlag string
 	var pluginsFlag string
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "--methodology=") {
 			methodology = strings.TrimPrefix(arg, "--methodology=")
+			methodologyExplicit = true
 			continue
 		}
 		if strings.HasPrefix(arg, "--mcp=") {
@@ -68,10 +71,12 @@ func RunInit(args []string, stdout io.Writer) error {
 			withPolicy = true
 		case "--force":
 			force = true
+		case "--merge":
+			merge = true
 		case "--json":
 			jsonOut = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force] [--json]")
+			fmt.Fprintln(stdout, "Usage: agent-manager init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force] [--merge] [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Initialize .agent-manager/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
@@ -90,6 +95,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --with-policy  Also create .agent-manager/policy.json with a starter template.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
 			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
+			fmt.Fprintln(stdout, "  --merge        Re-run init, merging new config on top of existing (preserves user customizations).")
 			fmt.Fprintln(stdout, "  --json         Output the init result as JSON instead of human-readable text.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
@@ -97,11 +103,16 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  agent-manager init --methodology=tdd --with-policy")
 			fmt.Fprintln(stdout, "  agent-manager init --methodology=sdd --mcp=context7 --plugins=code-review")
 			fmt.Fprintln(stdout, "  agent-manager init --force")
+			fmt.Fprintln(stdout, "  agent-manager init --merge")
 			fmt.Fprintln(stdout, "  agent-manager init --json")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for init", arg)
 		}
+	}
+
+	if merge && force {
+		return fmt.Errorf("--merge and --force are mutually exclusive")
 	}
 
 	// Parse MCP selections from flag.
@@ -167,10 +178,27 @@ func RunInit(args []string, stdout io.Writer) error {
 	// Create project config.
 	projectPath := config.ProjectConfigPath(projectDir)
 	_, projectExists := os.Stat(projectPath)
-	if projectExists == nil && !force {
+
+	// proj holds the final config used for both human-readable and JSON output.
+	var proj *domain.ProjectConfig
+	if projectExists == nil && !force && !merge {
+		// Existing config, no overwrite requested — skip.
 		fmt.Fprintf(humanOut, "  exists  %s\n", relPath(projectDir, projectPath))
+	} else if projectExists == nil && merge {
+		// Merge mode: load existing, build fresh detection, merge together.
+		existing, loadErr := config.LoadProject(projectDir)
+		if loadErr != nil {
+			return fmt.Errorf("load existing project config for merge: %w", loadErr)
+		}
+		fresh := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
+		proj = mergeProjectConfigs(existing, fresh, methodologyExplicit)
+		if err := config.WriteJSON(projectPath, proj); err != nil {
+			return fmt.Errorf("write project config: %w", err)
+		}
+		fmt.Fprintf(humanOut, "  merged  %s\n", relPath(projectDir, projectPath))
 	} else {
-		proj := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
+		// New or force: build fresh config.
+		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
@@ -179,6 +207,11 @@ func RunInit(args []string, stdout io.Writer) error {
 		} else {
 			fmt.Fprintf(humanOut, "  created %s\n", relPath(projectDir, projectPath))
 		}
+	}
+
+	// When proj was not written (exists + no-op skip), build it for JSON output.
+	if proj == nil {
+		proj = buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
 	}
 
 	// Create policy config if requested.
@@ -264,9 +297,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			adapterIDs = append(adapterIDs, string(a.ID()))
 		}
 
-		// Build component/MCP/plugin state from the written project config.
-		proj := buildSmartProjectConfig(meta, detectedAdapters, meth, mcpSelections, pluginSelections)
-
+		// Build component/MCP/plugin state from the computed project config.
 		componentMap := make(map[string]bool, len(proj.Components))
 		for k, v := range proj.Components {
 			componentMap[k] = v.Enabled
@@ -453,6 +484,106 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 	}
 
 	return proj
+}
+
+// mergeProjectConfigs merges a freshly-detected config on top of an existing one,
+// preserving user customizations while adding newly-detected items.
+//
+// Merge rules:
+//   - Version, Meta: always taken from fresh (latest version, re-detected metadata)
+//   - Adapters, Components, Skills, MCP, Plugins: map-merge — new keys from fresh are
+//     added, but existing keys are never overwritten (user customizations preserved)
+//   - Methodology, Team, Commands: if methodologyExplicit is true, overwrite from fresh;
+//     otherwise preserve existing values
+//   - Copilot, Rules: always preserved from existing (user-managed)
+func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExplicit bool) *domain.ProjectConfig {
+	result := *existing
+
+	// Always overwrite version and meta from fresh.
+	result.Version = fresh.Version
+	result.Meta = fresh.Meta
+
+	// Map-merge Adapters: add new keys from fresh, never overwrite existing.
+	result.Adapters = make(map[string]domain.AdapterConfig, len(existing.Adapters))
+	for k, v := range existing.Adapters {
+		result.Adapters[k] = v
+	}
+	for k, v := range fresh.Adapters {
+		if _, exists := result.Adapters[k]; !exists {
+			result.Adapters[k] = v
+		}
+	}
+
+	// Map-merge Components: add new keys from fresh, never overwrite existing.
+	result.Components = make(map[string]domain.ComponentConfig, len(existing.Components))
+	for k, v := range existing.Components {
+		result.Components[k] = v
+	}
+	for k, v := range fresh.Components {
+		if _, exists := result.Components[k]; !exists {
+			result.Components[k] = v
+		}
+	}
+
+	// Map-merge Skills: default skills added if not present, user-added preserved.
+	result.Skills = make(map[string]domain.SkillDef, len(existing.Skills))
+	for k, v := range existing.Skills {
+		result.Skills[k] = v
+	}
+	for k, v := range fresh.Skills {
+		if _, exists := result.Skills[k]; !exists {
+			result.Skills[k] = v
+		}
+	}
+
+	// Map-merge MCP: default servers added if not present, user servers preserved.
+	result.MCP = make(map[string]domain.MCPServerDef, len(existing.MCP))
+	for k, v := range existing.MCP {
+		result.MCP[k] = v
+	}
+	for k, v := range fresh.MCP {
+		if _, exists := result.MCP[k]; !exists {
+			result.MCP[k] = v
+		}
+	}
+
+	// Map-merge Plugins: new plugins added, existing preserved.
+	result.Plugins = make(map[string]domain.PluginDef, len(existing.Plugins))
+	for k, v := range existing.Plugins {
+		result.Plugins[k] = v
+	}
+	for k, v := range fresh.Plugins {
+		if _, exists := result.Plugins[k]; !exists {
+			result.Plugins[k] = v
+		}
+	}
+
+	// Methodology-aware: if explicit flag given, overwrite; otherwise preserve.
+	if methodologyExplicit {
+		result.Methodology = fresh.Methodology
+		result.Team = fresh.Team
+		result.Commands = fresh.Commands
+	}
+	// If not explicit, result.Methodology/Team/Commands are already the existing
+	// values from the struct copy above.
+
+	// Copilot and Rules are always preserved from existing (user-managed).
+	result.Copilot = existing.Copilot
+	result.Rules = existing.Rules
+
+	// Agents are preserved from existing (user-managed definitions).
+	// Map-merge to add fresh agent defs if not already present.
+	result.Agents = make(map[string]domain.AgentDef, len(existing.Agents))
+	for k, v := range existing.Agents {
+		result.Agents[k] = v
+	}
+	for k, v := range fresh.Agents {
+		if _, exists := result.Agents[k]; !exists {
+			result.Agents[k] = v
+		}
+	}
+
+	return &result
 }
 
 // defaultCommandsForMethodology returns a set of command definitions appropriate

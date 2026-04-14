@@ -994,3 +994,627 @@ func TestInit_WritesMultiStandards_GoNodeMonorepo(t *testing.T) {
 		t.Error("monorepo standards should contain '## TypeScript/JavaScript Standards' section")
 	}
 }
+
+// ─── P4-B: init --merge ───────────────────────────────────────────────────────
+
+// TestRunInit_Merge_MutuallyExclusiveWithForce verifies that --merge and --force
+// together return an error containing "mutually exclusive".
+func TestRunInit_Merge_MutuallyExclusiveWithForce(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunInit([]string{"--merge", "--force"}, &buf)
+	if err == nil {
+		t.Fatal("expected error when --merge and --force are combined, got nil")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("error = %q, want to contain 'mutually exclusive'", err.Error())
+	}
+}
+
+// TestRunInit_HelpIncludesMerge verifies that --merge appears in help output.
+func TestRunInit_HelpIncludesMerge(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--help"}, &buf); err != nil {
+		t.Fatalf("help should not error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--merge") {
+		t.Error("help output should mention --merge flag")
+	}
+}
+
+// TestRunInit_Merge_PreservesExistingConfig verifies that --merge preserves
+// user-added skills that are not in the default set.
+func TestRunInit_Merge_PreservesExistingConfig(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Create a project.json with a custom skill.
+	initial := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Skills: map[string]domain.SkillDef{
+			"my-custom-skill": {
+				Description: "A custom user skill",
+				ContentFile: "skills/my-custom.md",
+			},
+		},
+		MCP: map[string]domain.MCPServerDef{},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, initial); err != nil {
+		t.Fatalf("write initial project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--merge"}, &buf); err != nil {
+		t.Fatalf("RunInit --merge error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project after merge: %v", err)
+	}
+
+	if _, ok := proj.Skills["my-custom-skill"]; !ok {
+		t.Error("--merge should preserve user-added skill 'my-custom-skill'")
+	}
+}
+
+// TestRunInit_Merge_AddsNewAdapters verifies that --merge adds newly-detected
+// adapters (e.g., cursor) without removing existing ones.
+func TestRunInit_Merge_AddsNewAdapters(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Start with a project.json that only has opencode.
+	initial := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		MCP: map[string]domain.MCPServerDef{},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, initial); err != nil {
+		t.Fatalf("write initial project config: %v", err)
+	}
+
+	// Create a fake .cursor/ directory inside the temp home so cursor is detected.
+	// Since RunInit uses os.UserHomeDir(), we can't inject a custom home.
+	// Instead, simulate by directly testing the merge logic with a fake fresh config
+	// that includes cursor.
+	freshWithCursor := buildSmartProjectConfig(
+		domain.ProjectMeta{Language: "Go"},
+		nil, // no adapters from detection (temp dir won't find cursor)
+		"",
+		nil,
+		nil,
+	)
+	// Add cursor to the fresh config to simulate detection.
+	freshWithCursor.Adapters["cursor"] = domain.AdapterConfig{Enabled: true}
+
+	merged := mergeProjectConfigs(initial, freshWithCursor, false)
+
+	// Original opencode adapter must still be present.
+	if _, ok := merged.Adapters["opencode"]; !ok {
+		t.Error("merged config should preserve existing opencode adapter")
+	}
+	// Newly-detected cursor adapter should be added.
+	if _, ok := merged.Adapters["cursor"]; !ok {
+		t.Error("merged config should add newly-detected cursor adapter")
+	}
+}
+
+// TestRunInit_Merge_PreservesMethodology verifies that without --methodology,
+// --merge preserves the existing methodology.
+func TestRunInit_Merge_PreservesMethodology(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Start with tdd methodology.
+	initial := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Methodology: domain.MethodologyTDD,
+		Team:        domain.DefaultTeam(domain.MethodologyTDD),
+		MCP:         map[string]domain.MCPServerDef{},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, initial); err != nil {
+		t.Fatalf("write initial project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	// Run --merge without --methodology flag.
+	if err := RunInit([]string{"--merge"}, &buf); err != nil {
+		t.Fatalf("RunInit --merge error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project after merge: %v", err)
+	}
+
+	if proj.Methodology != domain.MethodologyTDD {
+		t.Errorf("Methodology = %q, want %q (should be preserved)", proj.Methodology, domain.MethodologyTDD)
+	}
+}
+
+// TestRunInit_Merge_OverridesMethodologyWhenExplicit verifies that when
+// --methodology is explicitly given, --merge overwrites the existing methodology.
+func TestRunInit_Merge_OverridesMethodologyWhenExplicit(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Start with tdd methodology.
+	initial := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Methodology: domain.MethodologyTDD,
+		Team:        domain.DefaultTeam(domain.MethodologyTDD),
+		MCP:         map[string]domain.MCPServerDef{},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, initial); err != nil {
+		t.Fatalf("write initial project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	// Run --merge --methodology=sdd — explicit flag should override.
+	if err := RunInit([]string{"--merge", "--methodology=sdd"}, &buf); err != nil {
+		t.Fatalf("RunInit --merge --methodology=sdd error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project after merge: %v", err)
+	}
+
+	if proj.Methodology != domain.MethodologySDD {
+		t.Errorf("Methodology = %q, want %q (should be overridden by explicit flag)", proj.Methodology, domain.MethodologySDD)
+	}
+}
+
+// TestRunInit_Merge_UpdatesMeta verifies that --merge re-detects and updates Meta.
+func TestRunInit_Merge_UpdatesMeta(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Start with a project.json that has Language="python".
+	initial := &domain.ProjectConfig{
+		Version: 1,
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Meta: domain.ProjectMeta{Language: "python"},
+		MCP:  map[string]domain.MCPServerDef{},
+	}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, initial); err != nil {
+		t.Fatalf("write initial project config: %v", err)
+	}
+
+	// Create a go.mod to trigger Go language detection.
+	goMod := "module github.com/example/test\n\ngo 1.24\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--merge"}, &buf); err != nil {
+		t.Fatalf("RunInit --merge error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project after merge: %v", err)
+	}
+
+	if proj.Meta.Language != "Go" {
+		t.Errorf("Meta.Language = %q, want %q (should be updated by merge)", proj.Meta.Language, "Go")
+	}
+}
+
+// TestRunInit_Merge_NoExistingConfig verifies that --merge behaves like normal
+// init when no project.json exists (creates a new config).
+func TestRunInit_Merge_NoExistingConfig(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--merge"}, &buf); err != nil {
+		t.Fatalf("RunInit --merge with no existing config should not error: %v", err)
+	}
+
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
+		t.Error("--merge with no existing config should create project.json")
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project after merge init: %v", err)
+	}
+	if proj.Version != 1 {
+		t.Errorf("Version = %d, want 1", proj.Version)
+	}
+}
+
+// TestRunInit_Merge_OutputSaysMerged verifies that the human output says "merged"
+// when --merge is used and config already exists.
+func TestRunInit_Merge_OutputSaysMerged(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Create initial project.json.
+	initial := domain.DefaultProjectConfig()
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, initial); err != nil {
+		t.Fatalf("write initial project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--merge"}, &buf); err != nil {
+		t.Fatalf("RunInit --merge error: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "merged") {
+		t.Errorf("output should contain 'merged', got:\n%s", buf.String())
+	}
+}
+
+// ─── TestMergeProjectConfigs (unit tests for the merge function) ──────────────
+
+// TestMergeProjectConfigs_AdditiveAdapterMerge verifies new adapters are added
+// and existing adapters are not overwritten.
+func TestMergeProjectConfigs_AdditiveAdapterMerge(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+	fresh := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: false}, // existing value should be kept
+			"cursor":   {Enabled: true},  // new adapter should be added
+		},
+		Components: map[string]domain.ComponentConfig{},
+	}
+
+	result := mergeProjectConfigs(existing, fresh, false)
+
+	if !result.Adapters["opencode"].Enabled {
+		t.Error("existing opencode adapter Enabled=true should be preserved")
+	}
+	if _, ok := result.Adapters["cursor"]; !ok {
+		t.Error("new cursor adapter from fresh should be added")
+	}
+}
+
+// TestMergeProjectConfigs_ExistingSkillsPreserved verifies that user-added skills
+// are not removed.
+func TestMergeProjectConfigs_ExistingSkillsPreserved(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{},
+		Adapters:   map[string]domain.AdapterConfig{},
+		Skills: map[string]domain.SkillDef{
+			"my-skill": {Description: "My custom skill"},
+		},
+	}
+	fresh := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{},
+		Adapters:   map[string]domain.AdapterConfig{},
+		Skills: map[string]domain.SkillDef{
+			"code-review": {Description: "Default code review skill"},
+		},
+	}
+
+	result := mergeProjectConfigs(existing, fresh, false)
+
+	if _, ok := result.Skills["my-skill"]; !ok {
+		t.Error("user skill 'my-skill' should be preserved after merge")
+	}
+	if _, ok := result.Skills["code-review"]; !ok {
+		t.Error("default skill 'code-review' from fresh should be added")
+	}
+}
+
+// TestMergeProjectConfigs_MethodologyPreservation verifies that when
+// methodologyExplicit=false, the existing methodology is kept.
+func TestMergeProjectConfigs_MethodologyPreservation(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version:     1,
+		Components:  map[string]domain.ComponentConfig{},
+		Adapters:    map[string]domain.AdapterConfig{},
+		Methodology: domain.MethodologyTDD,
+		Team:        domain.DefaultTeam(domain.MethodologyTDD),
+	}
+	fresh := &domain.ProjectConfig{
+		Version:     1,
+		Components:  map[string]domain.ComponentConfig{},
+		Adapters:    map[string]domain.AdapterConfig{},
+		Methodology: domain.MethodologySDD,
+		Team:        domain.DefaultTeam(domain.MethodologySDD),
+	}
+
+	result := mergeProjectConfigs(existing, fresh, false /* not explicit */)
+
+	if result.Methodology != domain.MethodologyTDD {
+		t.Errorf("Methodology = %q, want %q (should be preserved when not explicit)", result.Methodology, domain.MethodologyTDD)
+	}
+	// Team should also be TDD (6 roles), not SDD (8 roles).
+	if len(result.Team) != 6 {
+		t.Errorf("Team len = %d, want 6 (TDD team, preserved)", len(result.Team))
+	}
+}
+
+// TestMergeProjectConfigs_MethodologyOverride verifies that when
+// methodologyExplicit=true, the methodology from fresh overwrites existing.
+func TestMergeProjectConfigs_MethodologyOverride(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version:     1,
+		Components:  map[string]domain.ComponentConfig{},
+		Adapters:    map[string]domain.AdapterConfig{},
+		Methodology: domain.MethodologyTDD,
+		Team:        domain.DefaultTeam(domain.MethodologyTDD),
+	}
+	fresh := &domain.ProjectConfig{
+		Version:     1,
+		Components:  map[string]domain.ComponentConfig{},
+		Adapters:    map[string]domain.AdapterConfig{},
+		Methodology: domain.MethodologySDD,
+		Team:        domain.DefaultTeam(domain.MethodologySDD),
+	}
+
+	result := mergeProjectConfigs(existing, fresh, true /* explicit */)
+
+	if result.Methodology != domain.MethodologySDD {
+		t.Errorf("Methodology = %q, want %q (should be overwritten by explicit flag)", result.Methodology, domain.MethodologySDD)
+	}
+	if len(result.Team) != 8 {
+		t.Errorf("Team len = %d, want 8 (SDD team, from fresh)", len(result.Team))
+	}
+}
+
+// TestMergeProjectConfigs_MapIsolation verifies that modifying the result's maps
+// does not affect the original existing config (no shared map references).
+func TestMergeProjectConfigs_MapIsolation(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			"opencode": {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Skills: map[string]domain.SkillDef{
+			"skill-a": {Description: "Skill A"},
+		},
+		MCP: map[string]domain.MCPServerDef{
+			"context7": {Enabled: true},
+		},
+		Plugins: map[string]domain.PluginDef{
+			"plugin-a": {Description: "Plugin A"},
+		},
+	}
+	fresh := &domain.ProjectConfig{
+		Version:    1,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+	}
+
+	result := mergeProjectConfigs(existing, fresh, false)
+
+	// Add a new entry to result's maps.
+	result.Adapters["new-adapter"] = domain.AdapterConfig{Enabled: true}
+	result.Components["new-comp"] = domain.ComponentConfig{Enabled: true}
+	result.Skills["new-skill"] = domain.SkillDef{Description: "New"}
+	result.MCP["new-mcp"] = domain.MCPServerDef{Enabled: true}
+	result.Plugins["new-plugin"] = domain.PluginDef{Description: "New"}
+
+	// Existing maps must be unchanged.
+	if _, ok := existing.Adapters["new-adapter"]; ok {
+		t.Error("modifying result.Adapters should not affect existing.Adapters")
+	}
+	if _, ok := existing.Components["new-comp"]; ok {
+		t.Error("modifying result.Components should not affect existing.Components")
+	}
+	if _, ok := existing.Skills["new-skill"]; ok {
+		t.Error("modifying result.Skills should not affect existing.Skills")
+	}
+	if _, ok := existing.MCP["new-mcp"]; ok {
+		t.Error("modifying result.MCP should not affect existing.MCP")
+	}
+	if _, ok := existing.Plugins["new-plugin"]; ok {
+		t.Error("modifying result.Plugins should not affect existing.Plugins")
+	}
+}
+
+// TestMergeProjectConfigs_MetaAlwaysUpdated verifies Version and Meta come from fresh.
+func TestMergeProjectConfigs_MetaAlwaysUpdated(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version:    1,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+		Meta:       domain.ProjectMeta{Language: "python", Name: "old-project"},
+	}
+	fresh := &domain.ProjectConfig{
+		Version:    2,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+		Meta:       domain.ProjectMeta{Language: "Go", Name: "new-project"},
+	}
+
+	result := mergeProjectConfigs(existing, fresh, false)
+
+	if result.Version != 2 {
+		t.Errorf("Version = %d, want 2 (always from fresh)", result.Version)
+	}
+	if result.Meta.Language != "Go" {
+		t.Errorf("Meta.Language = %q, want %q (always from fresh)", result.Meta.Language, "Go")
+	}
+	if result.Meta.Name != "new-project" {
+		t.Errorf("Meta.Name = %q, want %q (always from fresh)", result.Meta.Name, "new-project")
+	}
+}
+
+// TestMergeProjectConfigs_CopilotPreserved verifies Copilot config is always
+// preserved from existing.
+func TestMergeProjectConfigs_CopilotPreserved(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version:    1,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+		Copilot: domain.CopilotConfig{
+			InstructionsTemplate: "custom",
+			CustomContent:        "# My custom instructions",
+		},
+	}
+	fresh := &domain.ProjectConfig{
+		Version:    1,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+		Copilot: domain.CopilotConfig{
+			InstructionsTemplate: "standard",
+		},
+	}
+
+	result := mergeProjectConfigs(existing, fresh, false)
+
+	if result.Copilot.InstructionsTemplate != "custom" {
+		t.Errorf("Copilot.InstructionsTemplate = %q, want %q (should be preserved)", result.Copilot.InstructionsTemplate, "custom")
+	}
+	if result.Copilot.CustomContent != "# My custom instructions" {
+		t.Errorf("Copilot.CustomContent = %q (should be preserved)", result.Copilot.CustomContent)
+	}
+}
+
+// TestMergeProjectConfigs_MCPAdditive verifies that new MCP servers are added
+// without removing existing user-configured servers.
+func TestMergeProjectConfigs_MCPAdditive(t *testing.T) {
+	existing := &domain.ProjectConfig{
+		Version:    1,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+		MCP: map[string]domain.MCPServerDef{
+			"my-custom-server": {Type: "http", Enabled: true},
+			"context7":         {Type: "stdio", Enabled: false}, // user disabled it
+		},
+	}
+	fresh := &domain.ProjectConfig{
+		Version:    1,
+		Adapters:   map[string]domain.AdapterConfig{},
+		Components: map[string]domain.ComponentConfig{},
+		MCP: map[string]domain.MCPServerDef{
+			"context7":   {Type: "stdio", Enabled: true}, // default: enabled
+			"new-server": {Type: "http", Enabled: true},  // new default server
+		},
+	}
+
+	result := mergeProjectConfigs(existing, fresh, false)
+
+	// Existing custom server must be preserved.
+	if _, ok := result.MCP["my-custom-server"]; !ok {
+		t.Error("user-added 'my-custom-server' should be preserved")
+	}
+	// Existing user-disabled context7 must stay disabled (not overwritten by fresh).
+	if result.MCP["context7"].Enabled {
+		t.Error("user-disabled 'context7' should remain disabled (not overwritten by fresh)")
+	}
+	// New server from fresh must be added.
+	if _, ok := result.MCP["new-server"]; !ok {
+		t.Error("new 'new-server' from fresh should be added")
+	}
+}
