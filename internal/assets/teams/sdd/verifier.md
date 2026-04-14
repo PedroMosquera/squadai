@@ -41,6 +41,9 @@ Load and follow the skill at: `skills/sdd/sdd-verify/SKILL.md`
 
 Use {{.Language}} conventions. Run `{{.TestCommand}}` to verify changes. Run
 `{{.BuildCommand}}` to ensure compilation.
+{{- if .LintCommand }}
+Run linting with: `{{ .LintCommand }}`
+{{- end }}
 
 ## Artifacts
 

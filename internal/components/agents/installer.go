@@ -636,6 +636,7 @@ func buildTemplateDataFromAction(cfg *domain.MergedConfig, projectDir string, ro
 		Methodology:        string(cfg.Methodology),
 		DelegationStrategy: delegationStrategyForAgent(agentID),
 		Language:           cfg.Meta.Language,
+		Languages:          cfg.Meta.Languages,
 		TestCommand:        cfg.Meta.TestCommand,
 		BuildCommand:       cfg.Meta.BuildCommand,
 		LintCommand:        cfg.Meta.LintCommand,
@@ -644,6 +645,10 @@ func buildTemplateDataFromAction(cfg *domain.MergedConfig, projectDir string, ro
 		TeamRoles:          cfg.Team,
 		MCPServers:         cfg.MCP,
 		HasContext7:        hasContext7,
+		Framework:          cfg.Meta.Framework,
+		PackageManager:     cfg.Meta.PackageManager,
+		ModelTier:          string(cfg.ModelTier),
+		ModelHint:          promptHintForTier(string(cfg.ModelTier)),
 	}
 }
 

@@ -871,3 +871,39 @@ func conventionalTeamConfig() *domain.MergedConfig {
 		Meta:        domain.ProjectMeta{},
 	}
 }
+
+// ─── Template: language rendering ───────────────────────────────────────────
+
+func TestOrchestratorTemplate_ContainsLanguage(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	cfg := tddTeamConfig()
+	cfg.Meta.Language = "Go"
+	cfg.Meta.TestCommand = "go test ./..."
+	inst := New(nil, cfg, project)
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("plan error: %v", err)
+	}
+
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply(%q) failed: %v", a.TargetPath, err)
+		}
+	}
+
+	data, err := os.ReadFile(filepath.Join(project, ".opencode", "agents", "orchestrator.md"))
+	if err != nil {
+		t.Fatalf("orchestrator.md not found: %v", err)
+	}
+	content := string(data)
+
+	if !strings.Contains(content, "Go") {
+		t.Error("rendered orchestrator should contain the language 'Go'")
+	}
+	// Template variables should be fully rendered — no raw Go template syntax.
+	if strings.Contains(content, "{{.Language}}") {
+		t.Error("{{.Language}} should be rendered, not left as raw template syntax")
+	}
+}

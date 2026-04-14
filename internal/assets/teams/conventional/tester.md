@@ -41,6 +41,9 @@ Load and follow the skill at: `skills/shared/testing/SKILL.md`
 
 Use {{.Language}} conventions. Run `{{.TestCommand}}` to verify changes. Run
 `{{.BuildCommand}}` to ensure compilation.
+{{- if .Framework }}
+Follow {{ .Framework }} testing conventions.
+{{- end }}
 
 ## Artifacts
 

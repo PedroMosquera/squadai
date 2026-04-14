@@ -38,6 +38,12 @@ Load and follow the skill at: `skills/tdd/test-driven-development/SKILL.md`
 
 Use {{.Language}} conventions. Run `{{.TestCommand}}` to verify changes. Run
 `{{.BuildCommand}}` to ensure compilation.
+{{- if .Framework }}
+Follow {{ .Framework }} conventions and idioms.
+{{- end }}
+{{- if .PackageManager }}
+Use `{{ .PackageManager }}` for dependency management.
+{{- end }}
 
 ## Artifacts
 

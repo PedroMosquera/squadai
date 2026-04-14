@@ -129,10 +129,28 @@ Summarize the skill content to preserve context budget.
 
 ## Stack Conventions
 
-{{if .Language}}- Language: {{.Language}}{{end}}
-{{if .TestCommand}}- Run tests: `{{.TestCommand}}`{{end}}
-{{if .BuildCommand}}- Build: `{{.BuildCommand}}`{{end}}
-{{if .LintCommand}}- Lint: `{{.LintCommand}}`{{end}}
+- Language: {{ .Language }}
+{{- if .Framework }}
+- Framework: {{ .Framework }}
+{{- end }}
+{{- if .PackageManager }}
+- Package Manager: {{ .PackageManager }}
+{{- end }}
+{{- if .TestCommand }}
+- Test: `{{ .TestCommand }}`
+{{- end }}
+{{- if .BuildCommand }}
+- Build: `{{ .BuildCommand }}`
+{{- end }}
+{{- if .LintCommand }}
+- Lint: `{{ .LintCommand }}`
+{{- end }}
+{{- if .ModelHint }}
+
+## Model Guidance
+
+{{ .ModelHint }}
+{{- end }}
 
 ### Commit Convention
 - `test: add failing tests for [feature]` — RED phase

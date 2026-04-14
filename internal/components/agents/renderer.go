@@ -22,6 +22,10 @@ type TemplateData struct {
 	TeamRoles          map[string]domain.TeamRole
 	MCPServers         map[string]domain.MCPServerDef
 	HasContext7        bool
+	Framework          string
+	PackageManager     string
+	ModelTier          string
+	ModelHint          string
 }
 
 // renderTemplate renders Go text/template content against TemplateData.
@@ -42,6 +46,7 @@ func renderTemplate(name, content string, data TemplateData) (string, error) {
 // buildTemplateData constructs TemplateData from adapter + merged config.
 func buildTemplateData(adapter domain.Adapter, cfg *domain.MergedConfig, homeDir, projectDir string) TemplateData {
 	_, hasContext7 := cfg.MCP["context7"]
+	tier := string(cfg.ModelTier)
 	return TemplateData{
 		Methodology:        string(cfg.Methodology),
 		DelegationStrategy: string(adapter.DelegationStrategy()),
@@ -55,5 +60,23 @@ func buildTemplateData(adapter domain.Adapter, cfg *domain.MergedConfig, homeDir
 		TeamRoles:          cfg.Team,
 		MCPServers:         cfg.MCP,
 		HasContext7:        hasContext7,
+		Framework:          cfg.Meta.Framework,
+		PackageManager:     cfg.Meta.PackageManager,
+		ModelTier:          tier,
+		ModelHint:          promptHintForTier(tier),
+	}
+}
+
+// promptHintForTier returns a human-readable model recommendation for the given tier.
+func promptHintForTier(tier string) string {
+	switch tier {
+	case "performance":
+		return "Use the most capable models available (Claude Sonnet 4.5, GPT-4.1). Prioritize quality over cost."
+	case "starter":
+		return "Use cost-effective models (Claude Haiku 3.5, GPT-4.1-mini). Prioritize budget over capability."
+	case "balanced":
+		return "Use Claude Sonnet 4 for complex tasks and architecture decisions. Use GPT-4.1-mini for quick edits and simple fixes."
+	default:
+		return "" // manual or unknown — no hint
 	}
 }

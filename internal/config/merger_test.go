@@ -854,3 +854,23 @@ func TestMerge_DoesNotMutateInput_UserAdapterSettings(t *testing.T) {
 		t.Error("merge should not mutate input user config settings")
 	}
 }
+
+func TestMerge_ModelTier_CarriedThrough(t *testing.T) {
+	project := &domain.ProjectConfig{
+		ModelTier: domain.ModelTierBalanced,
+	}
+
+	merged := Merge(nil, project, nil)
+
+	if merged.ModelTier != domain.ModelTierBalanced {
+		t.Errorf("ModelTier = %q, want %q", merged.ModelTier, domain.ModelTierBalanced)
+	}
+}
+
+func TestMerge_ModelTier_EmptyWhenNotSet(t *testing.T) {
+	merged := Merge(nil, nil, nil)
+
+	if merged.ModelTier != "" {
+		t.Errorf("ModelTier = %q, want empty string when not set", merged.ModelTier)
+	}
+}
