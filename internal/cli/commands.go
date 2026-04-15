@@ -1623,10 +1623,6 @@ func RunStatus(args []string, stdout io.Writer) error {
 	}
 
 	// Count managed files per component (non-skip actions grouped by component).
-	type compEntry struct {
-		id    string
-		paths map[string]bool
-	}
 	compOrder := make([]string, 0)
 	compMap := make(map[string]map[string]bool)
 	for _, a := range actions {
@@ -2424,16 +2420,4 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 	}
 
 	return nil
-}
-
-// join concatenates elements with a separator (avoids importing strings just for this).
-func join(elems []string, sep string) string {
-	result := ""
-	for i, e := range elems {
-		if i > 0 {
-			result += sep
-		}
-		result += e
-	}
-	return result
 }

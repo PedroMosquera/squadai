@@ -348,7 +348,7 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, projectDir string)
 				Component:   domain.ComponentMCP,
 				Action:      domain.ActionCreate,
 				TargetPath:  targetPath,
-				Description: fmt.Sprintf("mcp:configfile:create MCP config with mcpServers"),
+				Description: "mcp:configfile:create MCP config with mcpServers",
 			},
 		}, nil
 	}
@@ -362,7 +362,7 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, projectDir string)
 				Component:   domain.ComponentMCP,
 				Action:      domain.ActionSkip,
 				TargetPath:  targetPath,
-				Description: fmt.Sprintf("mcp:configfile:MCP server configuration already up to date"),
+				Description: "mcp:configfile:MCP server configuration already up to date",
 			},
 		}, nil
 	}
@@ -374,7 +374,7 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, projectDir string)
 			Component:   domain.ComponentMCP,
 			Action:      domain.ActionUpdate,
 			TargetPath:  targetPath,
-			Description: fmt.Sprintf("mcp:configfile:update MCP server configuration"),
+			Description: "mcp:configfile:update MCP server configuration",
 		},
 	}, nil
 }
