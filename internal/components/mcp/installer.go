@@ -5,19 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
 const (
 	// mcpKey is the top-level JSON key for MCP server configurations.
 	mcpKey = "mcp"
-
-	// managedMetaKey mirrors the settings component's metadata key.
-	managedMetaKey = "_agent_manager"
 )
 
 // mcpDirProvider is an optional interface for adapters that store MCP configs
@@ -43,6 +40,9 @@ const mcpServersKey = "mcpServers"
 type Installer struct {
 	// servers is the desired MCP server configuration.
 	servers map[string]domain.MCPServerDef
+
+	// projectDir is captured during Plan so Apply can write to the centralized sidecar.
+	projectDir string
 }
 
 // New returns an MCP installer configured from the merged MCP config.
@@ -76,6 +76,9 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	if len(i.servers) == 0 {
 		return nil, nil
 	}
+
+	// Capture project dir so Apply can write to the centralized sidecar.
+	i.projectDir = projectDir
 
 	// Strategy 1: SeparateMCPFiles (Claude Code).
 	if provider, ok := adapter.(mcpDirProvider); ok {
@@ -245,9 +248,6 @@ func (i *Installer) applyMergedConfig(action domain.PlannedAction) error {
 	}
 	existing[mcpKey] = mcpMap
 
-	// Update _agent_manager metadata to include "mcp" in managed_keys.
-	updateManagedKeys(existing, mcpKey)
-
 	// Marshal with indentation.
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
@@ -263,6 +263,17 @@ func (i *Installer) applyMergedConfig(action domain.PlannedAction) error {
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
 		return fmt.Errorf("write config: %w", err)
+	}
+
+	// Write managed-key tracking to the centralized sidecar (if we know projectDir).
+	if i.projectDir != "" {
+		relPath, err := filepath.Rel(i.projectDir, action.TargetPath)
+		if err != nil {
+			relPath = action.TargetPath
+		}
+		if err := managed.WriteManagedKeys(i.projectDir, relPath, []string{mcpKey}); err != nil {
+			return fmt.Errorf("write managed keys sidecar: %w", err)
+		}
 	}
 
 	return nil
@@ -386,9 +397,6 @@ func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 	}
 	existing[mcpServersKey] = serversMap
 
-	// Update _agent_manager metadata to include "mcpServers" in managed_keys.
-	updateManagedKeys(existing, mcpServersKey)
-
 	// Marshal with indentation.
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
@@ -404,6 +412,17 @@ func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
 		return fmt.Errorf("write MCP config: %w", err)
+	}
+
+	// Write managed-key tracking to the centralized sidecar (if we know projectDir).
+	if i.projectDir != "" {
+		relPath, err := filepath.Rel(i.projectDir, action.TargetPath)
+		if err != nil {
+			relPath = action.TargetPath
+		}
+		if err := managed.WriteManagedKeys(i.projectDir, relPath, []string{mcpServersKey}); err != nil {
+			return fmt.Errorf("write managed keys sidecar: %w", err)
+		}
 	}
 
 	return nil
@@ -609,7 +628,6 @@ func (i *Installer) renderMergedConfigContent(action domain.PlannedAction) ([]by
 		mcpMap[name] = serverToMap(def)
 	}
 	existing[mcpKey] = mcpMap
-	updateManagedKeys(existing, mcpKey)
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal config: %w", err)
@@ -643,7 +661,6 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 		serversMap[name] = serverToMap(def)
 	}
 	existing[mcpServersKey] = serversMap
-	updateManagedKeys(existing, mcpServersKey)
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal MCP config: %w", err)
@@ -698,38 +715,6 @@ func mcpKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPSer
 	expectedJSON, _ := json.Marshal(expectedMap)
 	actualJSON, _ := json.Marshal(mcpVal)
 	return string(expectedJSON) == string(actualJSON)
-}
-
-// updateManagedKeys adds the given key to _agent_manager.managed_keys if not already present.
-func updateManagedKeys(doc map[string]interface{}, key string) {
-	var managedKeys []string
-
-	if meta, ok := doc[managedMetaKey].(map[string]interface{}); ok {
-		if keys, ok := meta["managed_keys"].([]interface{}); ok {
-			for _, k := range keys {
-				if s, ok := k.(string); ok {
-					managedKeys = append(managedKeys, s)
-				}
-			}
-		}
-	}
-
-	// Add key if not present.
-	found := false
-	for _, k := range managedKeys {
-		if k == key {
-			found = true
-			break
-		}
-	}
-	if !found {
-		managedKeys = append(managedKeys, key)
-	}
-	sort.Strings(managedKeys)
-
-	doc[managedMetaKey] = map[string]interface{}{
-		"managed_keys": managedKeys,
-	}
 }
 
 // readJSONFile reads a JSON file into a generic map.

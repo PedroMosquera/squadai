@@ -9,6 +9,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────
@@ -89,8 +90,7 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	// Write existing file with matching content.
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"model":        "anthropic/claude-sonnet-4-5",
-		managedMetaKey: managedMeta{ManagedKeys: []string{"model"}},
+		"model": "anthropic/claude-sonnet-4-5",
 	})
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
@@ -115,8 +115,7 @@ func TestPlan_OpenCode_OutdatedValue_ReturnsUpdate(t *testing.T) {
 	// Write file with old model value.
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"model":        "old-model",
-		managedMetaKey: managedMeta{ManagedKeys: []string{"model"}},
+		"model": "old-model",
 	})
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
@@ -142,8 +141,7 @@ func TestPlan_OpenCode_MissingKey_ReturnsUpdate(t *testing.T) {
 	// Write file with only one of the two keys.
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"model":        "anthropic/claude-sonnet-4-5",
-		managedMetaKey: managedMeta{ManagedKeys: []string{"model"}},
+		"model": "anthropic/claude-sonnet-4-5",
 	})
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
@@ -232,17 +230,18 @@ func TestApply_OpenCode_CreatesFile(t *testing.T) {
 		t.Errorf("permission.edit = %v, want %q", perm["edit"], "allow")
 	}
 
-	// Check managed keys metadata.
-	meta, ok := doc[managedMetaKey].(map[string]interface{})
-	if !ok {
-		t.Fatal("_agent_manager should be present")
+	// Check that _agent_manager is NOT written into the config doc.
+	if _, hasKey := doc["_agent_manager"]; hasKey {
+		t.Error("_agent_manager must not appear in the config file — tracking moved to sidecar")
 	}
-	keys, ok := meta["managed_keys"].([]interface{})
-	if !ok {
-		t.Fatal("managed_keys should be an array")
+
+	// Check managed keys are written to the sidecar.
+	sidecarKeys, err := managed.ReadManagedKeys(project, "opencode.json")
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
 	}
-	if len(keys) != 2 {
-		t.Errorf("expected 2 managed keys, got %d", len(keys))
+	if len(sidecarKeys) != 2 {
+		t.Errorf("expected 2 managed keys in sidecar, got %d: %v", len(sidecarKeys), sidecarKeys)
 	}
 }
 
@@ -347,12 +346,11 @@ func TestApply_UpdatesOutdatedValues(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Write old values.
+	// Write old values (no _agent_manager — that's now in the sidecar).
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"model":        "old-model",
-		"user_key":     "keep",
-		managedMetaKey: managedMeta{ManagedKeys: []string{"model"}},
+		"model":    "old-model",
+		"user_key": "keep",
 	})
 
 	// Install new value.
@@ -462,11 +460,10 @@ func TestVerify_FailsWhenKeysOutdated(t *testing.T) {
 		"model": "new-model",
 	})
 
-	// Write file with old value.
+	// Write file with old value (no _agent_manager — tracking is now in the sidecar).
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"model":        "old-model",
-		managedMetaKey: managedMeta{ManagedKeys: []string{"model"}},
+		"model": "old-model",
 	})
 
 	results, _ := inst.Verify(adapter, t.TempDir(), project)

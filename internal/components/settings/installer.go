@@ -9,18 +9,8 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/managed"
 )
-
-const (
-	// managedMetaKey is the top-level JSON key used to track which keys
-	// are managed by SquadAI. This avoids a separate tracking file.
-	managedMetaKey = "_agent_manager"
-)
-
-// managedMeta is the structure stored under the _agent_manager key.
-type managedMeta struct {
-	ManagedKeys []string `json:"managed_keys"`
-}
 
 // Installer implements domain.ComponentInstaller for the settings component.
 // It writes adapter-specific JSON settings files (opencode.json, .claude/settings.json)
@@ -28,6 +18,9 @@ type managedMeta struct {
 type Installer struct {
 	// adapterSettings maps adapter ID → settings key/value pairs to write.
 	adapterSettings map[string]map[string]interface{}
+
+	// projectDir is captured during Plan so Apply can write to the sidecar.
+	projectDir string
 }
 
 // New returns a settings installer configured from the merged adapter configs.
@@ -58,6 +51,9 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	if !adapter.SupportsComponent(domain.ComponentSettings) {
 		return nil, nil
 	}
+
+	// Capture project dir so Apply can write to the centralized sidecar.
+	i.projectDir = projectDir
 
 	agentID := string(adapter.ID())
 	settings, ok := i.adapterSettings[agentID]
@@ -145,9 +141,6 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	}
 	sort.Strings(managedKeys)
 
-	// Update tracking metadata.
-	existing[managedMetaKey] = managedMeta{ManagedKeys: managedKeys}
-
 	// Marshal with indentation for readability.
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
@@ -163,6 +156,17 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
 		return fmt.Errorf("write settings: %w", err)
+	}
+
+	// Write managed-key tracking to the centralized sidecar (if we know projectDir).
+	if i.projectDir != "" {
+		relPath, err := filepath.Rel(i.projectDir, action.TargetPath)
+		if err != nil {
+			relPath = action.TargetPath
+		}
+		if err := managed.WriteManagedKeys(i.projectDir, relPath, managedKeys); err != nil {
+			return fmt.Errorf("write managed keys sidecar: %w", err)
+		}
 	}
 
 	return nil
@@ -241,7 +245,6 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 		managedKeys = append(managedKeys, key)
 	}
 	sort.Strings(managedKeys)
-	existing[managedMetaKey] = managedMeta{ManagedKeys: managedKeys}
 
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
