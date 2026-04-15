@@ -1,6 +1,6 @@
 # Build artifacts
 dist/
-squadai
+/squadai
 
 # Go
 *.exe
