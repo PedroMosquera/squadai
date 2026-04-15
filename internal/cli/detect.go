@@ -665,9 +665,6 @@ func detectPHP(projectDir string, meta *domain.ProjectMeta) bool {
 	if meta.TestCommand == "" {
 		meta.TestCommand = "./vendor/bin/phpunit"
 	}
-	if meta.BuildCommand == "" {
-		// PHP typically doesn't have a build step.
-	}
 	if meta.LintCommand == "" {
 		meta.LintCommand = "./vendor/bin/phpcs"
 	}

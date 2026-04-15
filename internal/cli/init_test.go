@@ -296,6 +296,11 @@ func TestRunInit_HelpIncludesMethodology(t *testing.T) {
 
 func TestRunInit_MethodologyFlag_TDD(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -327,6 +332,11 @@ func TestRunInit_MethodologyFlag_TDD(t *testing.T) {
 
 func TestRunInit_MethodologyFlag_SDD(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -373,6 +383,11 @@ func TestRunInit_MethodologySummaryPrinted(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
 		t.Fatal(err)
 	}
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -395,6 +410,11 @@ func TestRunInit_MethodologySummaryPrinted(t *testing.T) {
 
 func TestRunInit_MCPWrittenToProjectJSON(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -422,6 +442,11 @@ func TestRunInit_MCPWrittenToProjectJSON(t *testing.T) {
 
 func TestRunInit_MCPContext7EnabledByDefault(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -458,6 +483,11 @@ func TestRunInit_MCPSummaryPrinted(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
 		t.Fatal(err)
 	}
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -615,6 +645,11 @@ func TestBuildSmartProjectConfig_AllDetectedAdaptersEnabled(t *testing.T) {
 
 func TestRunInit_MCPFlag_FiltersToSelected(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -670,6 +705,11 @@ func TestBuildSmartProjectConfig_MCPFlag_EmptySelectionUsesDefaults(t *testing.T
 
 func TestRunInit_PluginsFlag_PopulatesPlugins(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -728,6 +768,11 @@ func TestBuildSmartProjectConfig_PluginsFlag_UnknownPluginIgnored(t *testing.T) 
 
 func TestRunInit_WritesFindSkillsFile(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -756,6 +801,11 @@ func TestBuildSmartProjectConfig_FindSkillsInSkillsMap(t *testing.T) {
 
 func TestRunInit_JSONOutput(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -804,6 +854,11 @@ func TestRunInit_JSONOutput(t *testing.T) {
 
 func TestRunInit_JSONOutput_NoHumanText(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -830,6 +885,11 @@ func TestRunInit_JSONOutput_NoHumanText(t *testing.T) {
 
 func TestRunInit_JSONOutput_WithMethodology(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -860,6 +920,11 @@ func TestRunInit_JSONOutput_WithMethodology(t *testing.T) {
 
 func TestRunInit_JSONOutput_PolicyCreatedFalseWithoutFlag(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -882,6 +947,11 @@ func TestRunInit_JSONOutput_PolicyCreatedFalseWithoutFlag(t *testing.T) {
 
 func TestRunInit_JSONOutput_PolicyCreatedTrueWithFlag(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}

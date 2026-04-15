@@ -133,6 +133,11 @@ func TestRunValidatePolicy_HelpText(t *testing.T) {
 
 func TestRunValidatePolicy_JSONOutput_ValidPolicy(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -148,7 +153,7 @@ func TestRunValidatePolicy_JSONOutput_ValidPolicy(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := RunValidatePolicy([]string{"--json"}, &buf)
+	err = RunValidatePolicy([]string{"--json"}, &buf)
 	if err != nil {
 		t.Fatalf("RunValidatePolicy --json on valid policy should not error: %v", err)
 	}
@@ -177,6 +182,11 @@ func TestRunValidatePolicy_JSONOutput_ValidPolicy(t *testing.T) {
 
 func TestRunValidatePolicy_JSONOutput_NoHumanText(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
