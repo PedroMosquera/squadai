@@ -12,6 +12,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────
@@ -300,23 +301,24 @@ func TestApply_OpenCode_CreatesFileWithMCPServers(t *testing.T) {
 		t.Errorf("url = %v, want https://mcp.context7.com/mcp", server["url"])
 	}
 
-	// Check managed keys metadata.
-	meta, ok := doc[managedMetaKey].(map[string]interface{})
-	if !ok {
-		t.Fatal("_agent_manager should be present")
+	// Check that _agent_manager is NOT written into the config doc.
+	if _, hasKey := doc["_agent_manager"]; hasKey {
+		t.Error("_agent_manager must not appear in the config file — tracking moved to sidecar")
 	}
-	keys, ok := meta["managed_keys"].([]interface{})
-	if !ok {
-		t.Fatal("managed_keys should be an array")
+
+	// Check managed keys are written to the sidecar.
+	sidecarKeys, err := managed.ReadManagedKeys(project, "opencode.json")
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
 	}
 	foundMCP := false
-	for _, k := range keys {
+	for _, k := range sidecarKeys {
 		if k == "mcp" {
 			foundMCP = true
 		}
 	}
 	if !foundMCP {
-		t.Error("managed_keys should include 'mcp'")
+		t.Error("sidecar managed_keys should include 'mcp'")
 	}
 }
 
@@ -325,14 +327,11 @@ func TestApply_PreservesExistingKeys(t *testing.T) {
 	adapter := opencode.New()
 	inst := newTestInstaller()
 
-	// Write file with existing settings.
+	// Write file with existing settings (no _agent_manager — tracking is now in sidecar).
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"model":    "anthropic/claude-sonnet-4-5",
 		"provider": "anthropic",
-		managedMetaKey: map[string]interface{}{
-			"managed_keys": []string{"model", "provider"},
-		},
 	})
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
@@ -351,18 +350,24 @@ func TestApply_PreservesExistingKeys(t *testing.T) {
 		t.Error("mcp key should be written")
 	}
 
-	// Check managed_keys includes both existing and mcp.
-	meta := doc[managedMetaKey].(map[string]interface{})
-	keys := meta["managed_keys"].([]interface{})
-	keySet := make(map[string]bool)
-	for _, k := range keys {
-		keySet[k.(string)] = true
+	// _agent_manager must NOT be in the config file.
+	if _, hasKey := doc["_agent_manager"]; hasKey {
+		t.Error("_agent_manager must not appear in the config file — tracking moved to sidecar")
 	}
-	if !keySet["model"] {
-		t.Error("managed_keys should include 'model'")
+
+	// Check sidecar has 'mcp' in managed_keys.
+	sidecarKeys, err := managed.ReadManagedKeys(project, "opencode.json")
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
 	}
-	if !keySet["mcp"] {
-		t.Error("managed_keys should include 'mcp'")
+	foundMCP := false
+	for _, k := range sidecarKeys {
+		if k == "mcp" {
+			foundMCP = true
+		}
+	}
+	if !foundMCP {
+		t.Error("sidecar managed_keys should include 'mcp'")
 	}
 }
 
@@ -706,46 +711,76 @@ func TestServerToMap_LocalServer(t *testing.T) {
 	}
 }
 
-// ─── updateManagedKeys ──────────────────────────────────────────────────────
+// ─── Sidecar tracking (replaces TestUpdateManagedKeys_* after _agent_manager removal) ─
 
-func TestUpdateManagedKeys_AddsNew(t *testing.T) {
-	doc := map[string]interface{}{}
-	updateManagedKeys(doc, "mcp")
+func TestApply_OpenCode_WritesSidecar(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	inst := newTestInstaller()
 
-	meta := doc[managedMetaKey].(map[string]interface{})
-	keys := meta["managed_keys"].([]string)
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	keys, err := managed.ReadManagedKeys(project, "opencode.json")
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
+	}
 	if len(keys) != 1 || keys[0] != "mcp" {
-		t.Errorf("expected [mcp], got %v", keys)
+		t.Errorf("expected [mcp] in sidecar, got %v", keys)
 	}
 }
 
-func TestUpdateManagedKeys_PreservesExisting(t *testing.T) {
-	doc := map[string]interface{}{
-		managedMetaKey: map[string]interface{}{
-			"managed_keys": []interface{}{"model", "provider"},
-		},
-	}
-	updateManagedKeys(doc, "mcp")
+func TestApply_OpenCode_SidecarPreservesOnRepeat(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	inst := newTestInstaller()
 
-	meta := doc[managedMetaKey].(map[string]interface{})
-	keys := meta["managed_keys"].([]string)
-	if len(keys) != 3 {
-		t.Errorf("expected 3 keys, got %d", len(keys))
+	// First apply.
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second apply (after changing servers — simulate an update).
+	inst2 := New(map[string]domain.MCPServerDef{
+		"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+		"sentry":   {Type: "remote", URL: "https://mcp.sentry.dev", Enabled: true},
+	})
+	actions2, _ := inst2.Plan(adapter, t.TempDir(), project)
+	if len(actions2) > 0 && actions2[0].Action != domain.ActionSkip {
+		if err := inst2.Apply(actions2[0]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	keys, err := managed.ReadManagedKeys(project, "opencode.json")
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
+	}
+	if len(keys) == 0 {
+		t.Error("sidecar should have managed keys after apply")
 	}
 }
 
-func TestUpdateManagedKeys_NoDuplicate(t *testing.T) {
-	doc := map[string]interface{}{
-		managedMetaKey: map[string]interface{}{
-			"managed_keys": []interface{}{"mcp", "model"},
-		},
-	}
-	updateManagedKeys(doc, "mcp")
+func TestApply_NoProjectDir_SidecarNotWritten(t *testing.T) {
+	// When Apply is called without a prior Plan (no projectDir set),
+	// the sidecar write is skipped gracefully — no panic, no error.
+	project := t.TempDir()
+	inst := newTestInstaller()
 
-	meta := doc[managedMetaKey].(map[string]interface{})
-	keys := meta["managed_keys"].([]string)
-	if len(keys) != 2 {
-		t.Errorf("expected 2 keys (no duplicate), got %d", len(keys))
+	targetPath := filepath.Join(project, "opencode.json")
+	action := domain.PlannedAction{
+		ID:         "opencode-mcp",
+		Agent:      "opencode",
+		Component:  domain.ComponentMCP,
+		Action:     domain.ActionCreate,
+		TargetPath: targetPath,
+	}
+
+	if err := inst.Apply(action); err != nil {
+		t.Fatalf("Apply without projectDir should not fail: %v", err)
 	}
 }
 
@@ -905,23 +940,24 @@ func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
 		t.Errorf("url = %v, want https://mcp.context7.com/mcp", server["url"])
 	}
 
-	// Check managed keys metadata.
-	meta, ok := doc[managedMetaKey].(map[string]interface{})
-	if !ok {
-		t.Fatal("_agent_manager should be present")
+	// Check that _agent_manager is NOT written into the config doc.
+	if _, hasKey := doc["_agent_manager"]; hasKey {
+		t.Error("_agent_manager must not appear in the config file — tracking moved to sidecar")
 	}
-	keys, ok := meta["managed_keys"].([]interface{})
-	if !ok {
-		t.Fatal("managed_keys should be an array")
+
+	// Check managed keys are written to the sidecar (relative path from project root).
+	sidecarKeys, err := managed.ReadManagedKeys(project, filepath.Join(".vscode", "mcp.json"))
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
 	}
 	foundKey := false
-	for _, k := range keys {
+	for _, k := range sidecarKeys {
 		if k == "mcpServers" {
 			foundKey = true
 		}
 	}
 	if !foundKey {
-		t.Error("managed_keys should include 'mcpServers'")
+		t.Error("sidecar managed_keys should include 'mcpServers'")
 	}
 }
 
