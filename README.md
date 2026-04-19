@@ -343,6 +343,44 @@ brew upgrade squadai
 
 The formula is published to [PedroMosquera/homebrew-tap](https://github.com/PedroMosquera/homebrew-tap) automatically by every release.
 
+### Linux native packages (deb / rpm)
+
+Every release publishes `.deb` and `.rpm` packages alongside the tarballs. Download the matching package from [Releases](https://github.com/PedroMosquera/squadai/releases/latest) and install it with your distro's package manager:
+
+```sh
+# Debian / Ubuntu
+sudo dpkg -i squadai_<version>_linux_<arch>.deb
+
+# Fedora / RHEL / openSUSE
+sudo rpm -i squadai_<version>_linux_<arch>.rpm
+```
+
+The binary lands at `/usr/bin/squadai`.
+
+### Install via your AI agent
+
+If you use Claude Code, OpenCode, Cursor, Windsurf, or VS Code Copilot, paste this prompt into your agent and let it install squadai for you:
+
+> Install **squadai** on this machine following the numbered steps in the "Agent install protocol" section of `https://github.com/PedroMosquera/squadai/blob/main/README.md`. After install, run `squadai doctor` and report back any failed checks.
+
+#### Agent install protocol
+
+Agents: follow these steps in order. Stop at the first method that succeeds.
+
+1. **Detect the OS and architecture** with `uname -sm`.
+2. **Pick the best install method available**, in this order:
+   1. If `brew` is on PATH (macOS or Linux): `brew install PedroMosquera/tap/squadai`.
+   2. Else if `apt` is available (Debian/Ubuntu) and the user can `sudo`: download the matching `.deb` from the latest GitHub release and `sudo dpkg -i`.
+   3. Else if `dnf` or `rpm` is available (Fedora/RHEL): download the matching `.rpm` and `sudo rpm -i`.
+   4. Else if `curl` is available (macOS / Linux): `curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh`.
+   5. Else if `go` (>= 1.24) is on PATH: `go install github.com/PedroMosquera/squadai/cmd/squadai@latest`.
+   6. Else: stop and tell the user to install one of `brew`, `curl`, or `go` first.
+3. **Verify the install**: `squadai version` must print a non-empty version string.
+4. **Run health checks**: `squadai doctor`. If any checks fail, run `squadai doctor --fix` and re-run `squadai doctor`.
+5. **Offer to initialize the workspace**: ask the user if they want to run `squadai init` in the current directory before doing it. Do not run `init` without confirmation.
+
+Do **not** modify shell rc files, do **not** install with `sudo` unless step 2 explicitly requires it, and do **not** edit any project files outside the squadai install itself.
+
 ### Self-update (built-in)
 
 Once installed, squadai can check for and apply its own updates:
