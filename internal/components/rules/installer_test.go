@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
@@ -503,5 +505,186 @@ func TestVerify_EmptyContent_ReturnsNil(t *testing.T) {
 	}
 	if len(results) != 0 {
 		t.Errorf("expected 0 results for empty content, got %d", len(results))
+	}
+}
+
+// ─── Windsurf structured rules ──────────────────────────────────────────────
+
+func TestPlan_Windsurf_NewFile_ReturnsCreate(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Action != domain.ActionCreate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
+	}
+	expected := filepath.Join(project, ".windsurf", "rules", "squadai.md")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+}
+
+func TestApply_Windsurf_WritesFrontmatter(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if len(actions) == 0 {
+		t.Fatal("expected at least 1 action")
+	}
+
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	data, _ := os.ReadFile(actions[0].TargetPath)
+	s := string(data)
+	if !strings.HasPrefix(s, "---\ntrigger: always_on\n---\n") {
+		t.Errorf("Windsurf rules should start with trigger frontmatter, got:\n%s", s)
+	}
+	if !strings.Contains(s, "Always use gofmt.") {
+		t.Error("content should include team standards")
+	}
+	if marker.HasSection(s, SectionID) {
+		t.Error("Windsurf structured rules should not use marker blocks")
+	}
+}
+
+func TestApply_Windsurf_Idempotent(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	actions2, _ := inst.Plan(adapter, t.TempDir(), project)
+	if actions2[0].Action != domain.ActionSkip {
+		t.Fatalf("second plan should be Skip, got %q", actions2[0].Action)
+	}
+}
+
+func TestVerify_Windsurf_PassesAfterApply(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := inst.Verify(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("check %q failed: %s", r.Check, r.Message)
+		}
+	}
+}
+
+// ─── Cursor structured rules ────────────────────────────────────────────────
+
+func TestPlan_Cursor_NewFile_ReturnsCreate(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	expected := filepath.Join(project, ".cursor", "rules", "squadai.mdc")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+}
+
+func TestApply_Cursor_WritesMDCFrontmatter(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if len(actions) == 0 {
+		t.Fatal("expected at least 1 action")
+	}
+
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	data, _ := os.ReadFile(actions[0].TargetPath)
+	s := string(data)
+	if !strings.HasPrefix(s, "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n") {
+		t.Errorf("Cursor rules should start with MDC frontmatter, got:\n%s", s)
+	}
+	if !strings.Contains(s, "Always use gofmt.") {
+		t.Error("content should include team standards")
+	}
+}
+
+func TestApply_Cursor_Idempotent(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	actions2, _ := inst.Plan(adapter, t.TempDir(), project)
+	if actions2[0].Action != domain.ActionSkip {
+		t.Fatalf("second plan should be Skip, got %q", actions2[0].Action)
+	}
+}
+
+// ─── Marker vs frontmatter verification ─────────────────────────────────────
+
+func TestApply_OpenCode_StillUsesMarkers(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(actions[0].TargetPath)
+	if !marker.HasSection(string(data), SectionID) {
+		t.Error("OpenCode should still use marker blocks")
+	}
+}
+
+func TestApply_Claude_StillUsesMarkers(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(actions[0].TargetPath)
+	if !marker.HasSection(string(data), SectionID) {
+		t.Error("Claude should still use marker blocks")
 	}
 }

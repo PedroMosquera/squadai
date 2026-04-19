@@ -1283,7 +1283,7 @@ func TestMCPInstallation_ClaudeCode_SeparateFiles(t *testing.T) {
 	assertJSONKey(t, mcpFile, "command", "MCP/Claude: context7.json has command array")
 }
 
-// TestMCPInstallation_VSCode_MCPConfigFile verifies VS Code uses .vscode/mcp.json with mcpServers.
+// TestMCPInstallation_VSCode_MCPConfigFile verifies VS Code uses .vscode/mcp.json with servers.
 func TestMCPInstallation_VSCode_MCPConfigFile(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
@@ -1329,15 +1329,18 @@ func TestMCPInstallation_VSCode_MCPConfigFile(t *testing.T) {
 	// .vscode/mcp.json must exist (NOT settings.json).
 	mcpJSON := filepath.Join(project, ".vscode", "mcp.json")
 	assertFileExists(t, mcpJSON, "MCP/VSCode: .vscode/mcp.json")
-	assertJSONKey(t, mcpJSON, "mcpServers", "MCP/VSCode: has 'mcpServers' key")
+	assertJSONKey(t, mcpJSON, "servers", "MCP/VSCode: has 'servers' key")
 
-	// Must NOT use the "mcp" key.
+	// Must NOT use the "mcp" or "mcpServers" key.
 	data, err := os.ReadFile(mcpJSON)
 	if err != nil {
 		t.Fatalf("read mcp.json: %v", err)
 	}
 	if strings.Contains(string(data), `"mcp":`) {
-		t.Error("MCP/VSCode: .vscode/mcp.json must not have 'mcp' key (should be 'mcpServers')")
+		t.Error("MCP/VSCode: .vscode/mcp.json must not have 'mcp' key (should be 'servers')")
+	}
+	if strings.Contains(string(data), `"mcpServers":`) {
+		t.Error("MCP/VSCode: .vscode/mcp.json must not have 'mcpServers' key (should be 'servers')")
 	}
 }
 

@@ -409,10 +409,11 @@ func TestVerify_SettingsPass_AfterApply(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Write opencode.json with correct managed settings (no _agent_manager — tracking is in sidecar).
+	// Write opencode.json with correct managed settings (including $schema).
 	targetPath := filepath.Join(project, "opencode.json")
 	writeVerifyJSON(t, targetPath, map[string]interface{}{
-		"model": "anthropic/claude-sonnet-4-5",
+		"$schema": "https://opencode.ai/config.json",
+		"model":   "anthropic/claude-sonnet-4-5",
 	})
 
 	cfg := &domain.MergedConfig{

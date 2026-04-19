@@ -87,7 +87,16 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	}
 
 	// Check if managed keys are all up to date.
-	if managedKeysMatch(existing, settings) {
+	// For OpenCode, also check that $schema is present.
+	allExpected := settings
+	if agentID == string(domain.AgentOpenCode) {
+		allExpected = make(map[string]interface{}, len(settings)+1)
+		for k, v := range settings {
+			allExpected[k] = v
+		}
+		allExpected["$schema"] = "https://opencode.ai/config.json"
+	}
+	if managedKeysMatch(existing, allExpected) {
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
@@ -134,11 +143,18 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	}
 
 	// Write managed keys into the document.
-	managedKeys := make([]string, 0, len(settings))
+	managedKeys := make([]string, 0, len(settings)+1)
 	for key, val := range settings {
 		existing[key] = val
 		managedKeys = append(managedKeys, key)
 	}
+
+	// Inject $schema for OpenCode configs.
+	if agentID == string(domain.AgentOpenCode) {
+		existing["$schema"] = "https://opencode.ai/config.json"
+		managedKeys = append(managedKeys, "$schema")
+	}
+
 	sort.Strings(managedKeys)
 
 	// Marshal with indentation for readability.
@@ -206,7 +222,16 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	})
 
 	// Check managed keys match expected values.
-	if managedKeysMatch(existing, settings) {
+	// For OpenCode, also verify $schema is present.
+	allExpected := settings
+	if agentID == string(domain.AgentOpenCode) {
+		allExpected = make(map[string]interface{}, len(settings)+1)
+		for k, v := range settings {
+			allExpected[k] = v
+		}
+		allExpected["$schema"] = "https://opencode.ai/config.json"
+	}
+	if managedKeysMatch(existing, allExpected) {
 		results = append(results, domain.VerifyResult{
 			Check:  "settings-keys-current",
 			Passed: true,
@@ -239,11 +264,18 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 		existing = make(map[string]interface{})
 	}
 
-	managedKeys := make([]string, 0, len(settings))
+	managedKeys := make([]string, 0, len(settings)+1)
 	for key, val := range settings {
 		existing[key] = val
 		managedKeys = append(managedKeys, key)
 	}
+
+	// Inject $schema for OpenCode configs.
+	if agentID == string(domain.AgentOpenCode) {
+		existing["$schema"] = "https://opencode.ai/config.json"
+		managedKeys = append(managedKeys, "$schema")
+	}
+
 	sort.Strings(managedKeys)
 
 	data, err := json.MarshalIndent(existing, "", "  ")

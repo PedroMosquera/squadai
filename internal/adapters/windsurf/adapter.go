@@ -74,9 +74,9 @@ func (a *Adapter) GlobalConfigDir(homeDir string) string {
 	return ConfigDir(homeDir)
 }
 
-// SystemPromptFile returns ~/.codeium/windsurf/global_rules.md.
+// SystemPromptFile returns ~/.codeium/windsurf/memories/global_rules.md.
 func (a *Adapter) SystemPromptFile(homeDir string) string {
-	return filepath.Join(ConfigDir(homeDir), "global_rules.md")
+	return filepath.Join(ConfigDir(homeDir), "memories", "global_rules.md")
 }
 
 // SkillsDir returns ~/.codeium/windsurf/skills.
@@ -106,9 +106,10 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, ".windsurf", "mcp_config.json")
 }
 
-// ProjectRulesFile returns <projectDir>/.windsurfrules.
+// ProjectRulesFile returns <projectDir>/.windsurf/rules/squadai.md.
+// Uses the structured rules format with YAML frontmatter (trigger: always_on).
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, ".windsurfrules")
+	return filepath.Join(projectDir, ".windsurf", "rules", "squadai.md")
 }
 
 // ProjectAgentsDir returns empty string — Windsurf is a solo agent with no sub-agents.

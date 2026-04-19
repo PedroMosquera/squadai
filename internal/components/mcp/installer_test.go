@@ -189,7 +189,7 @@ func TestPlan_Claude_SeparateFiles_UpToDate_ReturnsSkip(t *testing.T) {
 	expected := serverToJSON(domain.MCPServerDef{
 		Type: "remote",
 		URL:  "https://mcp.context7.com/mcp",
-	})
+	}, domain.AgentClaudeCode)
 	if err := os.WriteFile(filepath.Join(mcpDir, "context7.json"), expected, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func TestServerToMap_RemoteServer(t *testing.T) {
 		Type: "remote",
 		URL:  "https://mcp.example.com",
 	}
-	m := serverToMap(def)
+	m := serverToMap(def, domain.AgentOpenCode)
 	if m["type"] != "remote" {
 		t.Error("type should be remote")
 	}
@@ -694,7 +694,7 @@ func TestServerToMap_LocalServer(t *testing.T) {
 			"KEY": "value",
 		},
 	}
-	m := serverToMap(def)
+	m := serverToMap(def, domain.AgentOpenCode)
 	if m["type"] != "local" {
 		t.Error("type should be local")
 	}
@@ -860,7 +860,7 @@ func TestPlan_VSCode_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
 
 	targetPath := filepath.Join(project, ".vscode", "mcp.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"mcpServers": map[string]interface{}{
+		"servers": map[string]interface{}{
 			"context7": map[string]interface{}{
 				"type": "remote",
 				"url":  "https://mcp.context7.com/mcp",
@@ -887,7 +887,7 @@ func TestPlan_VSCode_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
 
 	targetPath := filepath.Join(project, ".vscode", "mcp.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"mcpServers": map[string]interface{}{
+		"servers": map[string]interface{}{
 			"context7": map[string]interface{}{
 				"type": "remote",
 				"url":  "https://old-url.com/mcp",
@@ -921,13 +921,16 @@ func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
 	}
 
 	doc := readTestJSON(t, actions[0].TargetPath)
-	// MUST use "mcpServers" key, NOT "mcp".
-	serversMap, ok := doc["mcpServers"].(map[string]interface{})
+	// VS Code Copilot MUST use "servers" key, NOT "mcpServers".
+	serversMap, ok := doc["servers"].(map[string]interface{})
 	if !ok {
-		t.Fatal("mcpServers key should be a map")
+		t.Fatal("servers key should be a map")
+	}
+	if _, hasMCPServers := doc["mcpServers"]; hasMCPServers {
+		t.Error("should NOT have 'mcpServers' key — VS Code uses 'servers'")
 	}
 	if _, hasMCP := doc["mcp"]; hasMCP {
-		t.Error("should NOT have 'mcp' key — MCPConfigFile uses 'mcpServers'")
+		t.Error("should NOT have 'mcp' key — MCPConfigFile uses 'servers' for VS Code")
 	}
 	server, ok := serversMap["context7"].(map[string]interface{})
 	if !ok {
@@ -952,12 +955,12 @@ func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
 	}
 	foundKey := false
 	for _, k := range sidecarKeys {
-		if k == "mcpServers" {
+		if k == "servers" {
 			foundKey = true
 		}
 	}
 	if !foundKey {
-		t.Error("sidecar managed_keys should include 'mcpServers'")
+		t.Error("sidecar managed_keys should include 'servers'")
 	}
 }
 
@@ -1087,13 +1090,13 @@ func TestVerify_Windsurf_MCPConfigFile_FailsWhenOutdated(t *testing.T) {
 	adapter := windsurf.New()
 	inst := newTestInstaller()
 
-	// Write file with wrong mcpServers config.
+	// Write file with wrong mcpServers config — note Windsurf uses "serverUrl" for remote.
 	targetPath := filepath.Join(project, ".windsurf", "mcp_config.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"type": "remote",
-				"url":  "https://wrong-url.com/mcp",
+				"type":      "remote",
+				"serverUrl": "https://wrong-url.com/mcp",
 			},
 		},
 	})
@@ -1110,6 +1113,317 @@ func TestVerify_Windsurf_MCPConfigFile_FailsWhenOutdated(t *testing.T) {
 	}
 	if !foundCheck {
 		t.Error("expected mcp-configfile-servers-current check in results")
+	}
+}
+
+// ─── Fix 1: VS Code uses "servers" root key ─────────────────────────────────
+
+func TestApply_VSCode_UsesServersRootKey(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	if _, ok := doc["servers"]; !ok {
+		t.Error("VS Code MUST use 'servers' root key")
+	}
+	if _, ok := doc["mcpServers"]; ok {
+		t.Error("VS Code MUST NOT use 'mcpServers' root key")
+	}
+}
+
+func TestApply_Cursor_UsesMcpServersRootKey(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	if _, ok := doc["mcpServers"]; !ok {
+		t.Error("Cursor MUST use 'mcpServers' root key")
+	}
+	if _, ok := doc["servers"]; ok {
+		t.Error("Cursor MUST NOT use 'servers' root key")
+	}
+}
+
+// ─── Fix 2: Windsurf uses "serverUrl" for remote servers ────────────────────
+
+func TestApply_Windsurf_UsesServerUrlField(t *testing.T) {
+	project := t.TempDir()
+	adapter := windsurf.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	serversMap := doc["mcpServers"].(map[string]interface{})
+	server := serversMap["context7"].(map[string]interface{})
+	if _, ok := server["serverUrl"]; !ok {
+		t.Error("Windsurf remote servers MUST use 'serverUrl' field")
+	}
+	if _, ok := server["url"]; ok {
+		t.Error("Windsurf remote servers MUST NOT use 'url' field")
+	}
+	if server["serverUrl"] != "https://mcp.context7.com/mcp" {
+		t.Errorf("serverUrl = %v, want https://mcp.context7.com/mcp", server["serverUrl"])
+	}
+}
+
+func TestApply_Cursor_UsesUrlField(t *testing.T) {
+	project := t.TempDir()
+	adapter := cursor.New()
+	inst := newTestInstaller()
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	serversMap := doc["mcpServers"].(map[string]interface{})
+	server := serversMap["context7"].(map[string]interface{})
+	if _, ok := server["url"]; !ok {
+		t.Error("Cursor remote servers MUST use 'url' field")
+	}
+	if _, ok := server["serverUrl"]; ok {
+		t.Error("Cursor remote servers MUST NOT use 'serverUrl' field")
+	}
+}
+
+// ─── Fix 3: OpenCode MCP uses "mcp" key with correct format ────────────────
+
+func TestApply_OpenCode_UsesMcpRootKey_CorrectFormat(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	inst := New(map[string]domain.MCPServerDef{
+		"local-server": {
+			Type:    "local",
+			Command: []string{"npx", "-y", "@modelcontextprotocol/server-postgres"},
+			Environment: map[string]string{
+				"DATABASE_URL": "postgres://localhost/mydb",
+			},
+			Enabled: true,
+		},
+		"remote-server": {
+			Type:    "remote",
+			URL:     "https://mcp.example.com",
+			Enabled: true,
+			Headers: map[string]string{"Authorization": "Bearer token"},
+		},
+	})
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	// OpenCode MUST use "mcp" root key.
+	mcpMap, ok := doc["mcp"].(map[string]interface{})
+	if !ok {
+		t.Fatal("OpenCode MUST use 'mcp' root key")
+	}
+	if _, ok := doc["mcpServers"]; ok {
+		t.Error("OpenCode MUST NOT use 'mcpServers' root key")
+	}
+
+	// Local server format: "command" as array, "environment" (not "env").
+	local := mcpMap["local-server"].(map[string]interface{})
+	if local["type"] != "local" {
+		t.Error("local server type should be 'local'")
+	}
+	cmd, ok := local["command"].([]interface{})
+	if !ok || len(cmd) != 3 {
+		t.Error("command should be an array of 3 elements")
+	}
+	env, ok := local["environment"].(map[string]interface{})
+	if !ok {
+		t.Fatal("should use 'environment' key (not 'env')")
+	}
+	if env["DATABASE_URL"] != "postgres://localhost/mydb" {
+		t.Error("environment variable should match")
+	}
+
+	// Remote server format: "url" (not "serverUrl").
+	remote := mcpMap["remote-server"].(map[string]interface{})
+	if remote["type"] != "remote" {
+		t.Error("remote server type should be 'remote'")
+	}
+	if remote["url"] != "https://mcp.example.com" {
+		t.Error("remote server should use 'url' field")
+	}
+	if _, ok := remote["serverUrl"]; ok {
+		t.Error("OpenCode MUST NOT use 'serverUrl' field")
+	}
+	headers, ok := remote["headers"].(map[string]interface{})
+	if !ok || headers["Authorization"] != "Bearer token" {
+		t.Error("headers should be present")
+	}
+}
+
+// ─── Fix 4: VS Code preserves "inputs" array ───────────────────────────────
+
+func TestApply_VSCode_PreservesInputsArray(t *testing.T) {
+	project := t.TempDir()
+	adapter := vscode.New()
+	inst := newTestInstaller()
+
+	// Pre-write mcp.json with an "inputs" array (VS Code credential prompting).
+	targetPath := filepath.Join(project, ".vscode", "mcp.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"inputs": []interface{}{
+			map[string]interface{}{
+				"type":        "promptString",
+				"id":          "api-key",
+				"description": "API Key for MCP server",
+				"password":    true,
+			},
+		},
+	})
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+
+	// "servers" key must be present.
+	if _, ok := doc["servers"]; !ok {
+		t.Error("servers key should be written")
+	}
+
+	// "inputs" array must be preserved.
+	inputs, ok := doc["inputs"].([]interface{})
+	if !ok {
+		t.Fatal("inputs array must be preserved")
+	}
+	if len(inputs) != 1 {
+		t.Errorf("expected 1 input entry, got %d", len(inputs))
+	}
+	entry, ok := inputs[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("input entry should be a map")
+	}
+	if entry["id"] != "api-key" {
+		t.Error("input entry id should be preserved")
+	}
+}
+
+// ─── Round-trip: all 5 agents produce correct format ────────────────────────
+
+func TestRoundTrip_AllAgents_CorrectFormat(t *testing.T) {
+	servers := map[string]domain.MCPServerDef{
+		"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+		"local-db": {
+			Type:        "local",
+			Command:     []string{"npx", "-y", "server"},
+			Environment: map[string]string{"KEY": "val"},
+			Enabled:     true,
+		},
+	}
+
+	tests := []struct {
+		name          string
+		adapter       domain.Adapter
+		expectRootKey string // expected root key in written file (empty = "mcp" strategy)
+		expectURLKey  string // "url" or "serverUrl"
+		strategy      string // "merge", "separate", "configfile"
+	}{
+		{"OpenCode", opencode.New(), "mcp", "url", "merge"},
+		{"Claude", claude.New(), "", "url", "separate"},
+		{"VSCode", vscode.New(), "servers", "url", "configfile"},
+		{"Cursor", cursor.New(), "mcpServers", "url", "configfile"},
+		{"Windsurf", windsurf.New(), "mcpServers", "serverUrl", "configfile"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			project := t.TempDir()
+			inst := New(servers)
+
+			actions, err := inst.Plan(tt.adapter, home, project)
+			if err != nil {
+				t.Fatalf("Plan: %v", err)
+			}
+			if len(actions) == 0 {
+				t.Fatal("expected actions")
+			}
+
+			for _, a := range actions {
+				if a.Action == domain.ActionSkip {
+					continue
+				}
+				if err := inst.Apply(a); err != nil {
+					t.Fatalf("Apply: %v", err)
+				}
+			}
+
+			// For separate file strategy (Claude), check individual files.
+			if tt.strategy == "separate" {
+				for name, def := range servers {
+					path := filepath.Join(home, ".claude", "mcp", name+".json")
+					data, err := os.ReadFile(path)
+					if err != nil {
+						t.Fatalf("read %s: %v", name, err)
+					}
+					var doc map[string]interface{}
+					if err := json.Unmarshal(data, &doc); err != nil {
+						t.Fatalf("parse %s: %v", name, err)
+					}
+					if def.URL != "" {
+						if _, ok := doc[tt.expectURLKey]; !ok {
+							t.Errorf("%s: expected URL key %q", name, tt.expectURLKey)
+						}
+					}
+				}
+				return
+			}
+
+			// For merge/configfile strategies, check the main file.
+			var targetPath string
+			for _, a := range actions {
+				targetPath = a.TargetPath
+				break
+			}
+			doc := readTestJSON(t, targetPath)
+
+			rootMap, ok := doc[tt.expectRootKey].(map[string]interface{})
+			if !ok {
+				t.Fatalf("expected root key %q to be a map, got %T", tt.expectRootKey, doc[tt.expectRootKey])
+			}
+
+			// Check remote server uses correct URL key.
+			ctx7, ok := rootMap["context7"].(map[string]interface{})
+			if !ok {
+				t.Fatal("context7 should be present")
+			}
+			if _, ok := ctx7[tt.expectURLKey]; !ok {
+				t.Errorf("remote server should use %q field", tt.expectURLKey)
+			}
+			// Ensure the WRONG key is not present.
+			wrongKey := "serverUrl"
+			if tt.expectURLKey == "serverUrl" {
+				wrongKey = "url"
+			}
+			if _, ok := ctx7[wrongKey]; ok {
+				t.Errorf("remote server should NOT use %q field", wrongKey)
+			}
+		})
 	}
 }
 
