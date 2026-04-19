@@ -4,15 +4,21 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/model"
 )
 
+// hybridWarnOnce ensures the deprecation warning is printed at most once per
+// process invocation, even when ResolveHybridMode is called multiple times
+// (e.g. by TUI flows that reload config on every navigation).
+var hybridWarnOnce sync.Once
+
 // ResolveHybridMode resolves a deprecated "hybrid" mode to the appropriate
 // canonical mode based on whether a policy.json exists in policyDir.
 // If the mode is not "hybrid", it is returned unchanged.
-// A deprecation warning is written to stderr when resolution occurs.
+// A deprecation warning is written to stderr at most once per process.
 func ResolveHybridMode(mode domain.OperationalMode, policyDir string) domain.OperationalMode {
 	if mode != "hybrid" {
 		return mode
@@ -25,10 +31,12 @@ func ResolveHybridMode(mode domain.OperationalMode, policyDir string) domain.Ope
 	} else {
 		resolved = domain.ModePersonal
 	}
-	fmt.Fprintf(os.Stderr,
-		"Warning: mode %q is deprecated. Resolved to %q based on policy.json presence. "+
-			"Update your config to use %q explicitly.\n",
-		"hybrid", resolved, resolved)
+	hybridWarnOnce.Do(func() {
+		fmt.Fprintf(os.Stderr,
+			"Warning: mode %q is deprecated. Resolved to %q based on policy.json presence. "+
+				"Update your config to use %q explicitly.\n",
+			"hybrid", resolved, resolved)
+	})
 	return resolved
 }
 

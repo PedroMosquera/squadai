@@ -1876,9 +1876,9 @@ func (m Model) runDoctorFixCmd() tea.Cmd {
 		var sb strings.Builder
 		for _, fr := range fixResults {
 			if fr.Err != nil {
-				sb.WriteString(fmt.Sprintf("❌ %s — %v\n", fr.CheckResult.Name, fr.Err))
+				sb.WriteString(fmt.Sprintf("✗ %s — %v\n", fr.CheckResult.Name, fr.Err))
 			} else {
-				sb.WriteString(fmt.Sprintf("✅ %s — fixed\n", fr.CheckResult.Name))
+				sb.WriteString(fmt.Sprintf("✓ %s — fixed\n", fr.CheckResult.Name))
 			}
 		}
 		return doctorFixDone{msg: strings.TrimRight(sb.String(), "\n")}
@@ -1969,11 +1969,11 @@ func (m Model) viewDoctor() string {
 func doctorStatusIcon(s doctor.CheckStatus) string {
 	switch s {
 	case doctor.CheckPass:
-		return successStyle.Render("✅")
+		return successStyle.Render("✓")
 	case doctor.CheckWarn:
-		return authBadgeStyle.Render("⚠️ ")
+		return authBadgeStyle.Render("⚠")
 	case doctor.CheckFail:
-		return errorStyle.Render("❌")
+		return errorStyle.Render("✗")
 	default:
 		return mutedStyle.Render("──")
 	}

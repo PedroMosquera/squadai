@@ -40,7 +40,9 @@ Thumbs.db
 # Local workspace
 .x9k4v/
 .opencode
+.copilot/
 
 # Planning & evaluation docs (local only, not committed)
 EVALUATION.md
 IMPLEMENTATION_PLAN.md
+TESTING-GUIDE.md
