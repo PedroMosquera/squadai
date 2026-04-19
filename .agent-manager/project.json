@@ -41,7 +41,7 @@
     }
   },
   "meta": {
-    "name": "agent-manager-pro",
+    "name": "squadai",
     "language": "Go",
     "test_command": "go test ./...",
     "build_command": "go build ./...",
