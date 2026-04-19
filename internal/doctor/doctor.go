@@ -72,15 +72,6 @@ type CommandRunner interface {
 	Output(name string, args ...string) ([]byte, error)
 }
 
-// commandRunnerFunc wraps a function as a CommandRunner.
-type commandRunnerFunc struct {
-	fn func(string, ...string) ([]byte, error)
-}
-
-func (c commandRunnerFunc) Output(name string, args ...string) ([]byte, error) {
-	return c.fn(name, args...)
-}
-
 // defaultCommandRunner uses exec.Command under the hood.
 type defaultCommandRunner struct{}
 
@@ -148,17 +139,6 @@ var categoryOrder = []string{
 	"MCP Servers",
 	"Filesystem",
 	"Config Drift",
-}
-
-// categorySlug maps canonical category names to their slug equivalents for
-// --category flag matching.
-var categorySlug = map[string]string{
-	"Environment":           "environment",
-	"AI Agents":             "agents",
-	"Project Configuration": "config",
-	"MCP Servers":           "mcp",
-	"Filesystem":            "filesystem",
-	"Config Drift":          "drift",
 }
 
 // Run executes all checks (or a filtered subset) and returns ordered results.
