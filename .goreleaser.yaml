@@ -46,13 +46,14 @@ changelog:
       - "^chore:"
 
 # Homebrew tap publishing.
-# Requires the HOMEBREW_TAP_TOKEN GitHub Actions secret and the
-# PedroMosquera/homebrew-tap repository to exist before this runs.
+# Requires the HOMEBREW_TAP_GITHUB_TOKEN GitHub Actions secret (a fine-scoped
+# PAT with write access to PedroMosquera/homebrew-tap) and the tap repository
+# to exist before this runs.
 brews:
   - repository:
       owner: PedroMosquera
       name: homebrew-tap
-      # HOMEBREW_TAP_TOKEN secret must be set in GitHub Actions for publishing.
+      # HOMEBREW_TAP_GITHUB_TOKEN secret must be set in GitHub Actions for publishing.
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     name: squadai
     homepage: "https://github.com/PedroMosquera/squadai"
