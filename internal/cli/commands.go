@@ -1151,35 +1151,6 @@ func RunApply(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// RunSync performs idempotent reconciliation (same as apply — plan then execute).
-func RunSync(args []string, stdout io.Writer) error {
-	// Intercept help before delegating to apply.
-	for _, arg := range args {
-		if arg == "-h" || arg == "--help" {
-			fmt.Fprintln(stdout, "Usage: squadai sync [--dry-run] [--json] [--force]")
-			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Idempotent reconciliation: plan and apply in one step. Identical to apply but")
-			fmt.Fprintln(stdout, "emphasizes idempotency — running sync multiple times produces the same result.")
-			fmt.Fprintln(stdout, "Actions are skipped automatically when the target file already matches the desired")
-			fmt.Fprintln(stdout, "state, so it is safe to run on a schedule or in CI.")
-			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --dry-run  Preview the actions that would be executed without writing any files.")
-			fmt.Fprintln(stdout, "  --json     Output the execution report as JSON.")
-			fmt.Fprintln(stdout, "  --force    Sync with default config even when no project.json is found.")
-			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Examples:")
-			fmt.Fprintln(stdout, "  squadai sync")
-			fmt.Fprintln(stdout, "  squadai sync --dry-run")
-			fmt.Fprintln(stdout, "  squadai sync --force")
-			return nil
-		}
-	}
-	// Sync is semantically identical to apply — it plans and executes.
-	// The idempotency comes from the planner returning Skip for up-to-date items.
-	return RunApply(args, stdout)
-}
-
 // RunVerify runs compliance checks and prints the report.
 func RunVerify(args []string, stdout io.Writer) error {
 	jsonOut := false

@@ -62,6 +62,17 @@ func LoadUser(homeDir string) (*domain.UserConfig, error) {
 		}
 	}
 
+	// Auto-migrate deprecated "hybrid" mode to "team" or "personal"
+	// based on whether a project-level policy exists. Best-effort: if
+	// no working dir or no policy, falls back to "personal".
+	if cfg.Mode == "hybrid" {
+		if cwd, err := os.Getwd(); err == nil {
+			cfg.Mode = ResolveHybridMode(cfg.Mode, cwd)
+		} else {
+			cfg.Mode = domain.ModePersonal
+		}
+	}
+
 	return &cfg, nil
 }
 

@@ -286,29 +286,6 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 	return data, nil
 }
 
-// readJSONFile reads a JSON file into a generic map.
-// Returns nil, nil if the file does not exist.
-func readJSONFile(path string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if len(data) == 0 {
-		return nil, nil
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
-	return result, nil
-}
-
 // managedKeysMatch checks whether all managed settings keys in the document
 // match the expected values.
 func managedKeysMatch(doc map[string]interface{}, expected map[string]interface{}) bool {

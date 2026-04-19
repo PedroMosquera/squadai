@@ -14,10 +14,10 @@ func TestDefaultUserConfig_HasCorrectVersion(t *testing.T) {
 	}
 }
 
-func TestDefaultUserConfig_HasHybridMode(t *testing.T) {
+func TestDefaultUserConfig_HasPersonalMode(t *testing.T) {
 	cfg := DefaultUserConfig()
-	if cfg.Mode != ModeHybrid {
-		t.Errorf("Mode = %q, want %q", cfg.Mode, ModeHybrid)
+	if cfg.Mode != ModePersonal {
+		t.Errorf("Mode = %q, want %q", cfg.Mode, ModePersonal)
 	}
 }
 

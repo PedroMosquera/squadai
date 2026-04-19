@@ -1,10 +1,37 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
+
+// ─── ResolveHybridMode tests ─────────────────────────────────────────────────
+
+func TestValidator_HybridWithPolicy_ResolvesToTeam(t *testing.T) {
+	dir := t.TempDir()
+	// Write a policy.json to simulate team environment.
+	if err := os.WriteFile(filepath.Join(dir, "policy.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatalf("write policy.json: %v", err)
+	}
+
+	resolved := ResolveHybridMode("hybrid", dir)
+	if resolved != domain.ModeTeam {
+		t.Errorf("ResolveHybridMode with policy.json = %q, want %q", resolved, domain.ModeTeam)
+	}
+}
+
+func TestValidator_HybridWithoutPolicy_ResolvesToPersonal(t *testing.T) {
+	dir := t.TempDir()
+	// No policy.json in this directory.
+
+	resolved := ResolveHybridMode("hybrid", dir)
+	if resolved != domain.ModePersonal {
+		t.Errorf("ResolveHybridMode without policy.json = %q, want %q", resolved, domain.ModePersonal)
+	}
+}
 
 // ─── ValidateUser tests ─────────────────────────────────────────────────────
 
@@ -38,14 +65,14 @@ func TestValidateUser_UnknownMode(t *testing.T) {
 }
 
 func TestValidateUser_AllValidModes(t *testing.T) {
-	modes := []domain.OperationalMode{domain.ModeTeam, domain.ModePersonal, domain.ModeHybrid}
+	modes := []domain.OperationalMode{domain.ModeTeam, domain.ModePersonal, "hybrid"}
 	for _, m := range modes {
 		cfg := domain.DefaultUserConfig()
 		cfg.Mode = m
 		issues := ValidateUser(cfg)
 		for _, issue := range issues {
 			if issue == "mode is required" || contains(issue, "unknown mode") {
-				t.Errorf("mode %q should be valid, got issue: %s", m, issue)
+				t.Errorf("mode %q should be valid (hybrid is deprecated alias), got issue: %s", m, issue)
 			}
 		}
 	}
@@ -976,6 +1003,16 @@ func TestValidateProject_Plugin_ExcludesMethodology_DisabledPlugin_NoIssue(t *te
 	for _, issue := range issues {
 		if contains(issue, "incompatible") {
 			t.Errorf("disabled plugin should not trigger exclusion, got: %s", issue)
+		}
+	}
+}
+
+func TestValidator_NonHybridMode_PassedThrough(t *testing.T) {
+	dir := t.TempDir()
+	for _, m := range []domain.OperationalMode{domain.ModeTeam, domain.ModePersonal} {
+		resolved := ResolveHybridMode(m, dir)
+		if resolved != m {
+			t.Errorf("ResolveHybridMode(%q) = %q, want unchanged", m, resolved)
 		}
 	}
 }
