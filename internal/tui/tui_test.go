@@ -1989,3 +1989,69 @@ func TestRemoveConfirm_YKeyStartsRunning(t *testing.T) {
 // Suppress unused import warnings.
 var _ = fmt.Sprintf
 var _ lipgloss.Style
+
+// ─── Post-install auth panel ─────────────────────────────────────────────────
+
+func TestPostInstall_ShowsAuthSetupForGithub(t *testing.T) {
+	selections := map[string]bool{
+		"github":   true,
+		"context7": true,
+	}
+	panel := renderPostInstallAuthPanel(selections)
+	if panel == "" {
+		t.Fatal("expected non-empty panel when github is selected")
+	}
+	if !strings.Contains(panel, "GITHUB_PERSONAL_ACCESS_TOKEN") {
+		t.Errorf("panel should mention GITHUB_PERSONAL_ACCESS_TOKEN, got:\n%s", panel)
+	}
+	if !strings.Contains(panel, "https://github.com/settings/tokens") {
+		t.Errorf("panel should include GitHub token URL, got:\n%s", panel)
+	}
+}
+
+func TestPostInstall_ShowsAuthSetupForSentry(t *testing.T) {
+	selections := map[string]bool{"sentry": true}
+	panel := renderPostInstallAuthPanel(selections)
+	if panel == "" {
+		t.Fatal("expected non-empty panel when sentry is selected")
+	}
+	if !strings.Contains(panel, "SENTRY_AUTH_TOKEN") {
+		t.Errorf("panel should mention SENTRY_AUTH_TOKEN, got:\n%s", panel)
+	}
+	if !strings.Contains(panel, "https://sentry.io/settings/account/api/auth-tokens/") {
+		t.Errorf("panel should include Sentry token URL, got:\n%s", panel)
+	}
+}
+
+func TestPostInstall_HidesAuthPanelWhenNotNeeded(t *testing.T) {
+	selections := map[string]bool{
+		"context7":            true,
+		"memory":              false,
+		"sequential-thinking": false,
+	}
+	panel := renderPostInstallAuthPanel(selections)
+	if panel != "" {
+		t.Errorf("expected empty panel when only context7 selected, got:\n%s", panel)
+	}
+}
+
+func TestPostInstall_HidesAuthPanelForEmptySelections(t *testing.T) {
+	panel := renderPostInstallAuthPanel(map[string]bool{})
+	if panel != "" {
+		t.Errorf("expected empty panel for empty selections, got:\n%s", panel)
+	}
+}
+
+func TestPostInstall_ShowsBothServersWhenBothSelected(t *testing.T) {
+	selections := map[string]bool{
+		"github": true,
+		"sentry": true,
+	}
+	panel := renderPostInstallAuthPanel(selections)
+	if !strings.Contains(panel, "GITHUB_PERSONAL_ACCESS_TOKEN") {
+		t.Errorf("panel should mention GitHub token, got:\n%s", panel)
+	}
+	if !strings.Contains(panel, "SENTRY_AUTH_TOKEN") {
+		t.Errorf("panel should mention Sentry token, got:\n%s", panel)
+	}
+}

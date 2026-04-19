@@ -249,6 +249,12 @@ type CuratedMCPServer struct {
 	Command     string   // primary executable for local servers
 	URL         string   // endpoint for remote servers
 	Args        []string // additional CLI arguments
+
+	// Auth metadata — populated for servers that require credentials to function.
+	RequiresAuth bool     // true if env vars must be set before the server will work
+	AuthEnvVars  []string // e.g. ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+	SetupURL     string   // where to obtain credentials, e.g. "https://github.com/settings/tokens"
+	SetupHint    string   // one-line human instruction shown in the post-install panel
 }
 
 // DefaultMCPCatalog returns the 5 curated MCP servers offered during init.
@@ -264,12 +270,16 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Args:        []string{"-y", "@upstash/context7-mcp@latest"},
 		},
 		{
-			Name:        "github",
-			Description: "Issues, PRs, code search (requires GITHUB_PERSONAL_ACCESS_TOKEN)",
-			Type:        "local",
-			PreChecked:  false,
-			Command:     "npx",
-			Args:        []string{"-y", "@modelcontextprotocol/server-github"},
+			Name:         "github",
+			Description:  "Issues, PRs, code search",
+			Type:         "local",
+			PreChecked:   false,
+			Command:      "npx",
+			Args:         []string{"-y", "@modelcontextprotocol/server-github"},
+			RequiresAuth: true,
+			AuthEnvVars:  []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
+			SetupURL:     "https://github.com/settings/tokens",
+			SetupHint:    "Create a personal access token with repo scope",
 		},
 		{
 			Name:        "memory",
@@ -277,15 +287,19 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:        "local",
 			PreChecked:  false,
 			Command:     "npx",
-			Args:        []string{"-y", "@anthropic/memory-server"},
+			Args:        []string{"-y", "@modelcontextprotocol/server-memory"},
 		},
 		{
-			Name:        "sentry",
-			Description: "Error monitoring and issue tracking (requires SENTRY_AUTH_TOKEN)",
-			Type:        "local",
-			PreChecked:  false,
-			Command:     "npx",
-			Args:        []string{"-y", "@sentry/mcp-server"},
+			Name:         "sentry",
+			Description:  "Error monitoring and issue tracking",
+			Type:         "local",
+			PreChecked:   false,
+			Command:      "npx",
+			Args:         []string{"-y", "@sentry/mcp-server"},
+			RequiresAuth: true,
+			AuthEnvVars:  []string{"SENTRY_AUTH_TOKEN"},
+			SetupURL:     "https://sentry.io/settings/account/api/auth-tokens/",
+			SetupHint:    "Create an auth token with project:read scope",
 		},
 		{
 			Name:        "sequential-thinking",
@@ -293,7 +307,7 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:        "local",
 			PreChecked:  false,
 			Command:     "npx",
-			Args:        []string{"-y", "@anthropic/sequential-thinking"},
+			Args:        []string{"-y", "@modelcontextprotocol/server-sequential-thinking"},
 		},
 	}
 }
