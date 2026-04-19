@@ -499,7 +499,7 @@ func TestSkillCatalog_HasCategories(t *testing.T) {
 			Skills []struct {
 				Name        string `json:"name"`
 				Description string `json:"description"`
-				Source      string `json:"source"`
+				Install     string `json:"install"`
 			} `json:"skills"`
 		} `json:"categories"`
 	}
@@ -536,6 +536,7 @@ func TestSkillCatalog_EachSkillHasNameAndDescription(t *testing.T) {
 			Skills []struct {
 				Name        string `json:"name"`
 				Description string `json:"description"`
+				Install     string `json:"install"`
 			} `json:"skills"`
 		} `json:"categories"`
 	}
@@ -549,6 +550,17 @@ func TestSkillCatalog_EachSkillHasNameAndDescription(t *testing.T) {
 			}
 			if s.Description == "" {
 				t.Errorf("skills/catalog.json: category %q skill %q has empty description", c.Name, s.Name)
+			}
+			if s.Install == "" {
+				t.Errorf("skills/catalog.json: category %q skill %q has empty install identifier", c.Name, s.Name)
+			}
+			// Install identifier must be in `owner/repo@skill` form.
+			if s.Install != "" {
+				slash := strings.Contains(s.Install, "/")
+				at := strings.Contains(s.Install, "@")
+				if !slash || !at {
+					t.Errorf("skills/catalog.json: skill %q install %q must be in owner/repo@skill format", s.Name, s.Install)
+				}
 			}
 		}
 	}
