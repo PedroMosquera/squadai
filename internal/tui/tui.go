@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/cli"
@@ -40,10 +42,11 @@ const (
 	screenInitPreset         // setup preset radio (full-squad / lean / custom)
 	screenInitInstallSummary // review and confirm before applying
 	screenSkillBrowser
-	screenInitApplyPrompt    // "Apply now?" prompt after successful init
-	screenRemoveConfirm      // "Remove SquadAI config" confirmation screen
-	screenClaudeDefaultAgent // "Set orchestrator as default Claude agent?" yes/no
-	screenDoctor             // pre-flight diagnostics screen
+	screenSkillInstallConfirm // "Install skill X?" Y/N confirmation
+	screenInitApplyPrompt     // "Apply now?" prompt after successful init
+	screenRemoveConfirm       // "Remove SquadAI config" confirmation screen
+	screenClaudeDefaultAgent  // "Set orchestrator as default Claude agent?" yes/no
+	screenDoctor              // pre-flight diagnostics screen
 )
 
 // menuItem is a selectable action.
@@ -71,7 +74,7 @@ var menuItems = []menuItem{
 type skillEntry struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Source      string `json:"source"`
+	Install     string `json:"install"` // owner/repo@skill identifier passed to `npx skills add`
 }
 
 // skillCategory groups related skills.
@@ -143,6 +146,10 @@ type Model struct {
 	skillCatErr      error
 	skillCatCursor   int // selected category index
 	skillScrollIndex int // first visible skill within the current category
+
+	// Skill install confirmation state.
+	pendingSkillName string // skill name awaiting install confirmation
+	pendingSkillCmd  string // full shell command that will be executed on confirm
 
 	// Init apply-prompt state.
 	initJustCompleted bool   // set before launching init; triggers apply-prompt on success
@@ -739,8 +746,45 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.skillScrollIndex++
 				}
 			}
+		case "enter":
+			if len(m.skillCat.Categories) == 0 || m.skillCatCursor >= len(m.skillCat.Categories) {
+				return m, nil
+			}
+			skills := m.skillCat.Categories[m.skillCatCursor].Skills
+			if m.skillScrollIndex >= len(skills) {
+				return m, nil
+			}
+			selected := skills[m.skillScrollIndex]
+			if selected.Install == "" {
+				return m, nil
+			}
+			installBase := strings.TrimSpace(m.skillCat.InstallCommand)
+			if installBase == "" {
+				installBase = "npx skills add -y"
+			}
+			m.pendingSkillName = selected.Name
+			m.pendingSkillCmd = installBase + " " + selected.Install
+			m.screen = screenSkillInstallConfirm
+			return m, nil
 		case "esc", "q":
 			m.screen = screenMenu
+			return m, nil
+		}
+
+	case screenSkillInstallConfirm:
+		switch key {
+		case "y", "Y", "enter":
+			cmdStr := m.pendingSkillCmd
+			m.screen = screenRunning
+			m.output = ""
+			m.err = nil
+			return m, func() tea.Msg {
+				return runShellCommand(cmdStr)
+			}
+		case "n", "N", "esc", "q":
+			m.pendingSkillName = ""
+			m.pendingSkillCmd = ""
+			m.screen = screenSkillBrowser
 			return m, nil
 		}
 
@@ -862,12 +906,45 @@ func (m Model) renderPanel(content string) string {
 	return panelStyle.Width(m.panelWidth()).Render(content)
 }
 
+// renderHeader renders the persistent wizard header — small ASCII logo on the
+// left, product title + tagline on the right, dark-blue rounded border.
+// Shown on every screen for consistent branding.
+func (m Model) renderHeader() string {
+	logo := logoStyle.Render("▞▀▚\n▚▄▞")
+	title := headerTitleStyle.Render("SquadAI " + formatVersion(m.version))
+	tagline := headerTaglineStyle.Render("One config. Every AI agent. Zero drift.")
+	right := lipgloss.JoinVertical(lipgloss.Left, title, tagline)
+	body := lipgloss.JoinHorizontal(lipgloss.Center, logo, right)
+	return headerPanelStyle.Width(m.panelWidth()).Render(body)
+}
+
+// formatVersion normalizes the version string for display: tagged releases
+// (e.g. "0.1.1") get a "v" prefix, dev/snapshot builds are shown verbatim.
+func formatVersion(v string) string {
+	if v == "" || v == "dev" {
+		return "dev"
+	}
+	if v[0] >= '0' && v[0] <= '9' {
+		return "v" + v
+	}
+	return v
+}
+
 // View renders the TUI.
 func (m Model) View() string {
 	if m.quitting {
 		return ""
 	}
 
+	body := m.viewBody()
+	if body == "" {
+		return ""
+	}
+	return m.renderHeader() + "\n\n" + body
+}
+
+// viewBody dispatches to the screen-specific view function.
+func (m Model) viewBody() string {
 	switch m.screen {
 	case screenIntro:
 		return m.viewIntro()
@@ -897,6 +974,8 @@ func (m Model) View() string {
 		return m.viewInitInstallSummary()
 	case screenSkillBrowser:
 		return m.viewSkillBrowser()
+	case screenSkillInstallConfirm:
+		return m.viewSkillInstallConfirm()
 	case screenInitApplyPrompt:
 		return m.viewInitApplyPrompt()
 	case screenRemoveConfirm:
@@ -911,15 +990,6 @@ func (m Model) View() string {
 
 func (m Model) viewIntro() string {
 	var b strings.Builder
-
-	// Header panel: version + mode
-	var hdr strings.Builder
-	hdr.WriteString(titleStyle.Render("SquadAI") + "\n")
-	hdr.WriteString(fmt.Sprintf("SquadAI %s\n", m.version))
-	hdr.WriteString("Team-consistent AI setup with safe local customization.\n")
-	hdr.WriteString(fmt.Sprintf("Mode: %s", m.mode))
-	b.WriteString(m.renderPanel(hdr.String()))
-	b.WriteString("\n\n")
 
 	// Adapter list panel
 	b.WriteString(headingStyle.Render("Detected Agents"))
@@ -942,7 +1012,7 @@ func (m Model) viewIntro() string {
 
 func (m Model) viewMenu() string {
 	var menuContent strings.Builder
-	menuContent.WriteString(headingStyle.Render("SquadAI "+m.version) + "\n\n")
+	menuContent.WriteString(headingStyle.Render("Main Menu") + "\n\n")
 
 	for i, item := range menuItems {
 		if i == m.cursor {
@@ -1705,24 +1775,24 @@ func (m Model) viewSkillBrowser() string {
 	content.WriteString("\n")
 	installCmd := m.skillCat.InstallCommand
 	if installCmd == "" {
-		installCmd = "npx skills install"
+		installCmd = "npx skills add -y"
 	}
 	browseURL := m.skillCat.BrowseURL
 	if browseURL == "" {
 		browseURL = "https://skills.sh"
 	}
-	selectedSkill := ""
+	selectedInstall := ""
 	if len(currentCat.Skills) > 0 && m.skillScrollIndex < len(currentCat.Skills) {
-		selectedSkill = " " + currentCat.Skills[m.skillScrollIndex].Name
+		selectedInstall = " " + currentCat.Skills[m.skillScrollIndex].Install
 	}
 	content.WriteString(mutedStyle.Render(
-		"Install: "+installCmd+selectedSkill+"  |  Browse more: "+browseURL,
+		"Install: "+installCmd+selectedInstall+"  |  Browse more: "+browseURL,
 	) + "\n")
 
 	var b strings.Builder
 	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
-	b.WriteString(mutedStyle.Render("tab/←/→: category  ↑/↓: skill  esc/q: back"))
+	b.WriteString(mutedStyle.Render("tab/←/→: category  ↑/↓: skill  enter: install  esc/q: back"))
 	return b.String()
 }
 
@@ -1977,4 +2047,38 @@ func doctorStatusIcon(s doctor.CheckStatus) string {
 	default:
 		return mutedStyle.Render("──")
 	}
+}
+
+// viewSkillInstallConfirm renders the install confirmation prompt for a
+// community skill selected in the browser.
+func (m Model) viewSkillInstallConfirm() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Install community skill") + "\n\n")
+	content.WriteString("Skill:   " + activeStyle.Render(m.pendingSkillName) + "\n")
+	content.WriteString("Command: " + mutedStyle.Render(m.pendingSkillCmd) + "\n\n")
+
+	if _, err := exec.LookPath("npx"); err != nil {
+		content.WriteString(errorStyle.Render("npx not found on PATH.") + "\n")
+		content.WriteString(mutedStyle.Render("Install Node.js (https://nodejs.org) and try again.") + "\n\n")
+		content.WriteString(mutedStyle.Render("esc: back"))
+	} else {
+		content.WriteString(mutedStyle.Render("This will run the command above in the current directory.") + "\n\n")
+		content.WriteString(mutedStyle.Render("y: install   n/esc: cancel"))
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	return b.String()
+}
+
+// runShellCommand executes a shell command line and returns the combined
+// output as a commandResult, suitable for dispatch into the result screen.
+func runShellCommand(cmdLine string) commandResult {
+	parts := strings.Fields(cmdLine)
+	if len(parts) == 0 {
+		return commandResult{err: fmt.Errorf("empty command")}
+	}
+	cmd := exec.Command(parts[0], parts[1:]...) //nolint:gosec // command is built from a curated catalog + skill name
+	out, err := cmd.CombinedOutput()
+	return commandResult{output: string(out), err: err}
 }
