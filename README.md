@@ -1,6 +1,6 @@
 # SquadAI
 
-Standardize AI coding agent environments across your team.
+Standardize AI coding agent environments.
 
 [![Build](https://github.com/PedroMosquera/squadai/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroMosquera/squadai/actions)
 [![Go](https://img.shields.io/github/go-mod/go-version/PedroMosquera/squadai)](go.mod)
