@@ -177,15 +177,25 @@ func TestProjectPaths(t *testing.T) {
 	}
 }
 
-func TestProjectPaths_EmptyForUnsupported(t *testing.T) {
+func TestProjectPaths_AgentsDir(t *testing.T) {
 	a := New()
 	project := "/Users/test/myproject"
 
-	if a.ProjectAgentsDir(project) != "" {
-		t.Error("ProjectAgentsDir should be empty for Claude")
+	wantAgents := filepath.Join(project, ".claude", "agents")
+	if got := a.ProjectAgentsDir(project); got != wantAgents {
+		t.Errorf("ProjectAgentsDir = %q, want %q", got, wantAgents)
 	}
 	if a.ProjectCommandsDir(project) != "" {
 		t.Error("ProjectCommandsDir should be empty for Claude")
+	}
+}
+
+func TestSubAgentsDir(t *testing.T) {
+	a := New()
+	home := "/Users/test"
+	want := filepath.Join(home, ".claude", "agents")
+	if got := a.SubAgentsDir(home); got != want {
+		t.Errorf("SubAgentsDir = %q, want %q", got, want)
 	}
 }
 
@@ -206,6 +216,7 @@ func TestSupportsComponent_SupportedComponents(t *testing.T) {
 		domain.ComponentSettings,
 		domain.ComponentSkills,
 		domain.ComponentMCP,
+		domain.ComponentAgents,
 	}
 	for _, c := range components {
 		if !a.SupportsComponent(c) {
@@ -231,22 +242,24 @@ func TestAdapter_ImplementsInterface(t *testing.T) {
 
 func TestAdapter_DelegationStrategy(t *testing.T) {
 	a := New()
-	if a.DelegationStrategy() != domain.DelegationPromptBased {
-		t.Errorf("DelegationStrategy() = %q, want %q", a.DelegationStrategy(), domain.DelegationPromptBased)
+	if a.DelegationStrategy() != domain.DelegationNativeAgents {
+		t.Errorf("DelegationStrategy() = %q, want %q", a.DelegationStrategy(), domain.DelegationNativeAgents)
 	}
 }
 
 func TestAdapter_SupportsSubAgents(t *testing.T) {
 	a := New()
-	if a.SupportsSubAgents() {
-		t.Error("Claude Code should not support sub-agents")
+	if !a.SupportsSubAgents() {
+		t.Error("Claude Code MUST support sub-agents via .claude/agents/*.md")
 	}
 }
 
 func TestAdapter_SubAgentsDir(t *testing.T) {
 	a := New()
-	if a.SubAgentsDir("/Users/test") != "" {
-		t.Error("SubAgentsDir should be empty for Claude Code")
+	home := "/Users/test"
+	want := filepath.Join(home, ".claude", "agents")
+	if got := a.SubAgentsDir(home); got != want {
+		t.Errorf("SubAgentsDir = %q, want %q", got, want)
 	}
 }
 

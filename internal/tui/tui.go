@@ -37,8 +37,9 @@ const (
 	screenInitPreset         // setup preset radio (full-squad / lean / custom)
 	screenInitInstallSummary // review and confirm before applying
 	screenSkillBrowser
-	screenInitApplyPrompt // "Apply now?" prompt after successful init
-	screenRemoveConfirm   // "Remove SquadAI config" confirmation screen
+	screenInitApplyPrompt    // "Apply now?" prompt after successful init
+	screenRemoveConfirm      // "Remove SquadAI config" confirmation screen
+	screenClaudeDefaultAgent // "Set orchestrator as default Claude agent?" yes/no
 )
 
 // menuItem is a selectable action.
@@ -141,6 +142,9 @@ type Model struct {
 	// Init apply-prompt state.
 	initJustCompleted bool   // set before launching init; triggers apply-prompt on success
 	initOutput        string // stores init output while on apply-prompt screen
+
+	// Claude default agent prompt state.
+	setClaudeDefaultAgent bool // whether to write .claude/settings.json "agent" field
 
 	// Remove confirmation state.
 	removePreview string // dry-run output shown on confirmation screen
@@ -450,7 +454,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.initCursor = 0
-			if m.setupPreset == domain.PresetCustom {
+			// If Claude Code is selected, ask about default agent before proceeding.
+			if m.agentSelections != nil && m.agentSelections[string(domain.AgentClaudeCode)] {
+				m.setClaudeDefaultAgent = true // default: yes
+				m.screen = screenClaudeDefaultAgent
+			} else if m.setupPreset == domain.PresetCustom {
 				m.screen = screenInitMethodology
 			} else {
 				// Non-custom presets: initialize MCP selections from catalog pre-checked defaults.
@@ -583,6 +591,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					args = append(args, "--agents="+strings.Join(selectedIDs, ","))
 				}
 			}
+			// Pass claude default agent flag when opted in.
+			if m.setClaudeDefaultAgent {
+				args = append(args, "--set-claude-default-agent")
+			}
 			return m, func() tea.Msg {
 				var buf bytes.Buffer
 				err := cli.RunInit(args, &buf)
@@ -660,6 +672,34 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenMenu
 			return m, nil
 		}
+
+	case screenClaudeDefaultAgent:
+		switch key {
+		case "y", "enter":
+			m.setClaudeDefaultAgent = true
+			m.initCursor = 0
+			if m.setupPreset == domain.PresetCustom {
+				m.screen = screenInitMethodology
+			} else {
+				m.mcpSelections = catalogPreCheckedSelections()
+				m.screen = screenInitMCP
+			}
+			return m, nil
+		case "n":
+			m.setClaudeDefaultAgent = false
+			m.initCursor = 0
+			if m.setupPreset == domain.PresetCustom {
+				m.screen = screenInitMethodology
+			} else {
+				m.mcpSelections = catalogPreCheckedSelections()
+				m.screen = screenInitMCP
+			}
+			return m, nil
+		case "esc":
+			m.initCursor = 0
+			m.screen = screenInitAdapters
+			return m, nil
+		}
 	}
 
 	return m, nil
@@ -674,7 +714,11 @@ func (m Model) runCommand(command string) tea.Cmd {
 		case "plan":
 			err = cli.RunPlan([]string{"--dry-run"}, &buf)
 		case "apply":
-			err = cli.RunApply(nil, &buf)
+			applyArgs := []string{}
+			if m.setClaudeDefaultAgent {
+				applyArgs = append(applyArgs, "--set-claude-default-agent")
+			}
+			err = cli.RunApply(applyArgs, &buf)
 		case "sync":
 			err = cli.RunSync(nil, &buf)
 		case "verify":
@@ -745,6 +789,8 @@ func (m Model) View() string {
 		return m.viewInitApplyPrompt()
 	case screenRemoveConfirm:
 		return m.viewRemoveConfirm()
+	case screenClaudeDefaultAgent:
+		return m.viewClaudeDefaultAgent()
 	}
 	return ""
 }
@@ -1575,5 +1621,29 @@ func (m Model) viewRemoveConfirm() string {
 	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("y/Enter: confirm   n/Esc: cancel"))
+	return b.String()
+}
+
+// viewClaudeDefaultAgent renders the yes/no prompt for setting the orchestrator
+// as the default Claude Code agent via .claude/settings.json.
+func (m Model) viewClaudeDefaultAgent() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Claude Code — Default Agent") + "\n\n")
+	content.WriteString("Set orchestrator as the default Claude Code agent?\n\n")
+	content.WriteString("This writes .claude/settings.json with:\n")
+	content.WriteString(mutedStyle.Render(`  { "agent": "orchestrator" }`) + "\n\n")
+	content.WriteString("When set, running `claude` will automatically start the orchestrator\n")
+	content.WriteString("without needing `--agent orchestrator` every time.\n\n")
+
+	if m.setClaudeDefaultAgent {
+		content.WriteString(activeStyle.Render("> Yes") + "  No\n")
+	} else {
+		content.WriteString("  Yes  " + activeStyle.Render("> No") + "\n")
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("y/Enter: yes   n: no   esc: back"))
 	return b.String()
 }

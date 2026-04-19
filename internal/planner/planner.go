@@ -31,13 +31,25 @@ type Planner struct {
 	pluginsInstaller   *plugins.Installer
 	workflowsInstaller *workflows.Installer
 	copilotManager     *copilot.Manager
+	opts               Options
+}
+
+// Options controls optional behavior passed to component installers.
+type Options struct {
+	// SetClaudeDefaultAgent passes the corresponding option to the agents installer.
+	SetClaudeDefaultAgent bool
 }
 
 // New returns a Planner with default component installers.
-func New() *Planner {
+func New(opts ...Options) *Planner {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	return &Planner{
 		memoryInstaller: memory.New(),
 		copilotManager:  copilot.New(),
+		opts:            o,
 	}
 }
 
@@ -61,7 +73,8 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 	p.mcpInstaller = mcp.New(cfg.MCP)
 
 	// Create agents/skills/commands installers (lazy init per plan call).
-	p.agentsInstaller = agents.New(cfg.Agents, cfg, projectDir)
+	p.agentsInstaller = agents.New(cfg.Agents, cfg, projectDir,
+		agents.Options{SetClaudeDefaultAgent: p.opts.SetClaudeDefaultAgent})
 	p.skillsInstaller = skills.New(cfg.Skills, cfg, projectDir)
 	p.commandsInstaller = commands.New(cfg.Commands)
 

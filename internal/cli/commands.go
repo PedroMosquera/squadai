@@ -112,6 +112,8 @@ func RunInit(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case "--global":
 			global = true
+		case "--set-claude-default-agent":
+			// Accepted for TUI compatibility; handled by 'apply' step.
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--force] [--merge] [--json] [--global]")
 			fmt.Fprintln(stdout)
@@ -998,6 +1000,7 @@ func RunApply(args []string, stdout io.Writer) error {
 	dryRun := false
 	jsonOut := false
 	force := false
+	setClaudeDefaultAgent := false
 	for _, arg := range args {
 		switch arg {
 		case "--dry-run":
@@ -1006,6 +1009,8 @@ func RunApply(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case "--force":
 			force = true
+		case "--set-claude-default-agent":
+			setClaudeDefaultAgent = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force]")
 			fmt.Fprintln(stdout)
@@ -1058,7 +1063,7 @@ func RunApply(args []string, stdout io.Writer) error {
 	}
 
 	adapters := DetectAdapters(homeDir)
-	p := planner.New()
+	p := planner.New(planner.Options{SetClaudeDefaultAgent: setClaudeDefaultAgent})
 	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
 	if err != nil {
 		return fmt.Errorf("plan: %w", err)
