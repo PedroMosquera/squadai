@@ -60,15 +60,16 @@ const (
 type ComponentID string
 
 const (
-	ComponentMemory    ComponentID = "memory"
-	ComponentRules     ComponentID = "rules"
-	ComponentSettings  ComponentID = "settings"
-	ComponentMCP       ComponentID = "mcp"
-	ComponentAgents    ComponentID = "agents"
-	ComponentSkills    ComponentID = "skills"
-	ComponentCommands  ComponentID = "commands"
-	ComponentPlugins   ComponentID = "plugins"
-	ComponentWorkflows ComponentID = "workflows"
+	ComponentMemory      ComponentID = "memory"
+	ComponentRules       ComponentID = "rules"
+	ComponentSettings    ComponentID = "settings"
+	ComponentMCP         ComponentID = "mcp"
+	ComponentAgents      ComponentID = "agents"
+	ComponentSkills      ComponentID = "skills"
+	ComponentCommands    ComponentID = "commands"
+	ComponentPlugins     ComponentID = "plugins"
+	ComponentWorkflows   ComponentID = "workflows"
+	ComponentPermissions ComponentID = "permissions"
 	// ComponentCleanup is used for stale-file deletion actions that are not
 	// associated with a specific installable component.
 	ComponentCleanup ComponentID = "cleanup"
