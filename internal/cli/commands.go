@@ -50,6 +50,7 @@ func RunInit(args []string, stdout io.Writer) error {
 	merge := false
 	jsonOut := false
 	global := false
+	permissionsEnabled := true
 	var methodology string
 	methodologyExplicit := false
 	var mcpFlag string
@@ -114,6 +115,8 @@ func RunInit(args []string, stdout io.Writer) error {
 			global = true
 		case "--set-claude-default-agent":
 			// Accepted for TUI compatibility; handled by 'apply' step.
+		case "--no-permissions":
+			permissionsEnabled = false
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--force] [--merge] [--json] [--global]")
 			fmt.Fprintln(stdout)
@@ -280,6 +283,9 @@ func RunInit(args []string, stdout io.Writer) error {
 			return fmt.Errorf("load existing project config for merge: %w", loadErr)
 		}
 		fresh := buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		if !permissionsEnabled {
+			fresh.Components[string(domain.ComponentPermissions)] = domain.ComponentConfig{Enabled: false}
+		}
 		proj = mergeProjectConfigs(existing, fresh, methodologyExplicit, modelTierExplicit)
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
@@ -288,6 +294,9 @@ func RunInit(args []string, stdout io.Writer) error {
 	} else {
 		// New or force: build fresh config.
 		proj = buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		if !permissionsEnabled {
+			proj.Components[string(domain.ComponentPermissions)] = domain.ComponentConfig{Enabled: false}
+		}
 		if err := config.WriteJSON(projectPath, proj); err != nil {
 			return fmt.Errorf("write project config: %w", err)
 		}
@@ -301,6 +310,9 @@ func RunInit(args []string, stdout io.Writer) error {
 	// When proj was not written (exists + no-op skip), build it for JSON output.
 	if proj == nil {
 		proj = buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		if !permissionsEnabled {
+			proj.Components[string(domain.ComponentPermissions)] = domain.ComponentConfig{Enabled: false}
+		}
 	}
 
 	// Create policy config if requested.
@@ -477,8 +489,9 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 					"team_standards_file": "templates/team-standards.md",
 				},
 			},
-			string(domain.ComponentSkills):    {Enabled: true},
-			string(domain.ComponentWorkflows): {Enabled: true},
+			string(domain.ComponentSkills):      {Enabled: true},
+			string(domain.ComponentWorkflows):   {Enabled: true},
+			string(domain.ComponentPermissions): {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{
 			InstructionsTemplate: "standard",

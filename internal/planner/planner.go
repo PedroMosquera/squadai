@@ -9,6 +9,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
+	"github.com/PedroMosquera/squadai/internal/components/permissions"
 	"github.com/PedroMosquera/squadai/internal/components/plugins"
 	"github.com/PedroMosquera/squadai/internal/components/rules"
 	"github.com/PedroMosquera/squadai/internal/components/settings"
@@ -21,17 +22,18 @@ import (
 
 // Planner computes the full action plan from merged config and detected adapters.
 type Planner struct {
-	memoryInstaller    *memory.Installer
-	rulesInstaller     *rules.Installer
-	settingsInstaller  *settings.Installer
-	mcpInstaller       *mcp.Installer
-	agentsInstaller    *agents.Installer
-	skillsInstaller    *skills.Installer
-	commandsInstaller  *commands.Installer
-	pluginsInstaller   *plugins.Installer
-	workflowsInstaller *workflows.Installer
-	copilotManager     *copilot.Manager
-	opts               Options
+	memoryInstaller      *memory.Installer
+	rulesInstaller       *rules.Installer
+	settingsInstaller    *settings.Installer
+	mcpInstaller         *mcp.Installer
+	agentsInstaller      *agents.Installer
+	skillsInstaller      *skills.Installer
+	commandsInstaller    *commands.Installer
+	pluginsInstaller     *plugins.Installer
+	workflowsInstaller   *workflows.Installer
+	permissionsInstaller *permissions.Installer
+	copilotManager       *copilot.Manager
+	opts                 Options
 }
 
 // Options controls optional behavior passed to component installers.
@@ -47,9 +49,10 @@ func New(opts ...Options) *Planner {
 		o = opts[0]
 	}
 	return &Planner{
-		memoryInstaller: memory.New(),
-		copilotManager:  copilot.New(),
-		opts:            o,
+		memoryInstaller:      memory.New(),
+		copilotManager:       copilot.New(),
+		permissionsInstaller: permissions.New(),
+		opts:                 o,
 	}
 }
 
@@ -114,6 +117,15 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 				return nil, fmt.Errorf("plan settings for %s: %w", adapter.ID(), err)
 			}
 			actions = append(actions, settingsActions...)
+		}
+
+		// Permissions component (runs after settings so the file exists first).
+		if permCfg, ok := cfg.Components[string(domain.ComponentPermissions)]; ok && permCfg.Enabled {
+			permActions, err := p.permissionsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan permissions for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, permActions...)
 		}
 
 		// MCP component.
@@ -290,6 +302,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	if p.workflowsInstaller != nil {
 		installers[domain.ComponentWorkflows] = p.workflowsInstaller
 	}
+	if p.permissionsInstaller != nil {
+		installers[domain.ComponentPermissions] = p.permissionsInstaller
+	}
 	return installers
 }
 
@@ -347,6 +362,9 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 
 	case domain.ComponentWorkflows:
 		return p.renderWorkflows(action, oldContent)
+
+	case domain.ComponentPermissions:
+		return p.renderPermissions(action, oldContent)
 
 	default:
 		return oldContent, []byte("[content preview not available for " + string(action.Component) + "]"), nil
@@ -461,6 +479,18 @@ func (p *Planner) renderWorkflows(action domain.PlannedAction, existing []byte) 
 		return existing, []byte("[content preview not available for workflows: " + err.Error() + "]"), nil
 	}
 	return existing, []byte(newContent), nil
+}
+
+// renderPermissions computes what the permissions installer would write.
+func (p *Planner) renderPermissions(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.permissionsInstaller == nil {
+		return existing, []byte("[permissions installer not initialized]"), nil
+	}
+	newContent, err := p.permissionsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, []byte("[content preview not available for permissions: " + err.Error() + "]"), nil
+	}
+	return existing, newContent, nil
 }
 
 // renderCopilot computes what the copilot manager would write.
