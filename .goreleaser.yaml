@@ -34,6 +34,21 @@ archives:
       - README.md
       - LICENSE*
 
+# Linux native packages: deb (apt/Debian/Ubuntu) and rpm (dnf/Fedora/RHEL).
+# Built from the same Linux binaries produced above. Published as release assets.
+nfpms:
+  - id: packages
+    package_name: squadai
+    vendor: PedroMosquera
+    homepage: "https://github.com/PedroMosquera/squadai"
+    maintainer: "Pedro Mosquera"
+    description: "CLI tool that standardizes AI coding agent environments across a team"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+
 checksum:
   name_template: "checksums.txt"
 
