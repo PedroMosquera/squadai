@@ -260,6 +260,12 @@ type CuratedMCPServer struct {
 	AuthEnvVars  []string // e.g. ["GITHUB_PERSONAL_ACCESS_TOKEN"]
 	SetupURL     string   // where to obtain credentials, e.g. "https://github.com/settings/tokens"
 	SetupHint    string   // one-line human instruction shown in the post-install panel
+
+	// Doctor metadata — used by `squadai doctor` to report server health.
+	// RequiredEnvVars lists env vars that must be set for the server to authenticate.
+	RequiredEnvVars []string // e.g. ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+	// MinNodeVersion is the minimum Node.js major version required (e.g. "20").
+	MinNodeVersion string // e.g. "20"
 }
 
 // DefaultMCPCatalog returns the 5 curated MCP servers offered during init.
@@ -275,16 +281,17 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Args:        []string{"-y", "@upstash/context7-mcp@latest"},
 		},
 		{
-			Name:         "github",
-			Description:  "Issues, PRs, code search",
-			Type:         "local",
-			PreChecked:   false,
-			Command:      "npx",
-			Args:         []string{"-y", "@modelcontextprotocol/server-github"},
-			RequiresAuth: true,
-			AuthEnvVars:  []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
-			SetupURL:     "https://github.com/settings/tokens",
-			SetupHint:    "Create a personal access token with repo scope",
+			Name:            "github",
+			Description:     "Issues, PRs, code search",
+			Type:            "local",
+			PreChecked:      false,
+			Command:         "npx",
+			Args:            []string{"-y", "@modelcontextprotocol/server-github"},
+			RequiresAuth:    true,
+			AuthEnvVars:     []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
+			RequiredEnvVars: []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
+			SetupURL:        "https://github.com/settings/tokens",
+			SetupHint:       "Create a personal access token with repo scope",
 		},
 		{
 			Name:        "memory",
@@ -295,16 +302,17 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Args:        []string{"-y", "@modelcontextprotocol/server-memory"},
 		},
 		{
-			Name:         "sentry",
-			Description:  "Error monitoring and issue tracking",
-			Type:         "local",
-			PreChecked:   false,
-			Command:      "npx",
-			Args:         []string{"-y", "@sentry/mcp-server"},
-			RequiresAuth: true,
-			AuthEnvVars:  []string{"SENTRY_AUTH_TOKEN"},
-			SetupURL:     "https://sentry.io/settings/account/api/auth-tokens/",
-			SetupHint:    "Create an auth token with project:read scope",
+			Name:            "sentry",
+			Description:     "Error monitoring and issue tracking",
+			Type:            "local",
+			PreChecked:      false,
+			Command:         "npx",
+			Args:            []string{"-y", "@sentry/mcp-server"},
+			RequiresAuth:    true,
+			AuthEnvVars:     []string{"SENTRY_AUTH_TOKEN"},
+			RequiredEnvVars: []string{"SENTRY_AUTH_TOKEN"},
+			SetupURL:        "https://sentry.io/settings/account/api/auth-tokens/",
+			SetupHint:       "Create an auth token with project:read scope",
 		},
 		{
 			Name:        "sequential-thinking",

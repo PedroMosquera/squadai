@@ -18,6 +18,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return tui.Run(Version)
 	}
 
+	// Propagate version to cli package so RunDoctor can include it in JSON output.
+	cli.Version = Version
+
 	switch args[0] {
 	case "version", "--version", "-v":
 		fmt.Fprintf(stdout, "SquadAI %s\n", Version)
@@ -72,6 +75,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "remove":
 		return cli.RunRemove(args[1:], stdout)
 
+	case "doctor":
+		return cli.RunDoctor(args[1:], stdout)
+
 	default:
 		return fmt.Errorf("unknown command %q — run 'squadai help' for available commands", args[0])
 	}
@@ -105,6 +111,7 @@ Commands:
   apply              Execute plan with backup and rollback safety
   verify             Print compliance and health report
   status             Show project configuration summary
+  doctor             Run pre-flight diagnostics (environment, agents, config, MCP, filesystem, drift)
   backup create      Snapshot managed files
   backup list        List available backups
   backup delete <id> Delete a backup snapshot
