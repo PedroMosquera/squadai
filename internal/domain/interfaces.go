@@ -68,6 +68,22 @@ type Adapter interface {
 	// WorkflowsDir returns the project-level workflows directory.
 	// Returns empty string if workflows are not supported.
 	WorkflowsDir(projectDir string) string
+
+	// MCPRootKey returns the top-level JSON key for MCP server configs.
+	// e.g. "mcp" for OpenCode, "servers" for VS Code, "mcpServers" for others.
+	MCPRootKey() string
+
+	// MCPURLKey returns the JSON field name for remote server URLs.
+	// e.g. "url" for most agents, "serverUrl" for Windsurf.
+	MCPURLKey() string
+
+	// MCPConfigPath returns the full path to the project-level MCP config file.
+	// Returns empty string if the adapter uses MergeIntoSettings (no separate MCP file).
+	MCPConfigPath(projectDir string) string
+
+	// RulesFrontmatter returns the YAML frontmatter prefix for structured rules files.
+	// Returns empty string for agents that use marker-based injection.
+	RulesFrontmatter() string
 }
 
 // ComponentInstaller handles installation and sync for a single component.

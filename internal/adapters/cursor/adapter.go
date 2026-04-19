@@ -152,6 +152,22 @@ func (a *Adapter) WorkflowsDir(_ string) string {
 	return ""
 }
 
+// MCPRootKey returns "mcpServers" — Cursor uses the standard mcpServers key.
+func (a *Adapter) MCPRootKey() string { return "mcpServers" }
+
+// MCPURLKey returns "url" — Cursor uses the standard URL key.
+func (a *Adapter) MCPURLKey() string { return "url" }
+
+// MCPConfigPath returns <projectDir>/.cursor/mcp.json.
+func (a *Adapter) MCPConfigPath(projectDir string) string {
+	return filepath.Join(projectDir, ".cursor", "mcp.json")
+}
+
+// RulesFrontmatter returns YAML frontmatter for Cursor's structured MDC rules.
+func (a *Adapter) RulesFrontmatter() string {
+	return "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n\n"
+}
+
 // ConfigDir returns the root config directory for Cursor.
 // On Windows it is %APPDATA%\Cursor\User (falling back to homeDir\AppData\Roaming\Cursor\User).
 // On all other platforms it is ~/.cursor.

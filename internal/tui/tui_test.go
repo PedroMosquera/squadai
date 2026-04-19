@@ -36,10 +36,14 @@ func (m *mockAdapter) ProjectCommandsDir(projectDir string) string { return "" }
 func (m *mockAdapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationSoloAgent
 }
-func (m *mockAdapter) SupportsSubAgents() bool               { return false }
-func (m *mockAdapter) SubAgentsDir(homeDir string) string    { return "" }
-func (m *mockAdapter) SupportsWorkflows() bool               { return false }
-func (m *mockAdapter) WorkflowsDir(projectDir string) string { return "" }
+func (m *mockAdapter) SupportsSubAgents() bool                { return false }
+func (m *mockAdapter) SubAgentsDir(homeDir string) string     { return "" }
+func (m *mockAdapter) SupportsWorkflows() bool                { return false }
+func (m *mockAdapter) WorkflowsDir(projectDir string) string  { return "" }
+func (m *mockAdapter) MCPRootKey() string                     { return "mcpServers" }
+func (m *mockAdapter) MCPURLKey() string                      { return "url" }
+func (m *mockAdapter) MCPConfigPath(projectDir string) string { return "" }
+func (m *mockAdapter) RulesFrontmatter() string               { return "" }
 
 // ─── Intro Screen ───────────────────────────────────────────────────────────
 

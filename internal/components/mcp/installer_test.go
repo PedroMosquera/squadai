@@ -1473,6 +1473,11 @@ func TestApplyMCPConfigFile_PreservesVSCodeInputs(t *testing.T) {
 	}
 	inst := New(servers)
 	inst.projectDir = dir
+	// Seed the agent config cache (normally populated during Plan).
+	inst.agentConfigs[domain.AgentVSCodeCopilot] = agentMCPConfig{
+		rootKey: "servers",
+		urlKey:  "url",
+	}
 
 	action := domain.PlannedAction{
 		ID:          "vscode-copilot-mcp",

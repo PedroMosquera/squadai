@@ -867,6 +867,33 @@ func TestMerge_ModelTier_CarriedThrough(t *testing.T) {
 	}
 }
 
+// TestMerge_UserNonNil_PreservesProjectCopilotConfig verifies that a non-nil user
+// config does not zero out copilot fields set by the project layer.
+// Regression test for MED-04: merged.Copilot was unconditionally zeroed at Layer 1,
+// which would wipe any copilot values if the order of operations changed, and makes
+// it impossible to ever support user-level copilot config.
+func TestMerge_UserNonNil_PreservesProjectCopilotConfig(t *testing.T) {
+	user := &domain.UserConfig{
+		Mode: domain.ModePersonal,
+	}
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Copilot: domain.CopilotConfig{
+			InstructionsTemplate: "standard",
+			CustomContent:        "## Team customs",
+		},
+	}
+
+	merged := Merge(user, project, nil)
+
+	if merged.Copilot.InstructionsTemplate != "standard" {
+		t.Errorf("InstructionsTemplate = %q, want %q", merged.Copilot.InstructionsTemplate, "standard")
+	}
+	if merged.Copilot.CustomContent != "## Team customs" {
+		t.Errorf("CustomContent = %q, want %q", merged.Copilot.CustomContent, "## Team customs")
+	}
+}
+
 func TestMerge_ModelTier_EmptyWhenNotSet(t *testing.T) {
 	merged := Merge(nil, nil, nil)
 

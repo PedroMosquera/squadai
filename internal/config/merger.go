@@ -37,7 +37,6 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		for k, v := range user.Components {
 			merged.Components[k] = cloneComponentConfig(v)
 		}
-		merged.Copilot = domain.CopilotConfig{}
 		if user.Paths.BackupDir != "" {
 			merged.Paths.BackupDir = user.Paths.BackupDir
 		}

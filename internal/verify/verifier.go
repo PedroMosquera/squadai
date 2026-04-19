@@ -41,7 +41,11 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 	// Create rules installer from merged config (lazy init per verify call).
 	var rulesInstaller *rules.Installer
 	if rulesCfg, ok := cfg.Components[string(domain.ComponentRules)]; ok && rulesCfg.Enabled {
-		rulesInstaller = rules.New(cfg.Rules, projectDir)
+		ri, err := rules.New(cfg.Rules, projectDir)
+		if err != nil {
+			return nil, fmt.Errorf("create rules installer: %w", err)
+		}
+		rulesInstaller = ri
 	}
 
 	// Create settings installer from merged adapter configs (lazy init per verify call).

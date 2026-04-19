@@ -31,10 +31,14 @@ func (a mcpTestAdapter) ProjectCommandsDir(_ string) string          { return ""
 func (a mcpTestAdapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationSoloAgent
 }
-func (a mcpTestAdapter) SupportsSubAgents() bool      { return false }
-func (a mcpTestAdapter) SubAgentsDir(_ string) string { return "" }
-func (a mcpTestAdapter) SupportsWorkflows() bool      { return false }
-func (a mcpTestAdapter) WorkflowsDir(_ string) string { return "" }
+func (a mcpTestAdapter) SupportsSubAgents() bool       { return false }
+func (a mcpTestAdapter) SubAgentsDir(_ string) string  { return "" }
+func (a mcpTestAdapter) SupportsWorkflows() bool       { return false }
+func (a mcpTestAdapter) WorkflowsDir(_ string) string  { return "" }
+func (a mcpTestAdapter) MCPRootKey() string            { return "mcpServers" }
+func (a mcpTestAdapter) MCPURLKey() string             { return "url" }
+func (a mcpTestAdapter) MCPConfigPath(_ string) string { return "" }
+func (a mcpTestAdapter) RulesFrontmatter() string      { return "" }
 
 // ─── DefaultMCPServers ───────────────────────────────────────────────────────
 

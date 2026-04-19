@@ -68,7 +68,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	actionID := fmt.Sprintf("%s-settings", agentID)
 
-	existing, err := readJSONFile(targetPath)
+	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read settings file: %w", err)
 	}
@@ -134,7 +134,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	}
 
 	// Read existing file or start with empty map.
-	existing, err := readJSONFile(action.TargetPath)
+	existing, err := fileutil.ReadJSONFile(action.TargetPath)
 	if err != nil {
 		return fmt.Errorf("read target: %w", err)
 	}
@@ -207,7 +207,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 
 	var results []domain.VerifyResult
 
-	existing, err := readJSONFile(targetPath)
+	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil || existing == nil {
 		results = append(results, domain.VerifyResult{
 			Check:   "settings-file-exists",
@@ -256,7 +256,7 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 		return nil, nil
 	}
 
-	existing, err := readJSONFile(action.TargetPath)
+	existing, err := fileutil.ReadJSONFile(action.TargetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read target: %w", err)
 	}

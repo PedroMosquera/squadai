@@ -124,13 +124,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 // Verify checks post-apply state for the memory component.
 func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) ([]domain.VerifyResult, error) {
 	if !adapter.SupportsComponent(domain.ComponentMemory) {
-		return []domain.VerifyResult{
-			{
-				Check:   "memory-supported",
-				Passed:  false,
-				Message: fmt.Sprintf("adapter %s does not support memory", adapter.ID()),
-			},
-		}, nil
+		return nil, nil
 	}
 
 	promptPath := memoryTargetPath(adapter, homeDir, projectDir)

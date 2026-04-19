@@ -158,6 +158,20 @@ func (a *Adapter) WorkflowsDir(_ string) string {
 	return ""
 }
 
+// MCPRootKey returns "servers" — VS Code Copilot uses the "servers" key.
+func (a *Adapter) MCPRootKey() string { return "servers" }
+
+// MCPURLKey returns "url" — VS Code Copilot uses the standard URL key.
+func (a *Adapter) MCPURLKey() string { return "url" }
+
+// MCPConfigPath returns <projectDir>/.vscode/mcp.json.
+func (a *Adapter) MCPConfigPath(projectDir string) string {
+	return filepath.Join(projectDir, ".vscode", "mcp.json")
+}
+
+// RulesFrontmatter returns empty string — VS Code Copilot uses YAML frontmatter in .instructions.md but not for rules.
+func (a *Adapter) RulesFrontmatter() string { return "" }
+
 // ConfigDir returns the root config directory for VS Code Copilot.
 // On macOS it is ~/Library/Application Support/Code/User.
 // On Linux it is ~/.config/Code/User.

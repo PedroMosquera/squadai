@@ -124,11 +124,6 @@ func (a *Adapter) ProjectCommandsDir(_ string) string {
 	return ""
 }
 
-// ProjectSettingsPath returns <projectDir>/.claude/settings.json.
-func (a *Adapter) ProjectSettingsPath(projectDir string) string {
-	return filepath.Join(projectDir, ".claude", "settings.json")
-}
-
 // ConfigDir returns the root config directory for Claude Code.
 func ConfigDir(homeDir string) string {
 	return filepath.Join(homeDir, ".claude")
@@ -158,3 +153,17 @@ func (a *Adapter) SupportsWorkflows() bool {
 func (a *Adapter) WorkflowsDir(_ string) string {
 	return ""
 }
+
+// MCPRootKey returns "mcpServers" — Claude Code uses the standard mcpServers key.
+func (a *Adapter) MCPRootKey() string { return "mcpServers" }
+
+// MCPURLKey returns "url" — Claude Code uses the standard URL key.
+func (a *Adapter) MCPURLKey() string { return "url" }
+
+// MCPConfigPath returns <projectDir>/.mcp.json.
+func (a *Adapter) MCPConfigPath(projectDir string) string {
+	return filepath.Join(projectDir, ".mcp.json")
+}
+
+// RulesFrontmatter returns empty string — Claude Code uses marker-based injection.
+func (a *Adapter) RulesFrontmatter() string { return "" }

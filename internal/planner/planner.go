@@ -16,6 +16,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/workflows"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // Planner computes the full action plan from merged config and detected adapters.
@@ -47,7 +48,11 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 	var actions []domain.PlannedAction
 
 	// Create rules installer from merged config (lazy init per plan call).
-	p.rulesInstaller = rules.New(cfg.Rules, projectDir)
+	rulesInst, err := rules.New(cfg.Rules, projectDir)
+	if err != nil {
+		return nil, fmt.Errorf("create rules installer: %w", err)
+	}
+	p.rulesInstaller = rulesInst
 
 	// Create settings installer from merged adapter configs (lazy init per plan call).
 	p.settingsInstaller = settings.New(cfg.Adapters)
@@ -454,86 +459,8 @@ func (p *Planner) renderCopilot(action domain.PlannedAction, existing []byte, pr
 	return existing, []byte("[content preview not available for copilot-instructions]"), nil
 }
 
-// injectSection is a local helper that calls marker.InjectSection.
-// Avoids a circular import since planner cannot import marker directly.
-// We replicate the logic inline rather than importing the marker package.
+// injectSection delegates to marker.InjectSection for inserting or replacing
+// managed content between squadai marker tags in a document.
 func injectSection(document, sectionID, content string) string {
-	open := "<!-- squadai:" + sectionID + " -->"
-	close := "<!-- /squadai:" + sectionID + " -->"
-
-	openIdx := indexOf(document, open)
-	closeIdx := indexOf(document, close)
-
-	if openIdx >= 0 && closeIdx >= 0 && closeIdx > openIdx {
-		before := document[:openIdx]
-		after := document[closeIdx+len(close):]
-		if content == "" {
-			result := trimRight(before, "\n") + after
-			if trimSpace(result) == "" {
-				return ""
-			}
-			return result
-		}
-		return before + open + "\n" + content + "\n" + close + after
-	}
-
-	if content == "" {
-		return document
-	}
-
-	block := open + "\n" + content + "\n" + close + "\n"
-	if document == "" {
-		return block
-	}
-	if !hasSuffix(document, "\n\n") {
-		if hasSuffix(document, "\n") {
-			document += "\n"
-		} else {
-			document += "\n\n"
-		}
-	}
-	return document + block
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
-func hasSuffix(s, suffix string) bool {
-	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
-}
-
-func trimRight(s, cutset string) string {
-	for len(s) > 0 {
-		found := false
-		for _, c := range cutset {
-			if rune(s[len(s)-1]) == c {
-				s = s[:len(s)-1]
-				found = true
-				break
-			}
-		}
-		if !found {
-			break
-		}
-	}
-	return s
-}
-
-func trimSpace(s string) string {
-	// minimal trim for the injectSection helper
-	start := 0
-	for start < len(s) && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
-		start++
-	}
-	end := len(s)
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
-		end--
-	}
-	return s[start:end]
+	return marker.InjectSection(document, sectionID, content)
 }

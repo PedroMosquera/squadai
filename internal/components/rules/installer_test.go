@@ -21,7 +21,7 @@ func TestInstaller_ImplementsInterface(t *testing.T) {
 }
 
 func TestInstaller_ID(t *testing.T) {
-	inst := New(domain.RulesConfig{}, "")
+	inst, _ := New(domain.RulesConfig{}, "")
 	if inst.ID() != domain.ComponentRules {
 		t.Errorf("ID() = %q, want %q", inst.ID(), domain.ComponentRules)
 	}
@@ -33,7 +33,7 @@ func TestNew_InlineContent(t *testing.T) {
 	cfg := domain.RulesConfig{
 		TeamStandards: "Always use gofmt.",
 	}
-	inst := New(cfg, "/some/project")
+	inst, _ := New(cfg, "/some/project")
 	if inst.Content() != "Always use gofmt." {
 		t.Errorf("Content() = %q, want %q", inst.Content(), "Always use gofmt.")
 	}
@@ -52,7 +52,7 @@ func TestNew_FileContent(t *testing.T) {
 	cfg := domain.RulesConfig{
 		TeamStandardsFile: "standards.md",
 	}
-	inst := New(cfg, project)
+	inst, _ := New(cfg, project)
 	if inst.Content() != "File-based standards." {
 		t.Errorf("Content() = %q, want %q", inst.Content(), "File-based standards.")
 	}
@@ -72,14 +72,14 @@ func TestNew_InlineTakesPrecedenceOverFile(t *testing.T) {
 		TeamStandards:     "inline content",
 		TeamStandardsFile: "standards.md",
 	}
-	inst := New(cfg, project)
+	inst, _ := New(cfg, project)
 	if inst.Content() != "inline content" {
 		t.Errorf("Content() = %q, want %q", inst.Content(), "inline content")
 	}
 }
 
 func TestNew_EmptyConfig(t *testing.T) {
-	inst := New(domain.RulesConfig{}, "/some/project")
+	inst, _ := New(domain.RulesConfig{}, "/some/project")
 	if inst.Content() != "" {
 		t.Errorf("Content() = %q, want empty", inst.Content())
 	}
@@ -89,7 +89,7 @@ func TestNew_MissingFile_ReturnsEmpty(t *testing.T) {
 	cfg := domain.RulesConfig{
 		TeamStandardsFile: "nonexistent.md",
 	}
-	inst := New(cfg, t.TempDir())
+	inst, _ := New(cfg, t.TempDir())
 	if inst.Content() != "" {
 		t.Errorf("Content() = %q, want empty for missing file", inst.Content())
 	}
@@ -99,7 +99,7 @@ func TestNew_EmptyProjectDir_FileRef_ReturnsEmpty(t *testing.T) {
 	cfg := domain.RulesConfig{
 		TeamStandardsFile: "standards.md",
 	}
-	inst := New(cfg, "")
+	inst, _ := New(cfg, "")
 	if inst.Content() != "" {
 		t.Errorf("Content() = %q, want empty when projectDir is empty", inst.Content())
 	}
@@ -110,7 +110,7 @@ func TestNew_EmptyProjectDir_FileRef_ReturnsEmpty(t *testing.T) {
 func TestPlan_OpenCode_NewFile_ReturnsCreate(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestPlan_OpenCode_NewFile_ReturnsCreate(t *testing.T) {
 func TestPlan_OpenCode_ExistingFileNoSection_ReturnsUpdate(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
 
 	targetPath := filepath.Join(project, "AGENTS.md")
 	if err := os.WriteFile(targetPath, []byte("# Existing Prompt\n"), 0644); err != nil {
@@ -157,7 +157,7 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 	content := "Use gofmt."
-	inst := New(domain.RulesConfig{TeamStandards: content}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: content}, project)
 
 	targetPath := filepath.Join(project, "AGENTS.md")
 	fileContent := marker.InjectSection("", SectionID, content)
@@ -180,7 +180,7 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 func TestPlan_OpenCode_OutdatedSection_ReturnsUpdate(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "New standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "New standards."}, project)
 
 	targetPath := filepath.Join(project, "AGENTS.md")
 	fileContent := marker.InjectSection("", SectionID, "Old standards.")
@@ -205,7 +205,7 @@ func TestPlan_OpenCode_OutdatedSection_ReturnsUpdate(t *testing.T) {
 func TestPlan_Claude_TargetsProjectLevel(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
 	if err != nil {
@@ -225,7 +225,7 @@ func TestPlan_Claude_TargetsProjectLevel(t *testing.T) {
 func TestPlan_EmptyContent_ReturnsNil(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{}, project)
+	inst, _ := New(domain.RulesConfig{}, project)
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
 	if err != nil {
@@ -242,7 +242,7 @@ func TestApply_OpenCode_CreatesFileWithRulesSection(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 	standards := "Always use gofmt.\nAlways run tests."
-	inst := New(domain.RulesConfig{TeamStandards: standards}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: standards}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if len(actions) == 0 {
@@ -266,7 +266,7 @@ func TestApply_OpenCode_CreatesFileWithRulesSection(t *testing.T) {
 func TestApply_Claude_CreatesProjectLevelFile(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Claude standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Claude standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if len(actions) == 0 {
@@ -290,7 +290,7 @@ func TestApply_Claude_CreatesProjectLevelFile(t *testing.T) {
 func TestApply_PreservesExistingContent(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	targetPath := filepath.Join(project, "AGENTS.md")
 	if err := os.WriteFile(targetPath, []byte("# My Custom Prompt\n\nDo not delete this.\n"), 0644); err != nil {
@@ -316,7 +316,7 @@ func TestApply_PreservesExistingContent(t *testing.T) {
 }
 
 func TestApply_SkipDoesNothing(t *testing.T) {
-	inst := New(domain.RulesConfig{}, "")
+	inst, _ := New(domain.RulesConfig{}, "")
 	err := inst.Apply(domain.PlannedAction{Action: domain.ActionSkip})
 	if err != nil {
 		t.Fatalf("Skip should succeed, got: %v", err)
@@ -327,7 +327,7 @@ func TestApply_Idempotent(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 	content := "Stable standards."
-	inst := New(domain.RulesConfig{TeamStandards: content}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: content}, project)
 
 	// First apply.
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
@@ -360,7 +360,7 @@ func TestApply_UpdatesOutdatedSection(t *testing.T) {
 	}
 
 	// Install new standards.
-	inst := New(domain.RulesConfig{TeamStandards: "New standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "New standards."}, project)
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if actions[0].Action != domain.ActionUpdate {
 		t.Fatalf("expected Update, got %q", actions[0].Action)
@@ -387,7 +387,7 @@ func TestApply_UpdatesOutdatedSection(t *testing.T) {
 func TestVerify_OpenCode_AllPass_AfterApply(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if err := inst.Apply(actions[0]); err != nil {
@@ -408,7 +408,7 @@ func TestVerify_OpenCode_AllPass_AfterApply(t *testing.T) {
 func TestVerify_Claude_AllPass_AfterApply(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if err := inst.Apply(actions[0]); err != nil {
@@ -429,7 +429,7 @@ func TestVerify_Claude_AllPass_AfterApply(t *testing.T) {
 func TestVerify_FailsWhenFileIsMissing(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	results, err := inst.Verify(adapter, t.TempDir(), project)
 	if err != nil {
@@ -446,7 +446,7 @@ func TestVerify_FailsWhenFileIsMissing(t *testing.T) {
 func TestVerify_FailsWhenMarkersAreMissing(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	targetPath := filepath.Join(project, "AGENTS.md")
 	if err := os.WriteFile(targetPath, []byte("no markers here"), 0644); err != nil {
@@ -471,7 +471,7 @@ func TestVerify_FailsWhenMarkersAreMissing(t *testing.T) {
 func TestVerify_FailsWhenContentOutdated(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "New standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "New standards."}, project)
 
 	targetPath := filepath.Join(project, "AGENTS.md")
 	content := marker.InjectSection("", SectionID, "Old standards.")
@@ -497,7 +497,7 @@ func TestVerify_FailsWhenContentOutdated(t *testing.T) {
 func TestVerify_EmptyContent_ReturnsNil(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{}, project)
+	inst, _ := New(domain.RulesConfig{}, project)
 
 	results, err := inst.Verify(adapter, t.TempDir(), project)
 	if err != nil {
@@ -513,7 +513,7 @@ func TestVerify_EmptyContent_ReturnsNil(t *testing.T) {
 func TestPlan_Windsurf_NewFile_ReturnsCreate(t *testing.T) {
 	project := t.TempDir()
 	adapter := windsurf.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
 	if err != nil {
@@ -534,7 +534,7 @@ func TestPlan_Windsurf_NewFile_ReturnsCreate(t *testing.T) {
 func TestApply_Windsurf_WritesFrontmatter(t *testing.T) {
 	project := t.TempDir()
 	adapter := windsurf.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if len(actions) == 0 {
@@ -561,7 +561,7 @@ func TestApply_Windsurf_WritesFrontmatter(t *testing.T) {
 func TestApply_Windsurf_Idempotent(t *testing.T) {
 	project := t.TempDir()
 	adapter := windsurf.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if err := inst.Apply(actions[0]); err != nil {
@@ -577,7 +577,7 @@ func TestApply_Windsurf_Idempotent(t *testing.T) {
 func TestVerify_Windsurf_PassesAfterApply(t *testing.T) {
 	project := t.TempDir()
 	adapter := windsurf.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if err := inst.Apply(actions[0]); err != nil {
@@ -600,7 +600,7 @@ func TestVerify_Windsurf_PassesAfterApply(t *testing.T) {
 func TestPlan_Cursor_NewFile_ReturnsCreate(t *testing.T) {
 	project := t.TempDir()
 	adapter := cursor.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
 	if err != nil {
@@ -618,7 +618,7 @@ func TestPlan_Cursor_NewFile_ReturnsCreate(t *testing.T) {
 func TestApply_Cursor_WritesMDCFrontmatter(t *testing.T) {
 	project := t.TempDir()
 	adapter := cursor.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if len(actions) == 0 {
@@ -642,7 +642,7 @@ func TestApply_Cursor_WritesMDCFrontmatter(t *testing.T) {
 func TestApply_Cursor_Idempotent(t *testing.T) {
 	project := t.TempDir()
 	adapter := cursor.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if err := inst.Apply(actions[0]); err != nil {
@@ -660,7 +660,7 @@ func TestApply_Cursor_Idempotent(t *testing.T) {
 func TestApply_OpenCode_StillUsesMarkers(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if err := inst.Apply(actions[0]); err != nil {
@@ -676,7 +676,7 @@ func TestApply_OpenCode_StillUsesMarkers(t *testing.T) {
 func TestApply_Claude_StillUsesMarkers(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
-	inst := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if err := inst.Apply(actions[0]); err != nil {
