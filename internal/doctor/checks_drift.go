@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,7 +34,11 @@ func (d *Doctor) runConfigDrift(_ context.Context) []CheckResult {
 	return results
 }
 
-// checkDriftFile inspects a single managed file for marker block integrity.
+// checkDriftFile inspects a single managed file for integrity. JSON files
+// (e.g. opencode.json, .mcp.json, settings.json) are validated by checking
+// that all managed JSON keys are present in the parsed object — JSON has no
+// comment syntax, so HTML markers cannot be used. All other files use the
+// HTML marker convention (<!-- squadai:section --> ... <!-- /squadai:section -->).
 func (d *Doctor) checkDriftFile(relFile string) CheckResult {
 	absPath := filepath.Join(d.projectDir, relFile)
 	name := filepath.Base(relFile)
@@ -51,8 +56,6 @@ func (d *Doctor) checkDriftFile(relFile string) CheckResult {
 			fmt.Sprintf("%s — could not read file: %v", relFile, err), relFile, "")
 	}
 
-	content := string(data)
-
 	// Read managed keys to find which sections we own.
 	managedKeys, err := managed.ReadManagedKeys(d.projectDir, relFile)
 	if err != nil {
@@ -60,7 +63,65 @@ func (d *Doctor) checkDriftFile(relFile string) CheckResult {
 			fmt.Sprintf("%s — could not read managed keys: %v", relFile, err), relFile, "")
 	}
 
-	// Check each managed section's open/close markers.
+	if isJSONFile(relFile) {
+		return checkDriftJSON(relFile, name, data, managedKeys)
+	}
+	return checkDriftMarkers(relFile, name, string(data), managedKeys)
+}
+
+// isJSONFile returns true for paths whose extension is .json. JSON files
+// cannot carry HTML comments, so they use a different drift-check strategy.
+func isJSONFile(relFile string) bool {
+	return strings.EqualFold(filepath.Ext(relFile), ".json")
+}
+
+// checkDriftJSON verifies that all managed JSON keys are present at the top
+// level of the parsed JSON object. A missing key indicates the user removed
+// (or never re-applied) a managed section.
+func checkDriftJSON(relFile, name string, data []byte, managedKeys []string) CheckResult {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fail(catDrift, name,
+			fmt.Sprintf("%s — invalid JSON: %v", relFile, err),
+			relFile,
+			"Restore from a backup or run 'squadai apply' to regenerate")
+	}
+
+	var missing []string
+	for _, key := range managedKeys {
+		if _, ok := obj[key]; !ok {
+			missing = append(missing, key)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fail(catDrift, name,
+			fmt.Sprintf("%s — managed key(s) missing: %s (was it manually edited?)",
+				relFile, strings.Join(missing, ", ")),
+			relFile,
+			"Run 'squadai apply' to restore the missing keys")
+	}
+
+	// Detect non-managed top-level keys as user content (informational, not a failure).
+	for k := range obj {
+		if !contains(managedKeys, k) {
+			return CheckResult{
+				Category: catDrift,
+				Name:     name,
+				Status:   CheckPass,
+				Message:  fmt.Sprintf("%s — managed keys present, user keys detected outside managed scope", relFile),
+				Detail:   relFile,
+			}
+		}
+	}
+
+	return pass(catDrift, name,
+		fmt.Sprintf("%s — matches last apply", relFile), relFile)
+}
+
+// checkDriftMarkers verifies that every managed section's open and close HTML
+// markers are present in a non-JSON file (markdown, text, etc.).
+func checkDriftMarkers(relFile, name, content string, managedKeys []string) CheckResult {
 	missingMarkers := []string{}
 	for _, sectionID := range managedKeys {
 		open := marker.OpenTag(sectionID)
@@ -80,9 +141,7 @@ func (d *Doctor) checkDriftFile(relFile string) CheckResult {
 			"Run 'squadai apply' to restore marker blocks")
 	}
 
-	// File is intact. Check whether there is user content outside the markers.
-	hasUserContent := detectUserContent(content, managedKeys)
-	if hasUserContent {
+	if detectUserContent(content, managedKeys) {
 		return CheckResult{
 			Category: catDrift,
 			Name:     name,
@@ -94,6 +153,16 @@ func (d *Doctor) checkDriftFile(relFile string) CheckResult {
 
 	return pass(catDrift, name,
 		fmt.Sprintf("%s — matches last apply", relFile), relFile)
+}
+
+// contains reports whether s is present in slice.
+func contains(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
 }
 
 // detectUserContent returns true when there is non-empty content outside all
