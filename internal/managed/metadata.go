@@ -158,6 +158,26 @@ func UntrackCreatedFile(projectRoot, relPath string) error {
 	return writeSidecar(projectRoot, doc)
 }
 
+// ListManagedFiles returns all files that have managed marker blocks (keys of
+// managed_files), sorted. Returns an empty slice (not nil) when the sidecar
+// does not exist or no entries are recorded.
+func ListManagedFiles(projectRoot string) ([]string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]string, 0, len(doc.ManagedFiles))
+	for f := range doc.ManagedFiles {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 // ListCreatedFiles returns all files SquadAI created (relative paths), sorted.
 // Returns an empty slice (not nil) when the sidecar does not exist.
 func ListCreatedFiles(projectRoot string) ([]string, error) {

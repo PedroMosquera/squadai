@@ -1439,6 +1439,81 @@ func newTestInstaller() *Installer {
 	})
 }
 
+// ─── VS Code inputs preservation ────────────────────────────────────────────
+
+func TestApplyMCPConfigFile_PreservesVSCodeInputs(t *testing.T) {
+	dir := t.TempDir()
+	vscodeDir := filepath.Join(dir, ".vscode")
+	if err := os.MkdirAll(vscodeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(vscodeDir, "mcp.json")
+
+	// Write an existing mcp.json that has a user-defined "inputs" array.
+	existing := map[string]interface{}{
+		"inputs": []interface{}{
+			map[string]interface{}{"id": "myToken", "type": "promptString"},
+		},
+		"servers": map[string]interface{}{
+			"old-server": map[string]interface{}{"type": "remote", "url": "https://old.example.com"},
+		},
+	}
+	writeTestJSON(t, mcpPath, existing)
+
+	_ = vscode.New() // ensure adapter package is imported; action.Agent drives the logic
+	servers := map[string]domain.MCPServerDef{
+		"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
+	}
+	inst := New(servers)
+	inst.projectDir = dir
+
+	action := domain.PlannedAction{
+		ID:          "vscode-copilot-mcp",
+		Agent:       domain.AgentVSCodeCopilot,
+		Component:   domain.ComponentMCP,
+		Action:      domain.ActionUpdate,
+		TargetPath:  mcpPath,
+		Description: "mcp:configfile:update MCP server configuration",
+	}
+
+	if err := inst.Apply(action); err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+
+	result := readTestJSON(t, mcpPath)
+
+	// "inputs" array must still be present and unchanged.
+	inputsRaw, ok := result["inputs"]
+	if !ok {
+		t.Fatal("Apply() removed the 'inputs' key from mcp.json")
+	}
+	inputs, ok := inputsRaw.([]interface{})
+	if !ok || len(inputs) != 1 {
+		t.Fatalf("expected 1 input entry, got %v", inputsRaw)
+	}
+	inputEntry, ok := inputs[0].(map[string]interface{})
+	if !ok || inputEntry["id"] != "myToken" {
+		t.Errorf("inputs[0] = %v, want id=myToken", inputs[0])
+	}
+
+	// "servers" key must have the new server.
+	serversRaw, ok := result["servers"]
+	if !ok {
+		t.Fatal("Apply() removed the 'servers' key")
+	}
+	serversMap, ok := serversRaw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("servers is not a map: %T", serversRaw)
+	}
+	if _, ok := serversMap["context7"]; !ok {
+		t.Error("expected 'context7' server to be written")
+	}
+	// Old server should be replaced (we overwrite the servers key entirely).
+	if _, ok := serversMap["old-server"]; ok {
+		t.Error("old-server should have been replaced")
+	}
+}
+
 func writeTestJSON(t *testing.T, path string, data map[string]interface{}) {
 	t.Helper()
 	dir := filepath.Dir(path)

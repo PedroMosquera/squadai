@@ -22,6 +22,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
@@ -1979,6 +1980,123 @@ func RunBackupPrune(args []string, stdout io.Writer) error {
 
 	fmt.Fprintf(stdout, "Pruned %d backups (kept %d most recent).\n", deleted, kept)
 	return nil
+}
+
+// RemoveOptions configures a Remove operation.
+type RemoveOptions struct {
+	DryRun     bool
+	JSON       bool
+	ProjectDir string // when empty, uses os.Getwd()
+}
+
+// RemoveReport is the result of a Remove operation.
+type RemoveReport struct {
+	RemovedFiles []string `json:"removed_files"` // files deleted entirely
+	CleanedFiles []string `json:"cleaned_files"` // files with marker blocks stripped
+	Errors       []string `json:"errors"`
+	DryRun       bool     `json:"dry_run"`
+}
+
+// Remove removes all SquadAI-managed configuration from the project:
+//   - Files in created_files (sidecar) are deleted entirely.
+//   - Files in managed_files (sidecar) have their marker blocks stripped; if
+//     the file becomes empty (or only whitespace) after stripping, it is deleted.
+//   - On success (non-dry-run) the sidecar itself is removed via DeleteSidecar.
+func Remove(opts RemoveOptions) (RemoveReport, error) {
+	projectDir := opts.ProjectDir
+	if projectDir == "" {
+		var err error
+		projectDir, err = os.Getwd()
+		if err != nil {
+			return RemoveReport{}, fmt.Errorf("resolve working directory: %w", err)
+		}
+	}
+
+	createdFiles, err := managed.ListCreatedFiles(projectDir)
+	if err != nil {
+		return RemoveReport{}, fmt.Errorf("list created files: %w", err)
+	}
+
+	managedFiles, err := managed.ListManagedFiles(projectDir)
+	if err != nil {
+		return RemoveReport{}, fmt.Errorf("list managed files: %w", err)
+	}
+
+	report := RemoveReport{
+		RemovedFiles: []string{},
+		CleanedFiles: []string{},
+		Errors:       []string{},
+		DryRun:       opts.DryRun,
+	}
+
+	// --- Process created_files: delete entirely ---
+	for _, relPath := range createdFiles {
+		absPath := filepath.Join(projectDir, relPath)
+		if opts.DryRun {
+			if _, statErr := os.Stat(absPath); statErr == nil {
+				report.RemovedFiles = append(report.RemovedFiles, absPath)
+			}
+			continue
+		}
+		if removeErr := os.Remove(absPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			report.Errors = append(report.Errors, fmt.Sprintf("remove %s: %v", absPath, removeErr))
+		} else {
+			report.RemovedFiles = append(report.RemovedFiles, absPath)
+		}
+	}
+
+	// --- Process managed_files: strip marker blocks ---
+	for _, relPath := range managedFiles {
+		absPath := filepath.Join(projectDir, relPath)
+		data, readErr := os.ReadFile(absPath)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			report.Errors = append(report.Errors, fmt.Sprintf("read %s: %v", absPath, readErr))
+			continue
+		}
+
+		stripped, hasMarkers := marker.StripAll(string(data))
+		if !hasMarkers {
+			// Nothing to strip — file has no marker blocks managed by us.
+			continue
+		}
+
+		if opts.DryRun {
+			if strings.TrimSpace(stripped) == "" {
+				report.RemovedFiles = append(report.RemovedFiles, absPath)
+			} else {
+				report.CleanedFiles = append(report.CleanedFiles, absPath)
+			}
+			continue
+		}
+
+		if strings.TrimSpace(stripped) == "" {
+			// File becomes empty — delete it.
+			if removeErr := os.Remove(absPath); removeErr != nil && !os.IsNotExist(removeErr) {
+				report.Errors = append(report.Errors, fmt.Sprintf("remove %s: %v", absPath, removeErr))
+			} else {
+				report.RemovedFiles = append(report.RemovedFiles, absPath)
+			}
+		} else {
+			// Preserve user content outside marker blocks.
+			if _, writeErr := fileutil.WriteAtomic(absPath, []byte(stripped), 0644); writeErr != nil {
+				report.Errors = append(report.Errors, fmt.Sprintf("write %s: %v", absPath, writeErr))
+			} else {
+				report.CleanedFiles = append(report.CleanedFiles, absPath)
+			}
+		}
+	}
+
+	// Clean up sidecar unless dry-run.
+	if !opts.DryRun {
+		if delErr := managed.DeleteSidecar(projectDir); delErr != nil {
+			report.Errors = append(report.Errors, fmt.Sprintf("delete sidecar: %v", delErr))
+		}
+	}
+
+	return report, nil
 }
 
 // removeResult is the JSON representation of a successful remove run.

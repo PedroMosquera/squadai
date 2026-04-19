@@ -119,7 +119,63 @@ func TestDefaultTeam_AllRolesHaveSubagentMode(t *testing.T) {
 	}
 }
 
-func TestDefaultTeam_AllRolesHaveSkillRef(t *testing.T) {
+// ─── DefaultMCPCatalog ───────────────────────────────────────────────────────
+
+func TestDefaultMCPCatalog_ReturnsFiveServers(t *testing.T) {
+	catalog := DefaultMCPCatalog()
+	if len(catalog) != 5 {
+		t.Errorf("DefaultMCPCatalog() len = %d, want 5", len(catalog))
+	}
+}
+
+func TestDefaultMCPCatalog_ExactlyTwoPreChecked(t *testing.T) {
+	catalog := DefaultMCPCatalog()
+	var preChecked []string
+	for _, s := range catalog {
+		if s.PreChecked {
+			preChecked = append(preChecked, s.Name)
+		}
+	}
+	if len(preChecked) != 2 {
+		t.Errorf("expected 2 pre-checked servers, got %d: %v", len(preChecked), preChecked)
+	}
+}
+
+func TestDefaultMCPCatalog_PreCheckedAreContext7AndGitHub(t *testing.T) {
+	catalog := DefaultMCPCatalog()
+	preChecked := make(map[string]bool)
+	for _, s := range catalog {
+		if s.PreChecked {
+			preChecked[s.Name] = true
+		}
+	}
+	for _, expected := range []string{"context7", "github"} {
+		if !preChecked[expected] {
+			t.Errorf("expected %q to be pre-checked", expected)
+		}
+	}
+}
+
+func TestDefaultMCPCatalog_AllHaveNonEmptyNameAndDescription(t *testing.T) {
+	for _, s := range DefaultMCPCatalog() {
+		if s.Name == "" {
+			t.Error("found server with empty Name")
+		}
+		if s.Description == "" {
+			t.Errorf("server %q has empty Description", s.Name)
+		}
+	}
+}
+
+func TestDefaultMCPCatalog_AllHaveValidType(t *testing.T) {
+	for _, s := range DefaultMCPCatalog() {
+		if s.Type != "remote" && s.Type != "local" {
+			t.Errorf("server %q has invalid Type %q", s.Name, s.Type)
+		}
+	}
+}
+
+func TestDefaultMCPCatalog_AllRolesHaveSkillRef(t *testing.T) {
 	// Orchestrators don't have SkillRef — they coordinate. All others should.
 	methodologies := []Methodology{MethodologyTDD, MethodologySDD, MethodologyConventional}
 	for _, m := range methodologies {

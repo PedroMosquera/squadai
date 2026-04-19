@@ -239,6 +239,63 @@ func DefaultTeam(m Methodology) map[string]TeamRole {
 	return nil
 }
 
+// CuratedMCPServer describes a server in the built-in MCP catalog shown during
+// the init wizard.
+type CuratedMCPServer struct {
+	Name        string   // unique key used in mcpSelections
+	Description string   // human-readable description shown in TUI
+	Type        string   // "remote" or "local"
+	PreChecked  bool     // whether the item starts selected in the TUI
+	Command     string   // primary executable for local servers
+	URL         string   // endpoint for remote servers
+	Args        []string // additional CLI arguments
+}
+
+// DefaultMCPCatalog returns the 5 curated MCP servers offered during init.
+// Context7 and GitHub are pre-checked; the others default to unselected.
+func DefaultMCPCatalog() []CuratedMCPServer {
+	return []CuratedMCPServer{
+		{
+			Name:        "context7",
+			Description: "Up-to-date documentation lookup for libraries and frameworks",
+			Type:        "local",
+			PreChecked:  true,
+			Command:     "npx",
+			Args:        []string{"-y", "@upstash/context7-mcp@latest"},
+		},
+		{
+			Name:        "github",
+			Description: "Repository operations: issues, PRs, code search",
+			Type:        "remote",
+			PreChecked:  true,
+			URL:         "https://api.githubcopilot.com/mcp/",
+		},
+		{
+			Name:        "memory",
+			Description: "Persistent knowledge graph across sessions",
+			Type:        "local",
+			PreChecked:  false,
+			Command:     "npx",
+			Args:        []string{"@anthropic/memory-server"},
+		},
+		{
+			Name:        "sentry",
+			Description: "Error monitoring and issue tracking integration",
+			Type:        "remote",
+			PreChecked:  false,
+			URL:         "https://mcp.sentry.dev/mcp",
+		},
+		{
+			Name:        "sequential-thinking",
+			Description: "Structured reasoning enhancement for complex tasks",
+			Type:        "local",
+			PreChecked:  false,
+			Command:     "npx",
+			Args:        []string{"@anthropic/sequential-thinking"},
+		},
+	}
+}
+
 // DefaultPolicyConfig returns a team policy that locks the baseline.
 func DefaultPolicyConfig() *PolicyConfig {
 	return &PolicyConfig{
