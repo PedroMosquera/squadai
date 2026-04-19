@@ -1068,7 +1068,11 @@ func (m Model) viewInitMCP() string {
 		}
 
 		content.WriteString(fmt.Sprintf("  %s %s\n", checked, nameStr))
-		content.WriteString(mutedStyle.Render("      "+server.Description) + "\n")
+		desc := server.Description
+		if server.RequiresAuth {
+			desc += "  " + authBadgeStyle.Render("(requires setup)")
+		}
+		content.WriteString(mutedStyle.Render("      "+desc) + "\n")
 		content.WriteString("\n")
 	}
 
@@ -1362,12 +1366,53 @@ func (m Model) viewInitInstallSummary() string {
 	return b.String()
 }
 
+// renderPostInstallAuthPanel builds a panel listing auth-requiring MCP servers
+// that were selected. Returns an empty string when no auth is needed.
+func renderPostInstallAuthPanel(mcpSelections map[string]bool) string {
+	catalog := domain.DefaultMCPCatalog()
+
+	var authServers []domain.CuratedMCPServer
+	for _, s := range catalog {
+		if s.RequiresAuth && mcpSelections[s.Name] {
+			authServers = append(authServers, s)
+		}
+	}
+	if len(authServers) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(headingStyle.Render("Post-install setup") + "\n")
+	b.WriteString("Some MCPs need credentials before they will work:\n\n")
+	for _, s := range authServers {
+		b.WriteString(authBadgeStyle.Render("• "+s.Name) + "\n")
+		for _, env := range s.AuthEnvVars {
+			b.WriteString("  Set:  " + env + "\n")
+		}
+		if s.SetupURL != "" {
+			b.WriteString("  Get:  " + s.SetupURL + "\n")
+		}
+		if s.SetupHint != "" {
+			b.WriteString("  Hint: " + s.SetupHint + "\n")
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
 // viewInitApplyPrompt renders the "Apply now?" confirmation prompt shown after
 // a successful init run.
 func (m Model) viewInitApplyPrompt() string {
 	var content strings.Builder
 	content.WriteString(successStyle.Render("✓ Init completed successfully!") + "\n\n")
 	content.WriteString("Apply now to install configuration files? [y/n]\n")
+
+	// Show post-install auth guidance when any selected MCPs require credentials.
+	if panel := renderPostInstallAuthPanel(m.mcpSelections); panel != "" {
+		content.WriteString("\n")
+		content.WriteString(panel)
+		content.WriteString("\n")
+	}
 
 	var b strings.Builder
 	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))

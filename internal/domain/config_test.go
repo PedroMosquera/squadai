@@ -192,3 +192,73 @@ func TestDefaultMCPCatalog_AllRolesHaveSkillRef(t *testing.T) {
 		}
 	}
 }
+
+// ─── CuratedMCPServer auth metadata ─────────────────────────────────────────
+
+func TestDefaultMCPCatalog_GithubRequiresAuth(t *testing.T) {
+	catalog := DefaultMCPCatalog()
+	for _, s := range catalog {
+		if s.Name != "github" {
+			continue
+		}
+		if !s.RequiresAuth {
+			t.Error("github server: RequiresAuth should be true")
+		}
+		if len(s.AuthEnvVars) == 0 || s.AuthEnvVars[0] != "GITHUB_PERSONAL_ACCESS_TOKEN" {
+			t.Errorf("github server: AuthEnvVars = %v, want [GITHUB_PERSONAL_ACCESS_TOKEN]", s.AuthEnvVars)
+		}
+		if s.SetupURL == "" {
+			t.Error("github server: SetupURL should not be empty")
+		}
+		if s.SetupHint == "" {
+			t.Error("github server: SetupHint should not be empty")
+		}
+		return
+	}
+	t.Fatal("github server not found in catalog")
+}
+
+func TestDefaultMCPCatalog_SentryRequiresAuth(t *testing.T) {
+	catalog := DefaultMCPCatalog()
+	for _, s := range catalog {
+		if s.Name != "sentry" {
+			continue
+		}
+		if !s.RequiresAuth {
+			t.Error("sentry server: RequiresAuth should be true")
+		}
+		if len(s.AuthEnvVars) == 0 || s.AuthEnvVars[0] != "SENTRY_AUTH_TOKEN" {
+			t.Errorf("sentry server: AuthEnvVars = %v, want [SENTRY_AUTH_TOKEN]", s.AuthEnvVars)
+		}
+		if s.SetupURL == "" {
+			t.Error("sentry server: SetupURL should not be empty")
+		}
+		if s.SetupHint == "" {
+			t.Error("sentry server: SetupHint should not be empty")
+		}
+		return
+	}
+	t.Fatal("sentry server not found in catalog")
+}
+
+func TestDefaultMCPCatalog_NoAuthServersHaveEmptyAuthFields(t *testing.T) {
+	noAuthNames := []string{"context7", "memory", "sequential-thinking"}
+	catalog := DefaultMCPCatalog()
+	byName := make(map[string]CuratedMCPServer, len(catalog))
+	for _, s := range catalog {
+		byName[s.Name] = s
+	}
+	for _, name := range noAuthNames {
+		s, ok := byName[name]
+		if !ok {
+			t.Errorf("server %q not found in catalog", name)
+			continue
+		}
+		if s.RequiresAuth {
+			t.Errorf("server %q: RequiresAuth should be false", name)
+		}
+		if len(s.AuthEnvVars) != 0 {
+			t.Errorf("server %q: AuthEnvVars should be empty, got %v", name, s.AuthEnvVars)
+		}
+	}
+}

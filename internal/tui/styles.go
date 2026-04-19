@@ -40,4 +40,7 @@ var (
 
 	successStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("2"))
+
+	authBadgeStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("3")) // yellow — signals attention needed
 )
