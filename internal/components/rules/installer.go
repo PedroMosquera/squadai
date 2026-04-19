@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
@@ -18,6 +19,7 @@ const (
 // Installer implements domain.ComponentInstaller for the rules component.
 // It manages team standards sections in project-level instruction files
 // (AGENTS.md for OpenCode, CLAUDE.md for Claude Code).
+// For Windsurf and Cursor, it writes structured rules files with YAML frontmatter.
 type Installer struct {
 	// content is the resolved team standards content to inject.
 	content string
@@ -64,6 +66,40 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	}
 
 	actionID := fmt.Sprintf("%s-rules", adapter.ID())
+
+	// Structured rules (Windsurf/Cursor) use frontmatter comparison, not markers.
+	if fm := frontmatterForAgent(adapter.ID()); fm != "" {
+		expectedContent := fm + i.content
+		if !strings.HasSuffix(expectedContent, "\n") {
+			expectedContent += "\n"
+		}
+		if string(existing) == expectedContent {
+			return []domain.PlannedAction{
+				{
+					ID:          actionID,
+					Agent:       adapter.ID(),
+					Component:   domain.ComponentRules,
+					Action:      domain.ActionSkip,
+					TargetPath:  targetPath,
+					Description: "structured rules file already up to date",
+				},
+			}, nil
+		}
+		action := domain.ActionCreate
+		if len(existing) > 0 {
+			action = domain.ActionUpdate
+		}
+		return []domain.PlannedAction{
+			{
+				ID:          actionID,
+				Agent:       adapter.ID(),
+				Component:   domain.ComponentRules,
+				Action:      action,
+				TargetPath:  targetPath,
+				Description: "write structured rules file",
+			},
+		}, nil
+	}
 
 	if marker.HasSection(string(existing), SectionID) {
 		current := marker.ExtractSection(string(existing), SectionID)
@@ -119,7 +155,19 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return fmt.Errorf("read target: %w", err)
 	}
 
-	updated := marker.InjectSection(string(existing), SectionID, i.content)
+	var updated string
+
+	// Structured rules formats: Windsurf (.md with trigger frontmatter)
+	// and Cursor (.mdc with alwaysApply frontmatter) use full-file replacement
+	// with YAML frontmatter instead of marker-based injection.
+	if fm := frontmatterForAgent(action.Agent); fm != "" {
+		updated = fm + i.content
+		if !strings.HasSuffix(updated, "\n") {
+			updated += "\n"
+		}
+	} else {
+		updated = marker.InjectSection(string(existing), SectionID, i.content)
+	}
 
 	_, err = fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644)
 	if err != nil {
@@ -161,6 +209,28 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	})
 
 	doc := string(data)
+
+	// Structured rules (Windsurf/Cursor) use frontmatter, not markers.
+	if fm := frontmatterForAgent(adapter.ID()); fm != "" {
+		expectedContent := fm + i.content
+		if !strings.HasSuffix(expectedContent, "\n") {
+			expectedContent += "\n"
+		}
+		if doc == expectedContent {
+			results = append(results, domain.VerifyResult{
+				Check:  "rules-content-current",
+				Passed: true,
+			})
+		} else {
+			results = append(results, domain.VerifyResult{
+				Check:   "rules-content-current",
+				Passed:  false,
+				Message: "structured rules content is outdated",
+			})
+		}
+		return results, nil
+	}
+
 	if !marker.HasSection(doc, SectionID) {
 		results = append(results, domain.VerifyResult{
 			Check:   "rules-markers-present",
@@ -189,6 +259,19 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	}
 
 	return results, nil
+}
+
+// frontmatterForAgent returns the YAML frontmatter prefix for agents that use
+// structured rules files. Returns empty string for agents that use marker blocks.
+func frontmatterForAgent(agent domain.AgentID) string {
+	switch agent {
+	case domain.AgentWindsurf:
+		return "---\ntrigger: always_on\n---\n\n"
+	case domain.AgentCursor:
+		return "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n\n"
+	default:
+		return ""
+	}
 }
 
 // resolveContent resolves team standards content from RulesConfig.

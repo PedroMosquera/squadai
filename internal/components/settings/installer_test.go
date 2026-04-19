@@ -87,10 +87,11 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	}
 	inst := newTestInstaller("opencode", settings)
 
-	// Write existing file with matching content.
+	// Write existing file with matching content (including $schema for OpenCode).
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"model": "anthropic/claude-sonnet-4-5",
+		"$schema": "https://opencode.ai/config.json",
+		"model":   "anthropic/claude-sonnet-4-5",
 	})
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
@@ -240,8 +241,8 @@ func TestApply_OpenCode_CreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read sidecar: %v", err)
 	}
-	if len(sidecarKeys) != 2 {
-		t.Errorf("expected 2 managed keys in sidecar, got %d: %v", len(sidecarKeys), sidecarKeys)
+	if len(sidecarKeys) != 3 {
+		t.Errorf("expected 3 managed keys in sidecar, got %d: %v", len(sidecarKeys), sidecarKeys)
 	}
 }
 
@@ -545,6 +546,70 @@ func TestManagedKeysMatch_DeepNested(t *testing.T) {
 	}
 	if !managedKeysMatch(doc, expected) {
 		t.Error("should match nested objects")
+	}
+}
+
+// ─── OpenCode $schema injection ─────────────────────────────────────────────
+
+func TestApply_OpenCode_InjectsSchema(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	inst := newTestInstaller("opencode", map[string]interface{}{
+		"model": "anthropic/claude-sonnet-4-5",
+	})
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	schema, ok := doc["$schema"]
+	if !ok {
+		t.Fatal("$schema key should be present in OpenCode config")
+	}
+	if schema != "https://opencode.ai/config.json" {
+		t.Errorf("$schema = %v, want %q", schema, "https://opencode.ai/config.json")
+	}
+}
+
+func TestApply_Claude_NoSchemaInjected(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	inst := newTestInstaller("claude-code", map[string]interface{}{
+		"model": "claude-sonnet-4-5",
+	})
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	if err := inst.Apply(actions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := readTestJSON(t, actions[0].TargetPath)
+	if _, ok := doc["$schema"]; ok {
+		t.Error("$schema should NOT be injected for Claude Code")
+	}
+}
+
+func TestPlan_OpenCode_MissingSchema_ReturnsUpdate(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	inst := newTestInstaller("opencode", map[string]interface{}{
+		"model": "anthropic/claude-sonnet-4-5",
+	})
+
+	// Write file with matching model but no $schema.
+	targetPath := filepath.Join(project, "opencode.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"model": "anthropic/claude-sonnet-4-5",
+	})
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if actions[0].Action != domain.ActionUpdate {
+		t.Errorf("Action = %q, want %q (missing $schema should trigger update)", actions[0].Action, domain.ActionUpdate)
 	}
 }
 

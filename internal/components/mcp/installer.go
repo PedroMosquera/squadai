@@ -25,9 +25,24 @@ type mcpDirProvider interface {
 	MCPDir(homeDir string) string
 }
 
-// mcpServersKey is the top-level JSON key used by the MCPConfigFile strategy.
-// VS Code Copilot, Cursor, and Windsurf use "mcpServers" instead of "mcp".
-const mcpServersKey = "mcpServers"
+// rootKeyForAgent returns the top-level JSON key for MCP server configs
+// in the MCPConfigFile strategy. VS Code Copilot expects "servers"; all
+// other MCPConfigFile adapters (Cursor, Windsurf) use "mcpServers".
+func rootKeyForAgent(agent domain.AgentID) string {
+	if agent == domain.AgentVSCodeCopilot {
+		return "servers"
+	}
+	return "mcpServers"
+}
+
+// urlKeyForAgent returns the JSON field name for remote server URLs.
+// Windsurf expects "serverUrl"; all other agents use "url".
+func urlKeyForAgent(agent domain.AgentID) string {
+	if agent == domain.AgentWindsurf {
+		return "serverUrl"
+	}
+	return "url"
+}
 
 // Installer implements domain.ComponentInstaller for MCP server configuration.
 // It supports three strategies:
@@ -157,8 +172,8 @@ func (i *Installer) planSeparateFiles(adapter domain.Adapter, mcpDir string) ([]
 		targetPath := filepath.Join(mcpDir, name+".json")
 		actionID := fmt.Sprintf("%s-mcp-%s", adapter.ID(), name)
 
-		// Generate expected content.
-		expected := serverToJSON(def)
+		// Generate expected content. Claude Code uses default URL key.
+		expected := serverToJSON(def, adapter.ID())
 
 		existing, err := os.ReadFile(targetPath)
 		if err != nil {
@@ -242,9 +257,10 @@ func (i *Installer) applyMergedConfig(action domain.PlannedAction) error {
 	}
 
 	// Convert servers to a generic map for JSON serialization.
+	// MergeIntoSettings is used by OpenCode — uses default "url" key.
 	mcpMap := make(map[string]interface{})
 	for name, def := range i.servers {
-		mcpMap[name] = serverToMap(def)
+		mcpMap[name] = serverToMap(def, action.Agent)
 	}
 	existing[mcpKey] = mcpMap
 
@@ -290,7 +306,7 @@ func (i *Installer) applySeparateFile(action domain.PlannedAction) error {
 		return fmt.Errorf("MCP server %q not found in config", name)
 	}
 
-	data := serverToJSON(def)
+	data := serverToJSON(def, action.Agent)
 
 	dir := filepath.Dir(action.TargetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -354,7 +370,7 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, projectDir string)
 	}
 
 	// Check if mcpServers key matches desired state.
-	if mcpServersKeyMatches(existing, i.servers) {
+	if mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
@@ -391,11 +407,12 @@ func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 	}
 
 	// Convert servers to a generic map for JSON serialization.
+	rootKey := rootKeyForAgent(action.Agent)
 	serversMap := make(map[string]interface{})
 	for name, def := range i.servers {
-		serversMap[name] = serverToMap(def)
+		serversMap[name] = serverToMap(def, action.Agent)
 	}
-	existing[mcpServersKey] = serversMap
+	existing[rootKey] = serversMap
 
 	// Marshal with indentation.
 	data, err := json.MarshalIndent(existing, "", "  ")
@@ -420,7 +437,7 @@ func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 		if err != nil {
 			relPath = action.TargetPath
 		}
-		if err := managed.WriteManagedKeys(i.projectDir, relPath, []string{mcpServersKey}); err != nil {
+		if err := managed.WriteManagedKeys(i.projectDir, relPath, []string{rootKey}); err != nil {
 			return fmt.Errorf("write managed keys sidecar: %w", err)
 		}
 	}
@@ -455,7 +472,7 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 		Component: "mcp",
 	})
 
-	if mcpServersKeyMatches(existing, i.servers) {
+	if mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
 		results = append(results, domain.VerifyResult{
 			Check:     "mcp-configfile-servers-current",
 			Passed:    true,
@@ -475,10 +492,11 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 	return results, nil
 }
 
-// mcpServersKeyMatches checks whether the "mcpServers" key in the document matches
-// the expected server definitions.
-func mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef) bool {
-	mcpVal, exists := doc[mcpServersKey]
+// mcpServersKeyMatches checks whether the adapter-specific root key in the document
+// matches the expected server definitions.
+func mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef, agent domain.AgentID) bool {
+	rootKey := rootKeyForAgent(agent)
+	mcpVal, exists := doc[rootKey]
 	if !exists {
 		return false
 	}
@@ -486,7 +504,7 @@ func mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain
 	// Compare via JSON serialization for deep equality.
 	expectedMap := make(map[string]interface{})
 	for name, def := range expected {
-		expectedMap[name] = serverToMap(def)
+		expectedMap[name] = serverToMap(def, agent)
 	}
 
 	expectedJSON, _ := json.Marshal(expectedMap)
@@ -555,12 +573,12 @@ func (i *Installer) verifyMergedConfig(adapter domain.Adapter, projectDir string
 }
 
 // verifySeparateFiles checks the SeparateMCPFiles strategy result.
-func (i *Installer) verifySeparateFiles(_ domain.Adapter, mcpDir string) ([]domain.VerifyResult, error) {
+func (i *Installer) verifySeparateFiles(adapter domain.Adapter, mcpDir string) ([]domain.VerifyResult, error) {
 	var results []domain.VerifyResult
 
 	for name, def := range i.servers {
 		targetPath := filepath.Join(mcpDir, name+".json")
-		expected := serverToJSON(def)
+		expected := serverToJSON(def, adapter.ID())
 
 		data, err := os.ReadFile(targetPath)
 		if err != nil {
@@ -625,7 +643,7 @@ func (i *Installer) renderMergedConfigContent(action domain.PlannedAction) ([]by
 	}
 	mcpMap := make(map[string]interface{})
 	for name, def := range i.servers {
-		mcpMap[name] = serverToMap(def)
+		mcpMap[name] = serverToMap(def, action.Agent)
 	}
 	existing[mcpKey] = mcpMap
 	data, err := json.MarshalIndent(existing, "", "  ")
@@ -644,7 +662,7 @@ func (i *Installer) renderSeparateFileContent(action domain.PlannedAction) ([]by
 	if !ok {
 		return nil, fmt.Errorf("MCP server %q not found in config", name)
 	}
-	return serverToJSON(def), nil
+	return serverToJSON(def, action.Agent), nil
 }
 
 // renderMCPConfigFileContent computes what applyMCPConfigFile would write.
@@ -658,9 +676,9 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 	}
 	serversMap := make(map[string]interface{})
 	for name, def := range i.servers {
-		serversMap[name] = serverToMap(def)
+		serversMap[name] = serverToMap(def, action.Agent)
 	}
-	existing[mcpServersKey] = serversMap
+	existing[rootKeyForAgent(action.Agent)] = serversMap
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal MCP config: %w", err)
@@ -670,8 +688,9 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 }
 
 // serverToMap converts an MCPServerDef to a generic map for JSON output.
+// The agent parameter controls the URL field name (e.g. "serverUrl" for Windsurf).
 // Only non-zero fields are included.
-func serverToMap(def domain.MCPServerDef) map[string]interface{} {
+func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]interface{} {
 	m := map[string]interface{}{
 		"type": def.Type,
 	}
@@ -679,7 +698,7 @@ func serverToMap(def domain.MCPServerDef) map[string]interface{} {
 		m["command"] = def.Command
 	}
 	if def.URL != "" {
-		m["url"] = def.URL
+		m[urlKeyForAgent(agent)] = def.URL
 	}
 	if len(def.Environment) > 0 {
 		m["environment"] = def.Environment
@@ -691,15 +710,15 @@ func serverToMap(def domain.MCPServerDef) map[string]interface{} {
 }
 
 // serverToJSON converts a server definition to indented JSON bytes.
-func serverToJSON(def domain.MCPServerDef) []byte {
-	m := serverToMap(def)
+func serverToJSON(def domain.MCPServerDef, agent domain.AgentID) []byte {
+	m := serverToMap(def, agent)
 	data, _ := json.MarshalIndent(m, "", "  ")
 	data = append(data, '\n')
 	return data
 }
 
 // mcpKeyMatches checks whether the "mcp" key in the document matches
-// the expected server definitions.
+// the expected server definitions. Used by the MergeIntoSettings strategy (OpenCode).
 func mcpKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef) bool {
 	mcpVal, exists := doc[mcpKey]
 	if !exists {
@@ -707,9 +726,10 @@ func mcpKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPSer
 	}
 
 	// Compare via JSON serialization for deep equality.
+	// MergeIntoSettings is only used by OpenCode which uses default "url" key.
 	expectedMap := make(map[string]interface{})
 	for name, def := range expected {
-		expectedMap[name] = serverToMap(def)
+		expectedMap[name] = serverToMap(def, domain.AgentOpenCode)
 	}
 
 	expectedJSON, _ := json.Marshal(expectedMap)

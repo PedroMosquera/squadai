@@ -106,9 +106,10 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "mcp.json")
 }
 
-// ProjectRulesFile returns <projectDir>/.cursorrules.
+// ProjectRulesFile returns <projectDir>/.cursor/rules/squadai.mdc.
+// Uses the structured MDC format with YAML frontmatter (alwaysApply: true).
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, ".cursorrules")
+	return filepath.Join(projectDir, ".cursor", "rules", "squadai.mdc")
 }
 
 // ProjectAgentsDir returns <projectDir>/.cursor/agents.
