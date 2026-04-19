@@ -182,6 +182,30 @@ func (i *Installer) planNativeAgents(adapter domain.Adapter, homeDir, projectDir
 	}
 	actions = append(actions, a)
 
+	// When Claude Code's default-agent feature is active, WriteDefaultAgentSettings
+	// writes .claude/settings.json during Apply. Emit a planned action so that
+	// collectAllTargetPaths (used by RunRemove) can find and clean up the file.
+	if i.opts.SetClaudeDefaultAgent && adapter.ID() == domain.AgentClaudeCode {
+		settingsPath := filepath.Join(projectDir, ".claude", "settings.json")
+		settingsActionID := fmt.Sprintf("%s-default-agent-settings", adapter.ID())
+		existing, readErr := fileutil.ReadFileOrEmpty(settingsPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("read claude default agent settings: %w", readErr)
+		}
+		settingsAction := domain.ActionSkip
+		if len(existing) == 0 {
+			settingsAction = domain.ActionCreate
+		}
+		actions = append(actions, domain.PlannedAction{
+			ID:          settingsActionID,
+			Agent:       adapter.ID(),
+			Component:   domain.ComponentAgents,
+			Action:      settingsAction,
+			TargetPath:  settingsPath,
+			Description: "claude default agent settings",
+		})
+	}
+
 	// Sub-agents for each non-orchestrator team role.
 	roles := sortedTeamRoles(i.config.Team)
 	for _, roleName := range roles {
@@ -372,6 +396,12 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return i.applyMarkerInjection(action, "prompt")
 	case strings.HasPrefix(action.Description, "team:solo:"):
 		return i.applyMarkerInjection(action, "solo")
+	case action.Description == "claude default agent settings":
+		// This action exists solely to track the settings.json path for
+		// collectAllTargetPaths (used by RunRemove). The actual write is
+		// performed by applyNativeAgent via WriteDefaultAgentSettings.
+		// Nothing to do here.
+		return nil
 	default:
 		return i.applyCustomAgent(action)
 	}
