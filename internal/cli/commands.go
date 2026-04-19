@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
 	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
@@ -26,6 +27,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
+	"github.com/PedroMosquera/squadai/internal/state"
 	"github.com/PedroMosquera/squadai/internal/verify"
 )
 
@@ -165,8 +167,6 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  squadai init --merge")
 			fmt.Fprintln(stdout, "  squadai init --json")
 			return nil
-		default:
-			return fmt.Errorf("unknown flag %q for init", arg)
 		}
 	}
 
@@ -1014,18 +1014,29 @@ func RunApply(args []string, stdout io.Writer) error {
 	jsonOut := false
 	force := false
 	setClaudeDefaultAgent := false
+	respectState := true
+	var explicitAgents []string
 	for _, arg := range args {
-		switch arg {
-		case "--dry-run":
+		switch {
+		case arg == "--dry-run":
 			dryRun = true
-		case "--json":
+		case arg == "--json":
 			jsonOut = true
-		case "--force":
+		case arg == "--force":
 			force = true
-		case "--set-claude-default-agent":
+		case arg == "--set-claude-default-agent":
 			setClaudeDefaultAgent = true
-		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force]")
+		case arg == "--respect-state" || arg == "--respect-state=true":
+			respectState = true
+		case arg == "--no-respect-state" || arg == "--respect-state=false":
+			respectState = false
+		case strings.HasPrefix(arg, "--agent=") || strings.HasPrefix(arg, "-a="):
+			val := arg[strings.Index(arg, "=")+1:]
+			if val != "" {
+				explicitAgents = append(explicitAgents, strings.Split(val, ",")...)
+			}
+		case arg == "-h" || arg == "--help":
+			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -1036,15 +1047,19 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "The backup ID is printed so you can restore manually if needed.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --dry-run  Preview the actions that would be executed without writing any files.")
-			fmt.Fprintln(stdout, "  --json     Output the execution report as JSON (includes backup ID and step results).")
-			fmt.Fprintln(stdout, "  --force    Apply with default config even when no project.json is found.")
+			fmt.Fprintln(stdout, "  --dry-run           Preview the actions that would be executed without writing any files.")
+			fmt.Fprintln(stdout, "  --json              Output the execution report as JSON (includes backup ID and step results).")
+			fmt.Fprintln(stdout, "  --force             Apply with default config even when no project.json is found.")
+			fmt.Fprintln(stdout, "  --agent=<csv>       Explicitly select agents to apply (e.g. opencode,cursor). Bypasses state filter.")
+			fmt.Fprintln(stdout, "  --respect-state     (default true) When state exists, restrict apply to previously-installed")
+			fmt.Fprintln(stdout, "                      agents union current config. Use --no-respect-state to apply to all detected.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai apply")
 			fmt.Fprintln(stdout, "  squadai apply --dry-run")
 			fmt.Fprintln(stdout, "  squadai apply --json")
 			fmt.Fprintln(stdout, "  squadai apply --force")
+			fmt.Fprintln(stdout, "  squadai apply --no-respect-state")
 			return nil
 		}
 	}
@@ -1076,6 +1091,15 @@ func RunApply(args []string, stdout io.Writer) error {
 	}
 
 	adapters := DetectAdapters(homeDir)
+
+	// Apply state-based filtering when --respect-state is active (default) and
+	// the user did not explicitly pass --agent flags.
+	if respectState && len(explicitAgents) == 0 {
+		adapters = applyStateFilter(adapters, merged, homeDir)
+	} else if len(explicitAgents) > 0 {
+		adapters = filterAdapters(adapters, explicitAgents)
+	}
+
 	p := planner.New(planner.Options{SetClaudeDefaultAgent: setClaudeDefaultAgent})
 	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
 	if err != nil {
@@ -1122,6 +1146,25 @@ func RunApply(args []string, stdout io.Writer) error {
 			return execErr
 		}
 		return fmt.Errorf("apply: %w", execErr)
+	}
+
+	// Persist installed agent IDs to state (warning-only on failure).
+	if report.Success {
+		agentIDs := make([]string, 0, len(adapters))
+		for _, a := range adapters {
+			agentIDs = append(agentIDs, string(a.ID()))
+		}
+		if statePath, pathErr := state.DefaultPath(); pathErr == nil {
+			if st, loadErr := state.Load(statePath); loadErr == nil {
+				st.AddAgents(agentIDs)
+				st.LastApply = timeNowUTC()
+				if saveErr := state.Save(statePath, st); saveErr != nil {
+					fmt.Fprintf(stdout, "Warning: could not save state: %v\n", saveErr)
+				}
+			} else {
+				fmt.Fprintf(stdout, "Warning: could not load state: %v\n", loadErr)
+			}
+		}
 	}
 
 	if jsonOut {
@@ -2103,17 +2146,28 @@ func RunRemove(args []string, stdout io.Writer) error {
 	dryRun := false
 	jsonOut := false
 	force := false
+	respectState := true
+	var explicitAgents []string
 
 	for _, arg := range args {
-		switch arg {
-		case "--dry-run":
+		switch {
+		case arg == "--dry-run":
 			dryRun = true
-		case "--json":
+		case arg == "--json":
 			jsonOut = true
-		case "--force":
+		case arg == "--force":
 			force = true
-		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai remove [--force] [--dry-run] [--json]")
+		case arg == "--respect-state" || arg == "--respect-state=true":
+			respectState = true
+		case arg == "--no-respect-state" || arg == "--respect-state=false":
+			respectState = false
+		case strings.HasPrefix(arg, "--agent=") || strings.HasPrefix(arg, "-a="):
+			val := arg[strings.Index(arg, "=")+1:]
+			if val != "" {
+				explicitAgents = append(explicitAgents, strings.Split(val, ",")...)
+			}
+		case arg == "-h" || arg == "--help":
+			fmt.Fprintln(stdout, "Usage: squadai remove [--force] [--dry-run] [--json] [--respect-state]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Remove all files managed by SquadAI from the current project. Files that")
 			fmt.Fprintln(stdout, "contain marker blocks alongside user content are stripped of the managed sections")
@@ -2122,9 +2176,12 @@ func RunRemove(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "A backup is created automatically before any files are removed.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --force    Required to confirm removal (without it, the command errors).")
-			fmt.Fprintln(stdout, "  --dry-run  Preview which files would be removed or stripped without changing anything.")
-			fmt.Fprintln(stdout, "  --json     Output the result as JSON.")
+			fmt.Fprintln(stdout, "  --force             Required to confirm removal (without it, the command errors).")
+			fmt.Fprintln(stdout, "  --dry-run           Preview which files would be removed or stripped without changing anything.")
+			fmt.Fprintln(stdout, "  --json              Output the result as JSON.")
+			fmt.Fprintln(stdout, "  --agent=<csv>       Explicitly select agents to remove (bypasses state filter).")
+			fmt.Fprintln(stdout, "  --respect-state     (default true) Restrict remove to previously-installed agents.")
+			fmt.Fprintln(stdout, "                      Use --no-respect-state to operate on all detected agents.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai remove --dry-run")
@@ -2157,6 +2214,15 @@ func RunRemove(args []string, stdout io.Writer) error {
 	}
 
 	adapters := DetectAdapters(homeDir)
+
+	// Apply state-based filtering when --respect-state is active (default) and
+	// the user did not explicitly pass --agent flags.
+	if respectState && len(explicitAgents) == 0 {
+		adapters = applyStateFilter(adapters, mergedCfg, homeDir)
+	} else if len(explicitAgents) > 0 {
+		adapters = filterAdapters(adapters, explicitAgents)
+	}
+
 	p := planner.New()
 	actions, err := p.Plan(mergedCfg, adapters, homeDir, projectDir)
 	if err != nil {
@@ -2318,6 +2384,23 @@ func RunRemove(args []string, stdout io.Writer) error {
 	for _, p := range stripped {
 		fmt.Fprintf(stdout, "  stripped: %s (user content preserved)\n", p)
 	}
+
+	// Update state: remove agents that were just removed (warning-only on failure).
+	agentIDs := make([]string, 0, len(adapters))
+	for _, a := range adapters {
+		agentIDs = append(agentIDs, string(a.ID()))
+	}
+	if statePath, pathErr := state.DefaultPath(); pathErr == nil {
+		if st, loadErr := state.Load(statePath); loadErr == nil {
+			st.RemoveAgents(agentIDs)
+			if saveErr := state.Save(statePath, st); saveErr != nil {
+				fmt.Fprintf(stdout, "Warning: could not save state: %v\n", saveErr)
+			}
+		} else {
+			fmt.Fprintf(stdout, "Warning: could not load state: %v\n", loadErr)
+		}
+	}
+
 	return nil
 }
 
@@ -2652,4 +2735,45 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 	}
 
 	return nil
+}
+
+// applyStateFilter restricts adapters to the union of state.InstalledAgents and the
+// adapters enabled in the current config. When the state file is missing or empty,
+// the original adapters slice is returned unchanged.
+func applyStateFilter(adapters []domain.Adapter, merged *domain.MergedConfig, homeDir string) []domain.Adapter {
+	statePath, err := state.DefaultPath()
+	if err != nil {
+		return adapters
+	}
+	st, err := state.Load(statePath)
+	if err != nil || len(st.InstalledAgents) == 0 {
+		return adapters
+	}
+
+	// Build the allowed set: state agents ∪ config-enabled adapters.
+	allowed := make(map[string]bool, len(st.InstalledAgents)+len(merged.Adapters))
+	for _, id := range st.InstalledAgents {
+		allowed[id] = true
+	}
+	for id, ac := range merged.Adapters {
+		if ac.Enabled {
+			allowed[id] = true
+		}
+	}
+
+	var filtered []domain.Adapter
+	for _, a := range adapters {
+		if allowed[string(a.ID())] {
+			filtered = append(filtered, a)
+		}
+	}
+	if filtered == nil {
+		return adapters // fallback: don't lock out everything
+	}
+	return filtered
+}
+
+// timeNowUTC returns the current UTC time. Extracted for testability.
+var timeNowUTC = func() time.Time {
+	return time.Now().UTC()
 }
