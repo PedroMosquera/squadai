@@ -2145,3 +2145,71 @@ func TestDryRunEmptyManagedDirs_ReportsWouldRemoveDirs(t *testing.T) {
 		t.Errorf("expected at least 2 dirs in report, got %d: %v", len(wouldRemove), wouldRemove)
 	}
 }
+
+// ─── applyModelOverrides tests ───────────────────────────────────────────────
+
+func TestApplyModelOverrides_ValidOverrides(t *testing.T) {
+	merged := &domain.MergedConfig{
+		Team: map[string]domain.TeamRole{
+			"orchestrator": {Description: "Orchestrator", Mode: "subagent"},
+			"implementer":  {Description: "Implementer", Mode: "subagent"},
+		},
+	}
+	err := applyModelOverrides(merged, []string{"orchestrator=premium", "implementer=cheap"})
+	if err != nil {
+		t.Fatalf("applyModelOverrides error = %v", err)
+	}
+	if got := merged.Team["orchestrator"].Model; got != "premium" {
+		t.Errorf("orchestrator.Model = %q, want premium", got)
+	}
+	if got := merged.Team["implementer"].Model; got != "cheap" {
+		t.Errorf("implementer.Model = %q, want cheap", got)
+	}
+}
+
+func TestApplyModelOverrides_UnknownRole_ReturnsError(t *testing.T) {
+	merged := &domain.MergedConfig{
+		Team: map[string]domain.TeamRole{
+			"orchestrator": {Description: "Orchestrator", Mode: "subagent"},
+		},
+	}
+	err := applyModelOverrides(merged, []string{"nonexistent=premium"})
+	if err == nil {
+		t.Fatal("expected error for unknown role, got nil")
+	}
+}
+
+func TestApplyModelOverrides_InvalidTier_ReturnsError(t *testing.T) {
+	merged := &domain.MergedConfig{
+		Team: map[string]domain.TeamRole{
+			"orchestrator": {Description: "Orchestrator", Mode: "subagent"},
+		},
+	}
+	err := applyModelOverrides(merged, []string{"orchestrator=elite"})
+	if err == nil {
+		t.Fatal("expected error for invalid tier, got nil")
+	}
+}
+
+func TestApplyModelOverrides_MalformedPair_ReturnsError(t *testing.T) {
+	merged := &domain.MergedConfig{
+		Team: map[string]domain.TeamRole{
+			"orchestrator": {Description: "Orchestrator", Mode: "subagent"},
+		},
+	}
+	err := applyModelOverrides(merged, []string{"orchestrator"})
+	if err == nil {
+		t.Fatal("expected error for malformed pair (no =), got nil")
+	}
+}
+
+func TestRunApply_HelpText_IncludesModelFlag(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunApply([]string{"--help"}, &buf)
+	if err != nil {
+		t.Fatalf("RunApply --help error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--model") {
+		t.Errorf("help text should mention --model flag")
+	}
+}

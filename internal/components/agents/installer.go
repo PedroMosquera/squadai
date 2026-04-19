@@ -12,6 +12,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/model"
 )
 
 const teamSectionID = "team"
@@ -175,6 +176,11 @@ func (i *Installer) planNativeAgents(adapter domain.Adapter, homeDir, projectDir
 	if err != nil {
 		return nil, fmt.Errorf("render orchestrator template: %w", err)
 	}
+	// Inject resolved model for orchestrator role.
+	if role, ok := i.config.Team["orchestrator"]; ok {
+		orchestratorContent = injectModelIntoFrontmatter(orchestratorContent,
+			model.ResolveRoleModel(role.Model, adapter.ID()))
+	}
 
 	a, err := i.planNativeAgentFile(adapter, agentsDir, "orchestrator", orchestratorContent)
 	if err != nil {
@@ -220,6 +226,11 @@ func (i *Installer) planNativeAgents(adapter domain.Adapter, homeDir, projectDir
 		rendered, renderErr := renderTemplate(roleName, tmplContent, data)
 		if renderErr != nil {
 			return nil, fmt.Errorf("render sub-agent template %s: %w", roleName, renderErr)
+		}
+		// Inject resolved model for this role.
+		if role, ok := i.config.Team[roleName]; ok {
+			rendered = injectModelIntoFrontmatter(rendered,
+				model.ResolveRoleModel(role.Model, adapter.ID()))
 		}
 
 		a, err := i.planNativeAgentFile(adapter, agentsDir, roleName, rendered)
@@ -440,6 +451,12 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 		return fmt.Errorf("render team agent %s: %w", roleName, err)
 	}
 
+	// Inject resolved model for this role.
+	if role, ok := i.config.Team[roleName]; ok {
+		rendered = injectModelIntoFrontmatter(rendered,
+			model.ResolveRoleModel(role.Model, action.Agent))
+	}
+
 	// Translate frontmatter to Claude-native format when applicable.
 	translated, err := i.maybeTranslateContent(action.Agent, roleName, rendered)
 	if err != nil {
@@ -598,6 +615,11 @@ func (i *Installer) verifyTeamAgents(adapter domain.Adapter, homeDir, projectDir
 		if err != nil {
 			return nil, fmt.Errorf("render orchestrator for verify: %w", err)
 		}
+		// Inject model for orchestrator.
+		if role, ok := i.config.Team["orchestrator"]; ok {
+			orchestratorRendered = injectModelIntoFrontmatter(orchestratorRendered,
+				model.ResolveRoleModel(role.Model, adapter.ID()))
+		}
 		orchestratorContent, err := i.maybeTranslateContent(adapter.ID(), "orchestrator", orchestratorRendered)
 		if err != nil {
 			return nil, fmt.Errorf("translate orchestrator for verify: %w", err)
@@ -618,6 +640,11 @@ func (i *Installer) verifyTeamAgents(adapter domain.Adapter, homeDir, projectDir
 			rendered, renderErr := renderTemplate(roleName, tmplContent, data)
 			if renderErr != nil {
 				return nil, fmt.Errorf("render %s for verify: %w", roleName, renderErr)
+			}
+			// Inject model for this role.
+			if role, ok := i.config.Team[roleName]; ok {
+				rendered = injectModelIntoFrontmatter(rendered,
+					model.ResolveRoleModel(role.Model, adapter.ID()))
 			}
 			translated, transErr := i.maybeTranslateContent(adapter.ID(), roleName, rendered)
 			if transErr != nil {
@@ -770,6 +797,11 @@ func (i *Installer) renderNativeAgentContent(action domain.PlannedAction) (strin
 	rendered, err := renderTemplate(roleName, templateContent, data)
 	if err != nil {
 		return "", fmt.Errorf("render team agent template %s: %w", roleName, err)
+	}
+	// Inject resolved model for this role.
+	if role, ok := i.config.Team[roleName]; ok {
+		rendered = injectModelIntoFrontmatter(rendered,
+			model.ResolveRoleModel(role.Model, action.Agent))
 	}
 	return i.maybeTranslateContent(action.Agent, roleName, rendered)
 }
