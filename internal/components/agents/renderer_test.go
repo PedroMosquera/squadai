@@ -180,3 +180,44 @@ func TestTemplateData_ModelHintEmptyForManual(t *testing.T) {
 		t.Errorf("ModelHint should be empty for manual tier, got: %q", data.ModelHint)
 	}
 }
+
+// ─── injectModelIntoFrontmatter tests ────────────────────────────────────────
+
+func TestInjectModelIntoFrontmatter_InjectsModel(t *testing.T) {
+	content := "---\ndescription: Test agent\nmode: subagent\n---\n\nBody text.\n"
+	got := injectModelIntoFrontmatter(content, "claude-sonnet-4")
+	if !strings.Contains(got, "model: claude-sonnet-4") {
+		t.Errorf("expected model line in output, got:\n%s", got)
+	}
+	// Body should be preserved.
+	if !strings.Contains(got, "Body text.") {
+		t.Errorf("body lost after inject, got:\n%s", got)
+	}
+}
+
+func TestInjectModelIntoFrontmatter_EmptyModel_NoChange(t *testing.T) {
+	content := "---\ndescription: Test\nmode: subagent\n---\n\nBody.\n"
+	got := injectModelIntoFrontmatter(content, "")
+	if got != content {
+		t.Errorf("empty model should not modify content")
+	}
+}
+
+func TestInjectModelIntoFrontmatter_ReplacesExistingModel(t *testing.T) {
+	content := "---\ndescription: Test\nmodel: old-model\nmode: subagent\n---\n\nBody.\n"
+	got := injectModelIntoFrontmatter(content, "new-model")
+	if strings.Contains(got, "old-model") {
+		t.Errorf("old model should be replaced, got:\n%s", got)
+	}
+	if !strings.Contains(got, "model: new-model") {
+		t.Errorf("new model should be present, got:\n%s", got)
+	}
+}
+
+func TestInjectModelIntoFrontmatter_NoFrontmatter_NoChange(t *testing.T) {
+	content := "No frontmatter here.\n"
+	got := injectModelIntoFrontmatter(content, "some-model")
+	if got != content {
+		t.Errorf("content without frontmatter should not be modified")
+	}
+}

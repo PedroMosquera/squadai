@@ -25,6 +25,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/model"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
 	"github.com/PedroMosquera/squadai/internal/state"
@@ -1016,6 +1017,7 @@ func RunApply(args []string, stdout io.Writer) error {
 	setClaudeDefaultAgent := false
 	respectState := true
 	var explicitAgents []string
+	var modelOverrides []string // raw "role=tier" pairs from --model flag
 	for _, arg := range args {
 		switch {
 		case arg == "--dry-run":
@@ -1035,8 +1037,18 @@ func RunApply(args []string, stdout io.Writer) error {
 			if val != "" {
 				explicitAgents = append(explicitAgents, strings.Split(val, ",")...)
 			}
+		case strings.HasPrefix(arg, "--model="):
+			val := strings.TrimPrefix(arg, "--model=")
+			if val != "" {
+				for _, pair := range strings.Split(val, ",") {
+					pair = strings.TrimSpace(pair)
+					if pair != "" {
+						modelOverrides = append(modelOverrides, pair)
+					}
+				}
+			}
 		case arg == "-h" || arg == "--help":
-			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state]")
+			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--model role=tier,...]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -1051,6 +1063,9 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --json              Output the execution report as JSON (includes backup ID and step results).")
 			fmt.Fprintln(stdout, "  --force             Apply with default config even when no project.json is found.")
 			fmt.Fprintln(stdout, "  --agent=<csv>       Explicitly select agents to apply (e.g. opencode,cursor). Bypasses state filter.")
+			fmt.Fprintln(stdout, "  --model=role=tier,... Override model tier per role for this run (in-memory only).")
+			fmt.Fprintln(stdout, "                      Tiers: premium, standard, cheap. Example: --model=orchestrator=premium,implementer=cheap")
+			fmt.Fprintln(stdout, "                      For permanent changes, edit agentmgr.yaml and re-run apply.")
 			fmt.Fprintln(stdout, "  --respect-state     (default true) When state exists, restrict apply to previously-installed")
 			fmt.Fprintln(stdout, "                      agents union current config. Use --no-respect-state to apply to all detected.")
 			fmt.Fprintln(stdout)
@@ -1060,6 +1075,7 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  squadai apply --json")
 			fmt.Fprintln(stdout, "  squadai apply --force")
 			fmt.Fprintln(stdout, "  squadai apply --no-respect-state")
+			fmt.Fprintln(stdout, "  squadai apply --model=orchestrator=premium,implementer=cheap")
 			return nil
 		}
 	}
@@ -1088,6 +1104,13 @@ func RunApply(args []string, stdout io.Writer) error {
 	merged, err := loadAndMerge(homeDir, projectDir)
 	if err != nil {
 		return err
+	}
+
+	// Apply --model overrides in-memory (does NOT write back to config file).
+	if len(modelOverrides) > 0 {
+		if err := applyModelOverrides(merged, modelOverrides); err != nil {
+			return err
+		}
 	}
 
 	adapters := DetectAdapters(homeDir)
@@ -2776,4 +2799,30 @@ func applyStateFilter(adapters []domain.Adapter, merged *domain.MergedConfig, ho
 // timeNowUTC returns the current UTC time. Extracted for testability.
 var timeNowUTC = func() time.Time {
 	return time.Now().UTC()
+}
+
+// applyModelOverrides applies --model role=tier,... overrides to the merged config in-memory.
+// Overrides do NOT write back to agentmgr.yaml; they last only for the current apply run.
+// Returns an error if any role name or tier value is invalid.
+func applyModelOverrides(merged *domain.MergedConfig, overrides []string) error {
+	for _, pair := range overrides {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("--model: invalid pair %q (expected role=tier)", pair)
+		}
+		roleName := strings.TrimSpace(parts[0])
+		tierStr := strings.TrimSpace(parts[1])
+
+		if _, exists := merged.Team[roleName]; !exists {
+			return fmt.Errorf("--model: role %q not found in current config", roleName)
+		}
+		if _, err := model.ParseTier(tierStr); err != nil {
+			return fmt.Errorf("--model: %w", err)
+		}
+
+		role := merged.Team[roleName]
+		role.Model = tierStr
+		merged.Team[roleName] = role
+	}
+	return nil
 }

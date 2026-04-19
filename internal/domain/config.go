@@ -94,6 +94,10 @@ type TeamRole struct {
 	Mode        string   `json:"mode"`                   // "subagent" or "inline"
 	SkillRef    string   `json:"skill_ref,omitempty"`    // e.g., "tdd/brainstorming"
 	DelegatesTo []string `json:"delegates_to,omitempty"` // roles this role can delegate to
+	// Model is the abstract tier for this role: "premium", "standard", or "cheap".
+	// Empty means use the default tier (standard). Each adapter resolves this to
+	// a concrete model name at install time.
+	Model string `json:"model,omitempty"`
 }
 
 // AgentDef defines a custom agent for OpenCode's .opencode/agents/ directory.

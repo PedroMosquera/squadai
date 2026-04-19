@@ -3,6 +3,7 @@ package agents
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
@@ -26,6 +27,9 @@ type TemplateData struct {
 	PackageManager     string
 	ModelTier          string
 	ModelHint          string
+	// RoleModel is the concrete model name resolved for the current role.
+	// Populated per-role during planning/apply and injected into frontmatter.
+	RoleModel string
 }
 
 // renderTemplate renders Go text/template content against TemplateData.
@@ -79,4 +83,40 @@ func promptHintForTier(tier string) string {
 	default:
 		return "" // manual or unknown — no hint
 	}
+}
+
+// injectModelIntoFrontmatter inserts or replaces the "model:" line in the YAML
+// frontmatter of a rendered agent file.  The frontmatter is delimited by leading
+// and trailing "---" lines.  If modelName is empty the content is returned unchanged.
+func injectModelIntoFrontmatter(content, modelName string) string {
+	if modelName == "" {
+		return content
+	}
+	// Locate the opening "---".
+	if !strings.HasPrefix(content, "---") {
+		return content
+	}
+	// Find the closing "---".
+	rest := content[3:]
+	idx := strings.Index(rest, "\n---")
+	if idx < 0 {
+		return content
+	}
+
+	frontmatter := rest[:idx]
+	body := rest[idx+1:] // starts with "---\n..."
+
+	// Remove any existing "model:" line.
+	lines := strings.Split(frontmatter, "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(l), "model:") {
+			filtered = append(filtered, l)
+		}
+	}
+	newFrontmatter := strings.Join(filtered, "\n")
+	newFrontmatter = strings.TrimRight(newFrontmatter, "\n")
+	newFrontmatter += "\nmodel: " + modelName
+
+	return "---" + newFrontmatter + "\n" + body
 }
