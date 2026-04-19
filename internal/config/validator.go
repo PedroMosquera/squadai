@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/model"
 )
 
 // ResolveHybridMode resolves a deprecated "hybrid" mode to the appropriate
@@ -297,6 +298,11 @@ func validateTeamRoles(team map[string]domain.TeamRole) []string {
 				// valid
 			default:
 				issues = append(issues, fmt.Sprintf("team role %q has unknown mode %q (expected: subagent, inline)", name, role.Mode))
+			}
+		}
+		if role.Model != "" {
+			if _, err := model.ParseTier(role.Model); err != nil {
+				issues = append(issues, fmt.Sprintf("team role %q has unknown_model_tier %q (expected: premium, standard, cheap)", name, role.Model))
 			}
 		}
 	}

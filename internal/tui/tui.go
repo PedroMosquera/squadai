@@ -968,7 +968,13 @@ func (m Model) viewTeamStatus() string {
 		names := sortedKeys(team)
 		for _, name := range names {
 			role := team[name]
-			content.WriteString(fmt.Sprintf("  %-14s %s\n", name+":", role.Description))
+			tier := role.Model
+			if tier == "" {
+				tier = "standard"
+			}
+			content.WriteString(fmt.Sprintf("  %-14s %s  %s\n",
+				name+":", role.Description,
+				mutedStyle.Render("· "+tier)))
 		}
 
 		// MCP Servers section
