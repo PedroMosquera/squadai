@@ -36,8 +36,8 @@ That's it. Every developer on the team gets identical agent configurations, rega
 ## Quick Start
 
 ```sh
-# Install
-go install github.com/PedroMosquera/squadai/cmd/squadai@latest
+# Install (macOS / Linux)
+brew install PedroMosquera/tap/squadai
 
 # Initialize with TDD methodology
 squadai init --methodology tdd
@@ -51,6 +51,8 @@ squadai apply
 # Verify compliance
 squadai verify
 ```
+
+Other install methods (curl, deb/rpm, `go install`, AI agent) are documented in the [Installation](#installation) section.
 
 Run `squadai` with no arguments to launch the interactive TUI wizard (methodology, MCP servers, plugins, summary).
 
@@ -240,6 +242,8 @@ Policy (locked fields)  >  Project config  >  User defaults
 | `squadai diff` | Preview what apply would change (unified diffs) |
 | `squadai apply` | Execute plan with backup and rollback safety (idempotent — re-run to sync) |
 | `squadai verify` | Run compliance checks and print health report |
+| `squadai doctor` | Run deep health checks (~22 across 6 categories); `--fix` resolves common issues |
+| `squadai update` | Self-update: `--check`, `--enable-checks`, or download + stage latest release |
 | `squadai status` | Show project health: adapters, components, managed files |
 | `squadai validate-policy` | Validate policy schema and lock/required consistency |
 | `squadai backup create` | Manually snapshot managed files |
@@ -313,23 +317,7 @@ Every `apply` operation:
 
 ## Installation
 
-### From source (requires Go 1.24+)
-
-```sh
-go install github.com/PedroMosquera/squadai/cmd/squadai@latest
-```
-
-### GitHub Releases
-
-Download the binary for your architecture from [Releases](https://github.com/PedroMosquera/squadai/releases).
-
-### Shell script
-
-```sh
-curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
-```
-
-### Homebrew (macOS / Linux)
+### Homebrew (macOS / Linux) — recommended
 
 ```sh
 brew install PedroMosquera/tap/squadai
@@ -345,7 +333,7 @@ The formula is published to [PedroMosquera/homebrew-tap](https://github.com/Pedr
 
 ### Linux native packages (deb / rpm)
 
-Every release publishes `.deb` and `.rpm` packages alongside the tarballs. Download the matching package from [Releases](https://github.com/PedroMosquera/squadai/releases/latest) and install it with your distro's package manager:
+Every release publishes `.deb` and `.rpm` packages alongside the tarballs. Download the matching package from [Releases](https://github.com/PedroMosquera/squadai/releases/latest):
 
 ```sh
 # Debian / Ubuntu
@@ -356,6 +344,22 @@ sudo rpm -i squadai_<version>_linux_<arch>.rpm
 ```
 
 The binary lands at `/usr/bin/squadai`.
+
+### Shell script (macOS / Linux)
+
+```sh
+curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
+```
+
+### From source (requires Go 1.24+)
+
+```sh
+go install github.com/PedroMosquera/squadai/cmd/squadai@latest
+```
+
+### GitHub Releases
+
+Download the binary for your architecture from [Releases](https://github.com/PedroMosquera/squadai/releases).
 
 ### Install via your AI agent
 
@@ -419,7 +423,14 @@ go install github.com/PedroMosquera/squadai/cmd/squadai@latest
 
 ## Roadmap
 
-V2 architecture is complete: 5 agents, 9 component installers, 3 methodologies, 3 delegation strategies, 3 MCP strategies, 1000+ tests. See the [V2.1 Follow-up Roadmap](.x9k4v/ROADMAP-V2.1.md) for activation, documentation, and distribution work in progress.
+- ✓ V2 architecture: 5 agents, 9 component installers, 3 methodologies, 3 delegation strategies, 3 MCP strategies
+- ✓ Health checks (`squadai doctor`) with auto-fix
+- ✓ Self-update (opt-in)
+- ✓ Distribution: Homebrew tap, deb/rpm packages, curl|sh installer
+- ⊙ Native Windows installer support (Scoop / WinGet) — planned
+- ⊙ Plugin catalog expansion — planned
+
+For tracked work, see [GitHub Issues](https://github.com/PedroMosquera/squadai/issues).
 
 ---
 

@@ -184,11 +184,11 @@ func statusIcon(s CheckStatus, colors bool) (icon, start, end string) {
 	}
 	switch s {
 	case CheckPass:
-		return "✅", ansiGreen, ansiReset
+		return "✓", ansiGreen, ansiReset
 	case CheckWarn:
-		return "⚠️ ", ansiYellow, ansiReset
+		return "⚠", ansiYellow, ansiReset
 	case CheckFail:
-		return "❌", ansiRed, ansiReset
+		return "✗", ansiRed, ansiReset
 	default:
 		return "──", ansiGray, ansiReset
 	}
