@@ -556,10 +556,27 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 }
 
 // serverToMap converts an MCPServerDef to a generic map for JSON output.
-// The agent parameter controls the serialization format:
-//   - OpenCode (MergeIntoSettings): {"type": "local", "command": ["npx", "-y", "..."]}
-//   - Claude Code, VS Code, Cursor, Windsurf: {"command": "npx", "args": ["-y", "..."]}
-//     These agents expect command as a string and args as a separate array, with no "type" field.
+// Each agent has a different MCP server schema:
+//
+// OpenCode (MergeIntoSettings):
+//
+//	{"type": "local", "command": ["npx", "-y", "..."]}
+//	{"type": "remote", "url": "https://..."}
+//
+// Claude Code, VS Code Copilot (require "type" for remote):
+//
+//	Stdio: {"command": "npx", "args": ["-y", "..."]}
+//	Remote: {"type": "http", "url": "https://..."}
+//
+// Cursor (no "type" field for any):
+//
+//	Stdio: {"command": "npx", "args": ["-y", "..."]}
+//	Remote: {"url": "https://..."}
+//
+// Windsurf (no "type" field, uses "serverUrl"):
+//
+//	Stdio: {"command": "npx", "args": ["-y", "..."]}
+//	Remote: {"serverUrl": "https://..."}
 func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]interface{} {
 	m := make(map[string]interface{})
 
@@ -570,12 +587,17 @@ func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]inter
 			m["command"] = def.Command
 		}
 	} else {
-		// Claude Code, VS Code Copilot, Cursor, Windsurf use split command/args format.
+		// All other agents use split command/args format for stdio servers.
 		if len(def.Command) > 0 {
 			m["command"] = def.Command[0]
 			if len(def.Command) > 1 {
 				m["args"] = def.Command[1:]
 			}
+		}
+		// Claude Code and VS Code require "type": "http" for remote servers.
+		// Cursor and Windsurf infer the type from the presence of url/serverUrl.
+		if def.URL != "" && (agent == domain.AgentClaudeCode || agent == domain.AgentVSCodeCopilot) {
+			m["type"] = "http"
 		}
 	}
 
@@ -583,7 +605,12 @@ func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]inter
 		m[urlKeyForAgent(agent)] = def.URL
 	}
 	if len(def.Environment) > 0 {
-		m["environment"] = def.Environment
+		if agent == domain.AgentOpenCode {
+			m["environment"] = def.Environment
+		} else {
+			// Claude Code, Cursor, Windsurf, VS Code use "env" for environment variables.
+			m["env"] = def.Environment
+		}
 	}
 	if len(def.Headers) > 0 {
 		m["headers"] = def.Headers

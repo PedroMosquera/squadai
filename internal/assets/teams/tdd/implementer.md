@@ -1,6 +1,13 @@
 ---
 description: Writes minimal code to pass tests using red-green-refactor cycles
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: true
 ---
 
 # Implementer

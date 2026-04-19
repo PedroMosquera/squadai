@@ -252,7 +252,7 @@ type CuratedMCPServer struct {
 }
 
 // DefaultMCPCatalog returns the 5 curated MCP servers offered during init.
-// Context7 and GitHub are pre-checked; the others default to unselected.
+// Context7 is pre-checked; the others default to unselected.
 func DefaultMCPCatalog() []CuratedMCPServer {
 	return []CuratedMCPServer{
 		{
@@ -265,10 +265,11 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 		},
 		{
 			Name:        "github",
-			Description: "Repository operations: issues, PRs, code search",
-			Type:        "remote",
-			PreChecked:  true,
-			URL:         "https://api.githubcopilot.com/mcp/",
+			Description: "Issues, PRs, code search (requires GITHUB_PERSONAL_ACCESS_TOKEN)",
+			Type:        "local",
+			PreChecked:  false,
+			Command:     "npx",
+			Args:        []string{"-y", "@modelcontextprotocol/server-github"},
 		},
 		{
 			Name:        "memory",
@@ -276,14 +277,15 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:        "local",
 			PreChecked:  false,
 			Command:     "npx",
-			Args:        []string{"@anthropic/memory-server"},
+			Args:        []string{"-y", "@anthropic/memory-server"},
 		},
 		{
 			Name:        "sentry",
-			Description: "Error monitoring and issue tracking integration",
-			Type:        "remote",
+			Description: "Error monitoring and issue tracking (requires SENTRY_AUTH_TOKEN)",
+			Type:        "local",
 			PreChecked:  false,
-			URL:         "https://mcp.sentry.dev/mcp",
+			Command:     "npx",
+			Args:        []string{"-y", "@sentry/mcp-server"},
 		},
 		{
 			Name:        "sequential-thinking",
@@ -291,7 +293,7 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:        "local",
 			PreChecked:  false,
 			Command:     "npx",
-			Args:        []string{"@anthropic/sequential-thinking"},
+			Args:        []string{"-y", "@anthropic/sequential-thinking"},
 		},
 	}
 }

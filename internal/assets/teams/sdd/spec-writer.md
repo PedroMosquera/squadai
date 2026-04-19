@@ -1,6 +1,13 @@
 ---
 description: Writes detailed formal specifications from the approved proposal
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: false
 ---
 
 # Spec Writer

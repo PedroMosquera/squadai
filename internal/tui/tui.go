@@ -43,21 +43,23 @@ const (
 
 // menuItem is a selectable action.
 type menuItem struct {
-	label   string
-	command string // CLI command name
+	label       string
+	command     string // CLI command name
+	description string // shown when item is highlighted
 }
 
 var menuItems = []menuItem{
-	{label: "Init / Setup", command: "init"},
-	{label: "Plan (dry-run)", command: "plan"},
-	{label: "Apply", command: "apply"},
-	{label: "Sync", command: "sync"},
-	{label: "Team Status", command: "team-status"},
-	{label: "Browse Skills", command: "skills"},
-	{label: "Verify", command: "verify"},
-	{label: "Restore backup", command: "restore"},
-	{label: "Remove SquadAI config", command: "remove"},
-	{label: "Quit", command: "quit"},
+	{label: "Init / Setup", command: "init", description: "Configure agents, MCP servers, and team methodology for this project"},
+	{label: "Plan (dry-run)", command: "plan", description: "Preview what files would be created or updated without making changes"},
+	{label: "Apply", command: "apply", description: "Write all planned config files to disk (agents, MCP, rules, etc.)"},
+	{label: "Sync", command: "sync", description: "Re-apply config after manual changes to .squadai/project.json"},
+	{label: "Team Status", command: "team-status", description: "Show which agents are configured and their team role assignments"},
+	{label: "Browse Skills", command: "skills", description: "Explore and install community skills (code review, testing, etc.)"},
+	{label: "Verify", command: "verify", description: "Check that all generated files match the expected configuration"},
+	{label: "Restore Backup", command: "restore", description: "Restore files from a backup created before apply or remove"},
+	{label: "Remove SquadAI Config", command: "remove", description: "Delete all SquadAI-managed files and the .squadai directory"},
+	{label: "CLI Commands", command: "cli-help", description: "Show available CLI commands for scripting and CI/CD pipelines"},
+	{label: "Quit", command: "quit", description: "Exit SquadAI"},
 }
 
 // skillEntry is a single skill in the curated catalog.
@@ -249,6 +251,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Build a dry-run preview to show on the confirmation screen.
 				m.removePreview = buildRemovePreview(m.homeDir)
 				m.screen = screenRemoveConfirm
+				return m, nil
+			case "cli-help":
+				m.output = cliHelpText()
+				m.err = nil
+				m.screen = screenResult
 				return m, nil
 			default:
 				m.screen = screenRunning
@@ -762,10 +769,8 @@ func (m Model) viewIntro() string {
 		adapterContent.WriteString("  (none detected)")
 	} else {
 		for _, a := range m.adapters {
-			id := string(a.ID())
-			lane := string(a.Lane())
-			strategy := string(a.DelegationStrategy())
-			adapterContent.WriteString(fmt.Sprintf("  %-16s %-10s %s\n", id, "("+lane+")", strategy))
+			name := agentDisplayName(a.ID())
+			adapterContent.WriteString(fmt.Sprintf("  %s\n", name))
 		}
 	}
 	b.WriteString(m.renderPanel(strings.TrimRight(adapterContent.String(), "\n")))
@@ -790,6 +795,13 @@ func (m Model) viewMenu() string {
 	var b strings.Builder
 	b.WriteString(m.renderPanel(strings.TrimRight(menuContent.String(), "\n")))
 	b.WriteString("\n\n")
+
+	// Show description of highlighted item.
+	if m.cursor >= 0 && m.cursor < len(menuItems) {
+		b.WriteString(mutedStyle.Render(menuItems[m.cursor].description))
+		b.WriteString("\n")
+	}
+
 	b.WriteString(mutedStyle.Render("↑/↓: navigate  enter: select  q: quit"))
 	return b.String()
 }
@@ -969,6 +981,60 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
+// agentDisplayName returns the proper display name for an agent ID.
+func agentDisplayName(id domain.AgentID) string {
+	switch id {
+	case domain.AgentOpenCode:
+		return "OpenCode"
+	case domain.AgentClaudeCode:
+		return "Claude Code"
+	case domain.AgentVSCodeCopilot:
+		return "VS Code Copilot"
+	case domain.AgentCursor:
+		return "Cursor"
+	case domain.AgentWindsurf:
+		return "Windsurf"
+	default:
+		return string(id)
+	}
+}
+
+// cliHelpText returns the CLI commands reference text.
+func cliHelpText() string {
+	return `CLI Commands Reference
+═══════════════════════════════════════════════════
+
+  squadai init             Configure agents, MCP, and methodology
+  squadai init --json      Output init result as JSON
+  squadai init --with-policy  Also create policy.json
+
+  squadai plan             Preview planned changes (dry-run)
+  squadai plan --json      Output plan as JSON
+
+  squadai apply            Write all config files to disk
+  squadai apply --json     Output result as JSON
+
+  squadai sync             Re-apply after manual config changes
+
+  squadai verify           Check generated files match config
+  squadai verify --json    Output result as JSON
+
+  squadai diff             Show unified diff of pending changes
+
+  squadai team-status      Show agent roles and configuration
+  squadai team-status --json
+
+  squadai remove --force   Remove all managed files + .squadai/
+  squadai remove --dry-run Preview what would be removed
+
+  squadai restore <id>     Restore from a backup
+  squadai backup list      List available backups
+
+  squadai validate-policy  Validate .squadai/policy.json
+
+Run 'squadai <command> --help' for detailed usage.`
+}
+
 // catalogPreCheckedSelections builds the initial mcpSelections map from the
 // curated catalog, pre-selecting all entries that have PreChecked == true.
 func catalogPreCheckedSelections() map[string]bool {
@@ -1135,20 +1201,6 @@ func (m Model) viewInitAdapters() string {
 		detectedSet[string(a.ID())] = true
 	}
 
-	// Build a set of delegation strategies by agent ID.
-	strategyMap := make(map[string]string)
-	for _, a := range m.adapters {
-		strategyMap[string(a.ID())] = string(a.DelegationStrategy())
-	}
-	// Known strategies for non-detected agents.
-	knownStrategies := map[string]string{
-		string(domain.AgentOpenCode):      "native",
-		string(domain.AgentClaudeCode):    "prompt",
-		string(domain.AgentVSCodeCopilot): "solo",
-		string(domain.AgentCursor):        "native",
-		string(domain.AgentWindsurf):      "solo",
-	}
-
 	var content strings.Builder
 	content.WriteString(headingStyle.Render("Select Agents to Configure") + "\n\n")
 
@@ -1166,25 +1218,20 @@ func (m Model) viewInitAdapters() string {
 			checkStr = badgeDisabledStyle.Render("[ ]")
 		}
 
-		// Determine strategy label.
-		strategy := strategyMap[id]
-		if strategy == "" {
-			strategy = knownStrategies[id]
-		}
-
 		// Build name and suffix.
+		name := agentDisplayName(agentID)
 		var nameStr, suffix string
 		if i == m.initCursor {
-			nameStr = activeStyle.Render(id)
+			nameStr = activeStyle.Render(name)
 		} else {
-			nameStr = id
+			nameStr = name
 		}
 
 		if !isDetected {
 			suffix = mutedStyle.Render("(not detected)")
 		}
 
-		line := fmt.Sprintf("  %s %-20s %-8s %s", checkStr, nameStr, strategy, suffix)
+		line := fmt.Sprintf("  %s %-20s %s", checkStr, nameStr, suffix)
 		content.WriteString(line + "\n")
 	}
 
@@ -1293,17 +1340,6 @@ func (m Model) viewInitInstallSummary() string {
 		domain.AgentCursor,
 		domain.AgentWindsurf,
 	}
-	knownStrategies := map[string]string{
-		string(domain.AgentOpenCode):      "native",
-		string(domain.AgentClaudeCode):    "prompt",
-		string(domain.AgentVSCodeCopilot): "solo",
-		string(domain.AgentCursor):        "native",
-		string(domain.AgentWindsurf):      "solo",
-	}
-	strategyMap := make(map[string]string)
-	for _, a := range m.adapters {
-		strategyMap[string(a.ID())] = string(a.DelegationStrategy())
-	}
 
 	hasAny := false
 	for _, agentID := range allAgents {
@@ -1313,11 +1349,7 @@ func (m Model) viewInitInstallSummary() string {
 			continue
 		}
 		hasAny = true
-		strategy := strategyMap[id]
-		if strategy == "" {
-			strategy = knownStrategies[id]
-		}
-		content.WriteString(fmt.Sprintf("  %-20s %-8s\n", id, strategy))
+		content.WriteString(fmt.Sprintf("  %s\n", agentDisplayName(agentID)))
 	}
 	if !hasAny {
 		content.WriteString(mutedStyle.Render("  (none selected)") + "\n")

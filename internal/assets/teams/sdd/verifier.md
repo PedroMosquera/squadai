@@ -1,6 +1,13 @@
 ---
 description: Verifies implementation matches specification contracts and criteria
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: false
+  edit: false
 ---
 
 # Verifier

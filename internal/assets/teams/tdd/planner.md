@@ -1,6 +1,13 @@
 ---
 description: Plans implementation from failing tests
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: false
+  edit: false
 ---
 
 # Planner

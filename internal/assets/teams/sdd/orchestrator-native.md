@@ -1,3 +1,15 @@
+---
+description: Orchestrates the SDD workflow by delegating phases to specialized sub-agents
+mode: primary
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: true
+---
+
 # {{.Methodology}} Orchestrator
 
 ## Identity

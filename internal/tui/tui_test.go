@@ -60,12 +60,9 @@ func TestIntroScreen_ShowsVersionAndMode(t *testing.T) {
 	if !strings.Contains(view, "Mode: team") {
 		t.Error("intro should show mode")
 	}
-	// New format: "  opencode          (team)     solo"
-	if !strings.Contains(view, "opencode") {
-		t.Error("intro should show detected adapter ID")
-	}
-	if !strings.Contains(view, "(team)") {
-		t.Error("intro should show adapter lane")
+	// Display name format: "  OpenCode"
+	if !strings.Contains(view, "OpenCode") {
+		t.Error("intro should show detected adapter display name")
 	}
 }
 
@@ -78,15 +75,15 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeHybrid, adapters, "/tmp/home")
 
 	view := m.View()
-	// New format shows adapter ID, lane in parens, and delegation strategy
-	if !strings.Contains(view, "opencode") {
-		t.Error("should show opencode")
+	// Display names instead of raw IDs
+	if !strings.Contains(view, "OpenCode") {
+		t.Error("should show OpenCode")
 	}
-	if !strings.Contains(view, "claude-code") {
-		t.Error("should show claude-code")
+	if !strings.Contains(view, "Claude Code") {
+		t.Error("should show Claude Code")
 	}
-	if !strings.Contains(view, "vscode-copilot") {
-		t.Error("should show vscode-copilot")
+	if !strings.Contains(view, "VS Code Copilot") {
+		t.Error("should show VS Code Copilot")
 	}
 	if !strings.Contains(view, "Mode: hybrid") {
 		t.Error("should show hybrid mode")
@@ -623,9 +620,10 @@ func TestIntroScreen_ShowsDelegationStrategy(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
 
 	view := m.View()
-	// Mock adapter returns DelegationSoloAgent = "solo"
-	if !strings.Contains(view, "solo") {
-		t.Errorf("intro should show delegation strategy 'solo', got:\n%s", view)
+	// Delegation strategy is no longer displayed on the intro screen.
+	// Verify the adapter display name is shown instead.
+	if !strings.Contains(view, "OpenCode") {
+		t.Errorf("intro should show adapter display name 'OpenCode', got:\n%s", view)
 	}
 }
 
@@ -643,7 +641,7 @@ func TestMenu_AllItemsPresent(t *testing.T) {
 		"Sync",
 		"Team Status",
 		"Verify",
-		"Restore backup",
+		"Restore Backup",
 		"Quit",
 	}
 	for _, label := range expectedLabels {
@@ -1134,7 +1132,7 @@ func TestMenu_AllItemsIncludingSkills(t *testing.T) {
 		"Team Status",
 		"Browse Skills",
 		"Verify",
-		"Restore backup",
+		"Restore Backup",
 		"Quit",
 	}
 	for _, label := range expected {
@@ -1447,7 +1445,7 @@ func TestInitAdapters_ShowsAllFiveAgents(t *testing.T) {
 	m.agentSelections = make(map[string]bool)
 
 	view := m.View()
-	expected := []string{"opencode", "claude-code", "vscode-copilot", "cursor", "windsurf"}
+	expected := []string{"OpenCode", "Claude Code", "VS Code Copilot", "Cursor", "Windsurf"}
 	for _, id := range expected {
 		if !strings.Contains(view, id) {
 			t.Errorf("adapters view should contain agent %q, got:\n%s", id, view)
@@ -1667,11 +1665,11 @@ func TestInstallSummary_ShowsSelectedAgentsOnly(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "opencode") {
-		t.Errorf("install summary should show opencode, got:\n%s", view)
+	if !strings.Contains(view, "OpenCode") {
+		t.Errorf("install summary should show OpenCode, got:\n%s", view)
 	}
-	if !strings.Contains(view, "cursor") {
-		t.Errorf("install summary should show cursor (selected), got:\n%s", view)
+	if !strings.Contains(view, "Cursor") {
+		t.Errorf("install summary should show Cursor (selected), got:\n%s", view)
 	}
 }
 
@@ -1867,8 +1865,8 @@ func TestInitMCP_PreCheckedCount(t *testing.T) {
 			count++
 		}
 	}
-	if count != 2 {
-		t.Errorf("expected 2 pre-checked items, got %d", count)
+	if count != 1 {
+		t.Errorf("expected 1 pre-checked items, got %d", count)
 	}
 }
 
@@ -1906,8 +1904,8 @@ func TestMenu_RemoveItemLabel(t *testing.T) {
 	m.screen = screenMenu
 
 	view := m.View()
-	if !strings.Contains(view, "Remove SquadAI config") {
-		t.Error("menu should show 'Remove SquadAI config' item")
+	if !strings.Contains(view, "Remove SquadAI Config") {
+		t.Error("menu should show 'Remove SquadAI Config' item")
 	}
 }
 

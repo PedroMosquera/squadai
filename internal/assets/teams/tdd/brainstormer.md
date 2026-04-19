@@ -1,6 +1,13 @@
 ---
 description: Generates test scenarios and edge cases
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: false
+  edit: false
 ---
 
 # Brainstormer
