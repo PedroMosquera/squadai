@@ -8,6 +8,27 @@ Standardize AI coding agent environments across your team.
 
 ---
 
+## Why squadai
+
+Modern teams use multiple AI coding agents — OpenCode, Claude Code, Cursor, Windsurf, Copilot — and every developer configures their own differently. The result: inconsistent code quality, no shared methodology, drifting team standards, and no policy enforcement on what each agent is allowed to do.
+
+squadai treats AI agent setup as **infrastructure**: a single declarative config (`.squadai/project.json`), a three-layer merge with locked policy fields, and an idempotent apply pipeline that writes the right files for each agent in its native format. Run it once per machine and every developer is on the same setup, regardless of which editor they prefer.
+
+---
+
+## Technical Highlights
+
+- **Six-layer hexagonal architecture** with strict downward dependencies (domain → config → planner → pipeline → verifier → interfaces). Adapters and components depend only on `domain` interfaces. Full design in [`docs/architecture.md`](docs/architecture.md).
+- **One config, five agents** through a 3-strategy delegation abstraction (native sub-agent files, prompt-injected Task tool, solo all-in-one prompts) and a 3-strategy MCP installer (merge-into-settings, dedicated MCP file, embedded). Adding a new agent is a single adapter package.
+- **Idempotent, crash-safe apply pipeline** — atomic file writes via `fileutil.WriteAtomic`, automatic backup snapshots before every mutation, full rollback on failure, marker-block preservation so user content outside managed regions is never touched.
+- **Three-layer config merge with policy enforcement** — `policy.json` (locked) > `project.json` > user defaults. Locked fields cannot be overridden; missing required values fail validation at load time.
+- **Built-in health diagnostics** (`squadai doctor`) — ~22 checks across 6 categories with `--fix` auto-resolution. JSON files are validated by managed-key presence, markdown files by HTML marker integrity. Full details in `squadai doctor --help`.
+- **Cross-platform distribution** — goreleaser pipeline produces darwin/linux/windows × amd64/arm64 binaries plus `.deb`, `.rpm`, Homebrew tap, curl|sh installer, and built-in self-update — all from a single `git tag`.
+- **Dual interface from one core** — Bubbletea TUI wizard for interactive setup, scriptable CLI for CI/automation. Both share the same planner, pipeline, and verifier.
+- **AI-agent install protocol** — paste-prompt installation: agents read a numbered protocol from this README, detect OS, pick the best install method, and run health checks. See [Install via your AI agent](#install-via-your-ai-agent).
+
+---
+
 ## What It Does
 
 One command configures every AI coding agent on your team to use the same methodology, team structure, MCP servers, and coding standards.
@@ -426,24 +447,21 @@ go install github.com/PedroMosquera/squadai/cmd/squadai@latest
 
 ---
 
-## Roadmap
-
-- ✓ V2 architecture: 5 agents, 9 component installers, 3 methodologies, 3 delegation strategies, 3 MCP strategies
-- ✓ Health checks (`squadai doctor`) with auto-fix
-- ✓ Self-update (opt-in)
-- ✓ Distribution: Homebrew tap, deb/rpm packages, curl|sh installer
-- ⊙ Native Windows installer support (Scoop / WinGet) — planned
-- ⊙ Plugin catalog expansion — planned
-
-For tracked work, see [GitHub Issues](https://github.com/PedroMosquera/squadai/issues).
-
----
-
 ## Development Process
 
 SquadAI uses Spec-Driven Development for its own changes. The `openspec/` directory tracks
 in-flight specs (`changes/`), living specs (`specs/`), and completed work (`archive/`).
 See `openspec/config.yaml` for workflow rules and testing conventions.
+
+---
+
+## Author
+
+Built by **Pedro Mosquera** — software engineer focused on developer tooling, clean architecture, and AI-assisted workflows.
+
+- GitHub: [@PedroMosquera](https://github.com/PedroMosquera)
+
+Feedback, issues, and pull requests are welcome.
 
 ---
 
