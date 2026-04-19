@@ -68,10 +68,14 @@ func (d *Doctor) checkUserConfig() CheckResult {
 	_, err := config.LoadUser(d.homeDir)
 	if err != nil {
 		if errors.Is(err, domain.ErrConfigNotFound) {
-			return warn(catConfig, "config.json",
-				"~/.squadai/config.json missing (using defaults)",
-				"",
-				"Run 'squadai init' to create it")
+			return CheckResult{
+				Category:    catConfig,
+				Name:        "config.json",
+				Status:      CheckFail,
+				Message:     "~/.squadai/config.json missing",
+				FixHint:     "Create with default config (personal mode)",
+				AutoFixable: true,
+			}
 		}
 		return fail(catConfig, "config.json",
 			fmt.Sprintf("~/.squadai/config.json parse error: %v", err),
