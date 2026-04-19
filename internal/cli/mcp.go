@@ -2,16 +2,26 @@ package cli
 
 import "github.com/PedroMosquera/squadai/internal/domain"
 
-// DefaultMCPServers returns the recommended MCP server configurations.
-// Context7 is included and enabled by default.
+// DefaultMCPServers returns all MCP server configurations from the curated catalog.
+// Each catalog entry is converted to an MCPServerDef with Enabled=true.
+// This is the single source of truth — the catalog defines what's available.
 func DefaultMCPServers() map[string]domain.MCPServerDef {
-	return map[string]domain.MCPServerDef{
-		"context7": {
-			Type:    "local",
-			Command: []string{"npx", "-y", "@upstash/context7-mcp@latest"},
+	catalog := domain.DefaultMCPCatalog()
+	servers := make(map[string]domain.MCPServerDef, len(catalog))
+	for _, s := range catalog {
+		def := domain.MCPServerDef{
+			Type:    s.Type,
 			Enabled: true,
-		},
+		}
+		if s.URL != "" {
+			def.URL = s.URL
+		}
+		if s.Command != "" {
+			def.Command = append([]string{s.Command}, s.Args...)
+		}
+		servers[s.Name] = def
 	}
+	return servers
 }
 
 // AvailablePlugins returns the full catalog of available plugins.

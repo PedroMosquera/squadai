@@ -186,8 +186,7 @@ func TestPlan_Claude_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"type": "remote",
-				"url":  "https://mcp.context7.com/mcp",
+				"url": "https://mcp.context7.com/mcp",
 			},
 		},
 	})
@@ -212,8 +211,7 @@ func TestPlan_Claude_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"type": "remote",
-				"url":  "https://wrong.com",
+				"url": "https://wrong.com",
 			},
 		},
 	})
@@ -508,11 +506,12 @@ func TestApply_Claude_MCPConfigFile_CreatesFile(t *testing.T) {
 	if !ok {
 		t.Fatal("expected context7 server")
 	}
-	if ctx7["type"] != "remote" {
-		t.Errorf("type = %v, want remote", ctx7["type"])
-	}
 	if ctx7["url"] != "https://mcp.context7.com/mcp" {
 		t.Errorf("url = %v, want https://mcp.context7.com/mcp", ctx7["url"])
+	}
+	// Claude Code format: no "type" field, command is string + args.
+	if _, hasType := ctx7["type"]; hasType {
+		t.Error("Claude Code format must NOT include 'type' field")
 	}
 }
 
@@ -718,6 +717,64 @@ func TestServerToMap_LocalServer(t *testing.T) {
 	}
 }
 
+// ─── Fix 5: Non-OpenCode agents use split command/args format ───────────────
+
+func TestServerToMap_ClaudeCode_SplitCommandArgs(t *testing.T) {
+	def := domain.MCPServerDef{
+		Type:    "local",
+		Command: []string{"npx", "-y", "@upstash/context7-mcp@latest"},
+	}
+	m := serverToMap(def, domain.AgentClaudeCode)
+
+	// Claude Code: command is a string (first element), args is the rest.
+	if m["command"] != "npx" {
+		t.Errorf("command = %v, want \"npx\" (string, not array)", m["command"])
+	}
+	args, ok := m["args"].([]string)
+	if !ok || len(args) != 2 {
+		t.Fatalf("args should be []string with 2 elements, got %T %v", m["args"], m["args"])
+	}
+	if args[0] != "-y" || args[1] != "@upstash/context7-mcp@latest" {
+		t.Errorf("args = %v, want [-y @upstash/context7-mcp@latest]", args)
+	}
+	// No "type" field for Claude Code.
+	if _, hasType := m["type"]; hasType {
+		t.Error("Claude Code format must NOT include 'type' field")
+	}
+}
+
+func TestServerToMap_ClaudeCode_RemoteServer(t *testing.T) {
+	def := domain.MCPServerDef{
+		Type: "remote",
+		URL:  "https://mcp.context7.com/mcp",
+	}
+	m := serverToMap(def, domain.AgentClaudeCode)
+
+	// No type, no command, just url.
+	if _, hasType := m["type"]; hasType {
+		t.Error("Claude Code remote must NOT include 'type' field")
+	}
+	if m["url"] != "https://mcp.context7.com/mcp" {
+		t.Errorf("url = %v, want https://mcp.context7.com/mcp", m["url"])
+	}
+}
+
+func TestServerToMap_SingleElementCommand(t *testing.T) {
+	def := domain.MCPServerDef{
+		Type:    "local",
+		Command: []string{"my-server"},
+	}
+	m := serverToMap(def, domain.AgentCursor)
+
+	if m["command"] != "my-server" {
+		t.Errorf("command = %v, want \"my-server\"", m["command"])
+	}
+	// No args when command has only one element.
+	if _, hasArgs := m["args"]; hasArgs {
+		t.Error("args should not be present for single-element command")
+	}
+}
+
 // ─── Sidecar tracking (replaces TestUpdateManagedKeys_* after _agent_manager removal) ─
 
 func TestApply_OpenCode_WritesSidecar(t *testing.T) {
@@ -869,8 +926,7 @@ func TestPlan_VSCode_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"servers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"type": "remote",
-				"url":  "https://mcp.context7.com/mcp",
+				"url": "https://mcp.context7.com/mcp",
 			},
 		},
 	})
@@ -896,8 +952,7 @@ func TestPlan_VSCode_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"servers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"type": "remote",
-				"url":  "https://old-url.com/mcp",
+				"url": "https://old-url.com/mcp",
 			},
 		},
 	})
@@ -943,11 +998,12 @@ func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
 	if !ok {
 		t.Fatal("context7 server should be present")
 	}
-	if server["type"] != "remote" {
-		t.Errorf("type = %v, want remote", server["type"])
-	}
 	if server["url"] != "https://mcp.context7.com/mcp" {
 		t.Errorf("url = %v, want https://mcp.context7.com/mcp", server["url"])
+	}
+	// VS Code format: no "type" field.
+	if _, hasType := server["type"]; hasType {
+		t.Error("VS Code format must NOT include 'type' field")
 	}
 
 	// Check that _agent_manager is NOT written into the config doc.
@@ -1102,7 +1158,6 @@ func TestVerify_Windsurf_MCPConfigFile_FailsWhenOutdated(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"type":      "remote",
 				"serverUrl": "https://wrong-url.com/mcp",
 			},
 		},
@@ -1462,7 +1517,7 @@ func TestApplyMCPConfigFile_PreservesVSCodeInputs(t *testing.T) {
 			map[string]interface{}{"id": "myToken", "type": "promptString"},
 		},
 		"servers": map[string]interface{}{
-			"old-server": map[string]interface{}{"type": "remote", "url": "https://old.example.com"},
+			"old-server": map[string]interface{}{"url": "https://old.example.com"},
 		},
 	}
 	writeTestJSON(t, mcpPath, existing)

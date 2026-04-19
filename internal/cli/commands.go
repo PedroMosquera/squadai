@@ -2203,6 +2203,12 @@ func RunRemove(args []string, stdout io.Writer) error {
 			}
 		}
 
+		// Also check .squadai/ directory.
+		squadaiDir := filepath.Join(projectDir, ".squadai")
+		if info, err := os.Stat(squadaiDir); err == nil && info.IsDir() {
+			result.Deleted = append(result.Deleted, squadaiDir)
+		}
+
 		if jsonOut {
 			data, err := json.MarshalIndent(result, "", "  ")
 			if err != nil {
@@ -2296,6 +2302,16 @@ func RunRemove(args []string, stdout io.Writer) error {
 	if backupID != "" {
 		fmt.Fprintf(stdout, "Backup created: %s\n", backupID)
 	}
+
+	// Clean up the .squadai/ directory (project.json, managed.json, templates, etc.).
+	squadaiDir := filepath.Join(projectDir, ".squadai")
+	if err := os.RemoveAll(squadaiDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove .squadai directory: %w", err)
+	}
+	if _, err := os.Stat(squadaiDir); os.IsNotExist(err) {
+		deleted = append(deleted, squadaiDir)
+	}
+
 	fmt.Fprintf(stdout, "Removed %d files, stripped markers from %d files.\n", len(deleted), len(stripped))
 	for _, p := range deleted {
 		fmt.Fprintf(stdout, "  deleted: %s\n", p)
