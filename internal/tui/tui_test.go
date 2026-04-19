@@ -54,11 +54,11 @@ func TestIntroScreen_ShowsVersionAndMode(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
 
 	view := m.View()
-	if !strings.Contains(view, "SquadAI 1.0.0") {
-		t.Error("intro should show version")
+	if !strings.Contains(view, "SquadAI v1.0.0") {
+		t.Error("header should show version")
 	}
-	if !strings.Contains(view, "Mode: team") {
-		t.Error("intro should show mode")
+	if !strings.Contains(view, "One config. Every AI agent. Zero drift.") {
+		t.Error("header should show product tagline")
 	}
 	// Display name format: "  OpenCode"
 	if !strings.Contains(view, "OpenCode") {
@@ -84,9 +84,6 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 	}
 	if !strings.Contains(view, "VS Code Copilot") {
 		t.Error("should show VS Code Copilot")
-	}
-	if !strings.Contains(view, "Mode: personal") {
-		t.Error("should show personal mode")
 	}
 }
 
@@ -928,8 +925,8 @@ func TestSkillBrowser_ShowsInstallHint(t *testing.T) {
 	m := newSkillBrowserModel(t)
 
 	view := m.View()
-	if !strings.Contains(view, "npx skills install") {
-		t.Errorf("skill browser should show install hint 'npx skills install', got:\n%s", view)
+	if !strings.Contains(view, "npx skills add") {
+		t.Errorf("skill browser should show install hint 'npx skills add', got:\n%s", view)
 	}
 }
 
@@ -1110,9 +1107,9 @@ func TestSkillBrowser_InstallHint_IncludesSelectedSkill(t *testing.T) {
 	if len(m.skillCat.Categories) == 0 || len(m.skillCat.Categories[0].Skills) == 0 {
 		t.Fatal("catalog should have skills")
 	}
-	selectedName := m.skillCat.Categories[0].Skills[0].Name
-	if !strings.Contains(view, "npx skills install "+selectedName) {
-		t.Errorf("install hint should include selected skill name %q, got:\n%s", selectedName, view)
+	selectedInstall := m.skillCat.Categories[0].Skills[0].Install
+	if !strings.Contains(view, "npx skills add -y "+selectedInstall) {
+		t.Errorf("install hint should include selected skill install identifier %q, got:\n%s", selectedInstall, view)
 	}
 }
 
