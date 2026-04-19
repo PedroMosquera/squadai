@@ -26,15 +26,6 @@ func (i *Installer) rootKeyForAgent(agent domain.AgentID) string {
 	return rootKeyForAgent(agent)
 }
 
-// urlKeyForAgentMethod returns the cached MCP URL key for the given agent,
-// falling back to the package-level urlKeyForAgent if not cached.
-func (i *Installer) urlKeyForAgent(agent domain.AgentID) string {
-	if cfg, ok := i.agentConfigs[agent]; ok {
-		return cfg.urlKey
-	}
-	return urlKeyForAgent(agent)
-}
-
 // rootKeyForAgent returns the top-level JSON key for MCP server configs.
 // VS Code Copilot expects "servers"; all other adapters use "mcpServers".
 func rootKeyForAgent(agent domain.AgentID) string {
@@ -602,14 +593,6 @@ func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]inter
 		m["headers"] = def.Headers
 	}
 	return m
-}
-
-// serverToJSON converts a server definition to indented JSON bytes.
-func serverToJSON(def domain.MCPServerDef, agent domain.AgentID) []byte {
-	m := serverToMap(def, agent)
-	data, _ := json.MarshalIndent(m, "", "  ")
-	data = append(data, '\n')
-	return data
 }
 
 // mcpKeyMatches checks whether the "mcp" key in the document matches

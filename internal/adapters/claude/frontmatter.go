@@ -101,9 +101,7 @@ func splitFrontmatter(content string) (fm, body string, err error) {
 	fm = rest[:idx]
 	body = rest[idx+4:] // skip "\n---"
 	// Consume one optional newline after the closing marker.
-	if strings.HasPrefix(body, "\n") {
-		body = body[1:]
-	}
+	body = strings.TrimPrefix(body, "\n")
 	return fm, body, nil
 }
 

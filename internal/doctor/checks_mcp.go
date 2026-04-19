@@ -96,7 +96,7 @@ func (d *Doctor) checkNodeVersionForMCP(serverName, minVersion string) *CheckRes
 		return nil
 	}
 	var requiredMajor int
-	fmt.Sscanf(strings.TrimPrefix(minVersion, "v"), "%d", &requiredMajor)
+	_, _ = fmt.Sscanf(strings.TrimPrefix(minVersion, "v"), "%d", &requiredMajor)
 	if requiredMajor > 0 && installedMajor < requiredMajor {
 		r := warn(catMCP, serverName,
 			fmt.Sprintf("%s — Node %s installed, v%s+ required", serverName, versionStr, minVersion),
