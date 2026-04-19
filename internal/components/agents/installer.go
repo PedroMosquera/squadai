@@ -421,8 +421,6 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 	// projectDir from the target path by stripping the agents subdir.
 	// Target: <projectDir>/<agentsSubPath>/<roleName>.md
 	// We use the stored projectDir from construction.
-	agentsSubdir := strings.TrimPrefix(filepath.Dir(action.TargetPath), i.projectDir)
-	_ = agentsSubdir
 
 	data := i.buildTemplateDataFromAction(i.config, roleName, action.Agent)
 

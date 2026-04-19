@@ -10,7 +10,7 @@ import (
 )
 
 // Adapter implements domain.Adapter for the OpenCode agent.
-// OpenCode is the team-baseline engine — always available in team/hybrid modes.
+// OpenCode is the team-baseline engine — always available in team mode.
 type Adapter struct {
 	// lookPath resolves a binary name to an absolute path.
 	// Defaults to exec.LookPath. Injected for testing.

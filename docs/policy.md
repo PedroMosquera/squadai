@@ -95,7 +95,8 @@ The merged config will have `adapters.opencode.enabled: true` regardless of what
 |------|----------|
 | `team` | Policy file governs all settings. Locked fields enforced. |
 | `personal` | User config only. No policy enforcement. |
-| `hybrid` | Both active. Policy locked fields take precedence, other fields follow project > user. |
+
+> **Note:** `hybrid` mode is deprecated. SquadAI resolves it to `team` (if `policy.json` exists) or `personal` (if not), and prints a deprecation warning.
 
 When a policy file exists and sets `mode: "team"`, the mode is forced to `team` regardless of user config.
 

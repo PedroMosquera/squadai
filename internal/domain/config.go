@@ -176,7 +176,7 @@ type MergedConfig struct {
 func DefaultUserConfig() *UserConfig {
 	return &UserConfig{
 		Version: 1,
-		Mode:    ModeHybrid,
+		Mode:    ModePersonal,
 		Adapters: map[string]AdapterConfig{
 			string(AgentOpenCode):   {Enabled: true},
 			string(AgentClaudeCode): {Enabled: false},

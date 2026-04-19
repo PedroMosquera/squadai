@@ -2,10 +2,34 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
+
+// ResolveHybridMode resolves a deprecated "hybrid" mode to the appropriate
+// canonical mode based on whether a policy.json exists in policyDir.
+// If the mode is not "hybrid", it is returned unchanged.
+// A deprecation warning is written to stderr when resolution occurs.
+func ResolveHybridMode(mode domain.OperationalMode, policyDir string) domain.OperationalMode {
+	if mode != "hybrid" {
+		return mode
+	}
+	policyPath := policyDir + "/policy.json"
+	_, err := os.Stat(policyPath)
+	var resolved domain.OperationalMode
+	if err == nil {
+		resolved = domain.ModeTeam
+	} else {
+		resolved = domain.ModePersonal
+	}
+	fmt.Fprintf(os.Stderr,
+		"Warning: mode %q is deprecated. Resolved to %q based on policy.json presence. "+
+			"Update your config to use %q explicitly.\n",
+		"hybrid", resolved, resolved)
+	return resolved
+}
 
 // ValidateUser checks a UserConfig for structural issues.
 func ValidateUser(cfg *domain.UserConfig) []string {
@@ -16,12 +40,14 @@ func ValidateUser(cfg *domain.UserConfig) []string {
 	}
 
 	switch cfg.Mode {
-	case domain.ModeTeam, domain.ModePersonal, domain.ModeHybrid:
+	case domain.ModeTeam, domain.ModePersonal:
 		// valid
+	case "hybrid":
+		// deprecated alias — accepted without error; callers should use ResolveHybridMode
 	case "":
 		issues = append(issues, "mode is required")
 	default:
-		issues = append(issues, fmt.Sprintf("unknown mode %q (expected: team, personal, hybrid)", cfg.Mode))
+		issues = append(issues, fmt.Sprintf("unknown mode %q (expected: team, personal)", cfg.Mode))
 	}
 
 	for name := range cfg.Adapters {
@@ -80,8 +106,10 @@ func ValidatePolicy(cfg *domain.PolicyConfig) []string {
 	}
 
 	switch cfg.Mode {
-	case domain.ModeTeam, domain.ModePersonal, domain.ModeHybrid:
+	case domain.ModeTeam, domain.ModePersonal:
 		// valid
+	case "hybrid":
+		// deprecated alias — accepted without error for policy files too
 	case "":
 		issues = append(issues, "mode is required")
 	default:
