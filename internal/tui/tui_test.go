@@ -382,8 +382,8 @@ func TestInitMethodology_SelectTDD(t *testing.T) {
 	if model.methodology != domain.MethodologyTDD {
 		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologyTDD)
 	}
-	if model.screen != screenInitMCP {
-		t.Errorf("screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
+	if model.screen != screenInitModelTier {
+		t.Errorf("screen = %d, want screenInitModelTier (%d)", model.screen, screenInitModelTier)
 	}
 }
 
@@ -398,8 +398,8 @@ func TestInitMethodology_SelectSDD(t *testing.T) {
 	if model.methodology != domain.MethodologySDD {
 		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologySDD)
 	}
-	if model.screen != screenInitMCP {
-		t.Errorf("screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
+	if model.screen != screenInitModelTier {
+		t.Errorf("screen = %d, want screenInitModelTier (%d)", model.screen, screenInitModelTier)
 	}
 }
 
@@ -414,20 +414,20 @@ func TestInitMethodology_SelectConventional(t *testing.T) {
 	if model.methodology != domain.MethodologyConventional {
 		t.Errorf("methodology = %q, want %q", model.methodology, domain.MethodologyConventional)
 	}
-	if model.screen != screenInitMCP {
-		t.Errorf("screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
+	if model.screen != screenInitModelTier {
+		t.Errorf("screen = %d, want screenInitModelTier (%d)", model.screen, screenInitModelTier)
 	}
 }
 
-func TestInitMethodology_EscReturnsToMenu(t *testing.T) {
+func TestInitMethodology_EscReturnsToAdapters(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMethodology
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenMenu {
-		t.Errorf("screen = %d, want screenMenu (%d) after esc", model.screen, screenMenu)
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) after esc", model.screen, screenInitAdapters)
 	}
 }
 
@@ -469,7 +469,7 @@ func TestTeamStatus_EscReturnsToMenu(t *testing.T) {
 
 // ─── Init MCP Screen ──────────────────────────────────────────────────────────
 
-func TestInitMethodology_SelectGoesToMCP(t *testing.T) {
+func TestInitMethodology_SelectGoesToModelTier(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMethodology
 	m.initCursor = 0 // TDD
@@ -477,8 +477,8 @@ func TestInitMethodology_SelectGoesToMCP(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitMCP {
-		t.Errorf("screen = %d, want screenInitMCP (%d) after methodology select", model.screen, screenInitMCP)
+	if model.screen != screenInitModelTier {
+		t.Errorf("screen = %d, want screenInitModelTier (%d) after methodology select", model.screen, screenInitModelTier)
 	}
 }
 
@@ -497,35 +497,65 @@ func TestInitMCP_ToggleContext7(t *testing.T) {
 	}
 }
 
-func TestInitMCP_EnterGoesToPlugins(t *testing.T) {
+func TestInitMCP_EnterGoesToPlugins_WhenCustom(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
+	m.setupPreset = domain.PresetCustom
 	m.mcpSelections = map[string]bool{"context7": true}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
 	if model.screen != screenInitPlugins {
-		t.Errorf("screen = %d, want screenInitPlugins (%d) after enter", model.screen, screenInitPlugins)
+		t.Errorf("screen = %d, want screenInitPlugins (%d) after enter (custom)", model.screen, screenInitPlugins)
 	}
 }
 
-func TestInitMCP_EscGoesToMethodology(t *testing.T) {
+func TestInitMCP_EnterGoesToInstallSummary_WhenNonCustom(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
+	m.setupPreset = domain.PresetFullSquad
+	m.mcpSelections = map[string]bool{"context7": true}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitInstallSummary {
+		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter (non-custom)", model.screen, screenInitInstallSummary)
+	}
+}
+
+func TestInitMCP_EscGoesToModelTier_WhenCustom(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.setupPreset = domain.PresetCustom
 	m.mcpSelections = map[string]bool{}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenInitMethodology {
-		t.Errorf("screen = %d, want screenInitMethodology (%d) after esc", model.screen, screenInitMethodology)
+	if model.screen != screenInitModelTier {
+		t.Errorf("screen = %d, want screenInitModelTier (%d) after esc (custom)", model.screen, screenInitModelTier)
+	}
+}
+
+func TestInitMCP_EscGoesToAdapters_WhenNonCustom(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.setupPreset = domain.PresetFullSquad
+	m.mcpSelections = map[string]bool{}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) after esc (non-custom)", model.screen, screenInitAdapters)
 	}
 }
 
 // ─── Init Plugins Screen ──────────────────────────────────────────────────────
 
-func TestInitPlugins_EnterGoesToSummary(t *testing.T) {
+func TestInitPlugins_EnterGoesToInstallSummary(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPlugins
 	m.pluginSelections = make(map[string]bool)
@@ -533,8 +563,8 @@ func TestInitPlugins_EnterGoesToSummary(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitAdapters {
-		t.Errorf("screen = %d, want screenInitAdapters (%d) after enter", model.screen, screenInitAdapters)
+	if model.screen != screenInitInstallSummary {
+		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter", model.screen, screenInitInstallSummary)
 	}
 }
 
@@ -548,23 +578,6 @@ func TestInitPlugins_EscGoesToMCP(t *testing.T) {
 
 	if model.screen != screenInitMCP {
 		t.Errorf("screen = %d, want screenInitMCP (%d) after esc", model.screen, screenInitMCP)
-	}
-}
-
-// ─── Init Summary Screen ──────────────────────────────────────────────────────
-
-func TestInitSummary_EscGoesToPlugins(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyTDD
-	m.mcpSelections = map[string]bool{"context7": true}
-	m.pluginSelections = make(map[string]bool)
-
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model := updated.(Model)
-
-	if model.screen != screenInitModelTier {
-		t.Errorf("screen = %d, want screenInitModelTier (%d) after esc", model.screen, screenInitModelTier)
 	}
 }
 
@@ -700,53 +713,6 @@ func TestInitPlugins_TDDBlockMessage(t *testing.T) {
 	}
 }
 
-// ─── Summary Screen Tests ──────────────────────────────────────────────────────
-
-func TestInitSummary_ShowsAgentList(t *testing.T) {
-	adapters := []domain.Adapter{
-		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
-	}
-	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyTDD
-	m.mcpSelections = map[string]bool{"context7": true}
-	m.pluginSelections = make(map[string]bool)
-
-	view := m.View()
-	if !strings.Contains(view, "opencode") {
-		t.Errorf("summary should show adapter name 'opencode', got:\n%s", view)
-	}
-}
-
-func TestInitSummary_ShowsWillCreate(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyTDD
-	m.mcpSelections = map[string]bool{"context7": true}
-	m.pluginSelections = make(map[string]bool)
-
-	view := m.View()
-	if !strings.Contains(view, "This will create") {
-		t.Errorf("summary should show 'This will create', got:\n%s", view)
-	}
-	if !strings.Contains(view, ".squadai/project.json") {
-		t.Errorf("summary should show '.squadai/project.json', got:\n%s", view)
-	}
-}
-
-func TestInitSummary_MCPNoneWhenEmpty(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyTDD
-	m.mcpSelections = map[string]bool{} // empty
-	m.pluginSelections = make(map[string]bool)
-
-	view := m.View()
-	if !strings.Contains(view, "(none)") {
-		t.Errorf("summary with empty MCP selections should show '(none)', got:\n%s", view)
-	}
-}
-
 // ─── Team Status New Tests ─────────────────────────────────────────────────────
 
 func TestTeamStatus_ShowsMCPSection(t *testing.T) {
@@ -824,71 +790,27 @@ func TestViewResult_ShowsSuccessMessage(t *testing.T) {
 	}
 }
 
-// ─── Back Navigation Test ──────────────────────────────────────────────────────
-
-func TestInitWizard_BackNavigation_FullRound(t *testing.T) {
-	// Start at summary, navigate back through each screen to menu.
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyTDD
-	m.mcpSelections = map[string]bool{"context7": true}
-	m.pluginSelections = make(map[string]bool)
-
-	// Esc from summary → model tier
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model := updated.(Model)
-	if model.screen != screenInitModelTier {
-		t.Errorf("esc from summary: screen = %d, want screenInitModelTier (%d)", model.screen, screenInitModelTier)
-	}
-
-	// Esc from model tier → plugins
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model = updated.(Model)
-	if model.screen != screenInitPlugins {
-		t.Errorf("esc from model tier: screen = %d, want screenInitPlugins (%d)", model.screen, screenInitPlugins)
-	}
-
-	// Esc from plugins → MCP
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model = updated.(Model)
-	if model.screen != screenInitMCP {
-		t.Errorf("esc from plugins: screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
-	}
-
-	// Esc from MCP → methodology
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model = updated.(Model)
-	if model.screen != screenInitMethodology {
-		t.Errorf("esc from MCP: screen = %d, want screenInitMethodology (%d)", model.screen, screenInitMethodology)
-	}
-
-	// Esc from methodology → menu
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model = updated.(Model)
-	if model.screen != screenMenu {
-		t.Errorf("esc from methodology: screen = %d, want screenMenu (%d)", model.screen, screenMenu)
-	}
-}
-
 // ─── Wizard Flow Tests ────────────────────────────────────────────────────────
 
 func TestInitWizard_MCPPreSelectedContext7(t *testing.T) {
+	// Context7 is pre-selected when entering screenInitMCP.
+	// For Custom preset: this happens at screenInitModelTier enter.
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitMethodology
-	m.initCursor = 0 // TDD
+	m.screen = screenInitModelTier
+	m.setupPreset = domain.PresetCustom
+	m.initCursor = 0 // Balanced
 
-	// Select TDD — should pre-select context7
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
 	if model.screen != screenInitMCP {
-		t.Errorf("after methodology select: screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
+		t.Errorf("after model tier select: screen = %d, want screenInitMCP (%d)", model.screen, screenInitMCP)
 	}
 	if model.mcpSelections == nil {
-		t.Fatal("mcpSelections should be initialized after methodology selection")
+		t.Fatal("mcpSelections should be initialized after model tier selection")
 	}
 	if !model.mcpSelections["context7"] {
-		t.Error("context7 should be pre-selected after methodology selection")
+		t.Error("context7 should be pre-selected after model tier selection")
 	}
 }
 
@@ -911,105 +833,6 @@ func TestSortedKeys_DeterministicOrder(t *testing.T) {
 		if k != expected[i] {
 			t.Errorf("sortedKeys[%d] = %q, want %q", i, k, expected[i])
 		}
-	}
-}
-
-// ─── Item 1.3 Part B: TUI wizard passes MCP/plugin args ──────────────────────
-
-// capturedArgs captures what args were passed to RunInit by executing the
-// summary screen's enter handler and checking the resulting command output.
-// We do this indirectly by verifying the model transitions to screenRunning
-// and by inspecting the cmd function's closure via commandResult.
-
-func TestInitSummary_Enter_BuildsArgWithMCPSelections(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyTDD
-	m.mcpSelections = map[string]bool{
-		"context7": true,
-	}
-	m.pluginSelections = make(map[string]bool)
-
-	// Press enter — should transition to screenRunning and return a cmd.
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model := updated.(Model)
-
-	if model.screen != screenRunning {
-		t.Errorf("screen = %d, want screenRunning (%d) after enter", model.screen, screenRunning)
-	}
-	if cmd == nil {
-		t.Fatal("enter on summary should return a command")
-	}
-	// Execute the command and inspect the result.
-	// The cmd runs RunInit which will fail (no real project dir) but that's okay —
-	// we just need to confirm a command was produced (non-nil cmd).
-}
-
-func TestInitSummary_Enter_BuildsArgWithPluginSelections(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologySDD
-	m.mcpSelections = make(map[string]bool)
-	m.pluginSelections = map[string]bool{
-		"code-review": true,
-		"superpowers": false, // not selected
-	}
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model := updated.(Model)
-
-	if model.screen != screenRunning {
-		t.Errorf("screen = %d, want screenRunning (%d) after enter", model.screen, screenRunning)
-	}
-	if cmd == nil {
-		t.Fatal("enter on summary should return a command")
-	}
-}
-
-func TestInitSummary_Enter_NoSelectionsNoMCPFlag(t *testing.T) {
-	// When no MCP servers are selected, no --mcp flag should be added.
-	// We can test the model transitions correctly.
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyConventional
-	m.mcpSelections = map[string]bool{
-		"context7": false, // explicitly deselected
-	}
-	m.pluginSelections = make(map[string]bool)
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model := updated.(Model)
-
-	if model.screen != screenRunning {
-		t.Errorf("screen = %d, want screenRunning (%d) after enter with no MCP", model.screen, screenRunning)
-	}
-	if cmd == nil {
-		t.Fatal("enter on summary should return a command even with no MCP selections")
-	}
-}
-
-func TestInitSummary_Enter_MultipleMCPSelectionsSorted(t *testing.T) {
-	// Verify that with multiple MCP servers selected, the resulting args
-	// are built (cmd is non-nil) and the screen transitions to running.
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitSummary
-	m.methodology = domain.MethodologyTDD
-	// Pre-populate with multiple entries to test sorting logic.
-	m.mcpSelections = map[string]bool{
-		"context7": true,
-		"zebra":    true,
-		"alpha":    false,
-	}
-	m.pluginSelections = make(map[string]bool)
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model := updated.(Model)
-
-	if model.screen != screenRunning {
-		t.Errorf("screen = %d, want screenRunning (%d)", model.screen, screenRunning)
-	}
-	if cmd == nil {
-		t.Fatal("enter should produce a command")
 	}
 }
 
@@ -1490,7 +1313,7 @@ func TestInitModelTier_ScreenExists(t *testing.T) {
 		screenTeamStatus,
 		screenInitMCP,
 		screenInitPlugins,
-		screenInitSummary,
+		screenInitScope,
 		screenInitAdapters,
 		screenInitPreset,
 		screenInitInstallSummary,
@@ -1513,18 +1336,19 @@ func TestInitModelTier_DefaultIsBalanced(t *testing.T) {
 	}
 }
 
-// TestInitModelTier_Enter_AdvancesToNextScreen verifies that pressing enter on
-// the model tier screen stores the selected tier and advances to screenInitInstallSummary.
-func TestInitModelTier_Enter_AdvancesToNextScreen(t *testing.T) {
+// TestInitModelTier_Enter_AdvancesToMCP verifies that pressing enter on
+// the model tier screen stores the selected tier and advances to screenInitMCP.
+func TestInitModelTier_Enter_AdvancesToMCP(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitModelTier
+	m.setupPreset = domain.PresetCustom
 	m.initCursor = 0 // balanced is first
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitInstallSummary {
-		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter on model tier", model.screen, screenInitInstallSummary)
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d) after enter on model tier", model.screen, screenInitMCP)
 	}
 	if model.modelTier != domain.ModelTierBalanced {
 		t.Errorf("modelTier = %q, want %q after selecting first option", model.modelTier, domain.ModelTierBalanced)
@@ -1545,7 +1369,7 @@ func TestInitAdapters_ScreenExists(t *testing.T) {
 		screenInitMCP,
 		screenInitPlugins,
 		screenInitModelTier,
-		screenInitSummary,
+		screenInitScope,
 		screenInitPreset,
 		screenInitInstallSummary,
 		screenSkillBrowser,
@@ -1558,7 +1382,7 @@ func TestInitAdapters_ScreenExists(t *testing.T) {
 	}
 }
 
-func TestInitPlugins_Enter_GoesToAdapters(t *testing.T) {
+func TestInitPlugins_Enter_GoesToInstallSummary(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPlugins
 	m.pluginSelections = make(map[string]bool)
@@ -1566,12 +1390,12 @@ func TestInitPlugins_Enter_GoesToAdapters(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitAdapters {
-		t.Errorf("screen = %d, want screenInitAdapters (%d) after enter on plugins", model.screen, screenInitAdapters)
+	if model.screen != screenInitInstallSummary {
+		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter on plugins", model.screen, screenInitInstallSummary)
 	}
 }
 
-func TestInitAdapters_Esc_GoesToPlugins(t *testing.T) {
+func TestInitAdapters_Esc_GoesToPreset(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitAdapters
 	m.agentSelections = make(map[string]bool)
@@ -1579,21 +1403,36 @@ func TestInitAdapters_Esc_GoesToPlugins(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenInitPlugins {
-		t.Errorf("screen = %d, want screenInitPlugins (%d) after esc on adapters", model.screen, screenInitPlugins)
+	if model.screen != screenInitPreset {
+		t.Errorf("screen = %d, want screenInitPreset (%d) after esc on adapters", model.screen, screenInitPreset)
 	}
 }
 
-func TestInitAdapters_Enter_GoesToPreset(t *testing.T) {
+func TestInitAdapters_Enter_GoesToMethodology_WhenCustom(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitAdapters
+	m.setupPreset = domain.PresetCustom
 	m.agentSelections = make(map[string]bool)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitPreset {
-		t.Errorf("screen = %d, want screenInitPreset (%d) after enter on adapters", model.screen, screenInitPreset)
+	if model.screen != screenInitMethodology {
+		t.Errorf("screen = %d, want screenInitMethodology (%d) after enter on adapters (custom)", model.screen, screenInitMethodology)
+	}
+}
+
+func TestInitAdapters_Enter_GoesToMCP_WhenNonCustom(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitAdapters
+	m.setupPreset = domain.PresetFullSquad
+	m.agentSelections = make(map[string]bool)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d) after enter on adapters (non-custom)", model.screen, screenInitMCP)
 	}
 }
 
@@ -1674,10 +1513,10 @@ func TestInitAdapters_AllDetectedPreChecked(t *testing.T) {
 		&mockAdapter{id: domain.AgentClaudeCode, lane: domain.LanePersonal},
 	}
 	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
-	m.screen = screenInitPlugins
-	m.pluginSelections = make(map[string]bool)
+	m.screen = screenInitPreset
+	m.initCursor = 0 // Full Squad
 
-	// Pressing enter on plugins → adapters should pre-check detected agents.
+	// Pressing enter on preset → adapters should pre-check detected agents.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
@@ -1708,7 +1547,7 @@ func TestInitPreset_ScreenExists(t *testing.T) {
 		screenInitMCP,
 		screenInitPlugins,
 		screenInitModelTier,
-		screenInitSummary,
+		screenInitScope,
 		screenInitAdapters,
 		screenInitInstallSummary,
 		screenSkillBrowser,
@@ -1753,7 +1592,7 @@ func TestInitPreset_Lean_SetsMethodologyAndTier(t *testing.T) {
 	}
 }
 
-func TestInitPreset_Custom_GoesToMethodology(t *testing.T) {
+func TestInitPreset_Custom_GoesToAdapters(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPreset
 	m.initCursor = 2 // Custom is third
@@ -1761,12 +1600,12 @@ func TestInitPreset_Custom_GoesToMethodology(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitMethodology {
-		t.Errorf("screen = %d, want screenInitMethodology (%d) for custom preset", model.screen, screenInitMethodology)
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) for custom preset", model.screen, screenInitAdapters)
 	}
 }
 
-func TestInitPreset_FullSquad_SkipsToInstallSummary(t *testing.T) {
+func TestInitPreset_FullSquad_GoesToAdapters(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPreset
 	m.initCursor = 0 // Full Squad
@@ -1774,20 +1613,20 @@ func TestInitPreset_FullSquad_SkipsToInstallSummary(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitInstallSummary {
-		t.Errorf("screen = %d, want screenInitInstallSummary (%d) for full-squad", model.screen, screenInitInstallSummary)
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) for full-squad", model.screen, screenInitAdapters)
 	}
 }
 
-func TestInitPreset_Esc_GoesToAdapters(t *testing.T) {
+func TestInitPreset_Esc_GoesToScope(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPreset
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenInitAdapters {
-		t.Errorf("screen = %d, want screenInitAdapters (%d) after esc on preset", model.screen, screenInitAdapters)
+	if model.screen != screenInitScope {
+		t.Errorf("screen = %d, want screenInitScope (%d) after esc on preset", model.screen, screenInitScope)
 	}
 }
 
@@ -1879,15 +1718,29 @@ func TestInstallSummary_Enter_GoesToApplyPrompt(t *testing.T) {
 	}
 }
 
-func TestInstallSummary_Esc_GoesToPreset(t *testing.T) {
+func TestInstallSummary_Esc_GoesToPlugins_WhenCustom(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitInstallSummary
+	m.setupPreset = domain.PresetCustom
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenInitPreset {
-		t.Errorf("screen = %d, want screenInitPreset (%d) after esc on install summary", model.screen, screenInitPreset)
+	if model.screen != screenInitPlugins {
+		t.Errorf("screen = %d, want screenInitPlugins (%d) after esc on install summary (custom)", model.screen, screenInitPlugins)
+	}
+}
+
+func TestInstallSummary_Esc_GoesToMCP_WhenNonCustom(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.setupPreset = domain.PresetFullSquad
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+
+	if model.screen != screenInitMCP {
+		t.Errorf("screen = %d, want screenInitMCP (%d) after esc on install summary (non-custom)", model.screen, screenInitMCP)
 	}
 }
 

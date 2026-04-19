@@ -48,6 +48,7 @@ func RunInit(args []string, stdout io.Writer) error {
 	force := false
 	merge := false
 	jsonOut := false
+	global := false
 	var methodology string
 	methodologyExplicit := false
 	var mcpFlag string
@@ -108,8 +109,10 @@ func RunInit(args []string, stdout io.Writer) error {
 			merge = true
 		case "--json":
 			jsonOut = true
+		case "--global":
+			global = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--force] [--merge] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--force] [--merge] [--json] [--global]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Initialize .squadai/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
@@ -138,6 +141,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "                 full-squad: SDD methodology, balanced models, all components")
 			fmt.Fprintln(stdout, "                 lean: conventional methodology, starter models, core only")
 			fmt.Fprintln(stdout, "                 custom: explicit flags or wizard defaults")
+			fmt.Fprintln(stdout, "  --global       Apply configuration globally (home directory) instead of the current project.")
 			fmt.Fprintln(stdout, "  --with-policy  Also create .squadai/policy.json with a starter template.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
 			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
@@ -227,6 +231,14 @@ func RunInit(args []string, stdout io.Writer) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		homeDir = "" // non-fatal, adapter detection will be limited
+	}
+
+	// When --global is set, target the home directory instead of the project directory.
+	if global {
+		if homeDir == "" {
+			return fmt.Errorf("--global: could not determine home directory")
+		}
+		projectDir = homeDir
 	}
 
 	// Detect project metadata.

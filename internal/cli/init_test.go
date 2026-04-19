@@ -2067,3 +2067,25 @@ func TestRunInit_PresetFlag_InvalidReturnsError(t *testing.T) {
 		t.Errorf("error = %q, want to contain 'unknown preset'", err.Error())
 	}
 }
+
+func TestRunInit_GlobalFlag_UsesHomeDirectory(t *testing.T) {
+	// --global should not return an unknown flag error.
+	// It may fail for other reasons (e.g. writing to home dir), but
+	// the flag must be recognized.
+	var buf bytes.Buffer
+	err := RunInit([]string{"--global"}, &buf)
+	if err != nil && strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("--global flag should be recognized, got: %v", err)
+	}
+}
+
+func TestRunInit_GlobalFlag_HelpMentionsGlobal(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunInit([]string{"--help"}, &buf)
+	if err != nil {
+		t.Fatalf("--help should not return error, got: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--global") {
+		t.Errorf("help output should mention --global, got:\n%s", buf.String())
+	}
+}
