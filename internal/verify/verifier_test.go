@@ -779,7 +779,12 @@ func TestVerify_HealthCheck_ConfiguredButNotDetected(t *testing.T) {
 func TestVerify_HealthCheck_DetectedButNotConfigured(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
-	adapter := opencode.New()
+	// Inject a fake lookPath so detection is deterministic regardless of
+	// whether opencode is installed on the host (CI runners don't have it).
+	adapter := opencode.NewWithDeps(
+		func(string) (string, error) { return "/fake/path/opencode", nil },
+		os.Stat,
+	)
 
 	// Config does NOT include opencode.
 	cfg := &domain.MergedConfig{
