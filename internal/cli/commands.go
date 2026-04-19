@@ -21,6 +21,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/backup"
 	"github.com/PedroMosquera/squadai/internal/config"
+	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/managed"
@@ -31,6 +32,9 @@ import (
 	"github.com/PedroMosquera/squadai/internal/state"
 	"github.com/PedroMosquera/squadai/internal/verify"
 )
+
+// Version is the CLI version string, set by app before calling any Run* function.
+var Version = "dev"
 
 // initResult is the JSON representation of a successful init run.
 type initResult struct {
@@ -2823,6 +2827,88 @@ func applyModelOverrides(merged *domain.MergedConfig, overrides []string) error 
 		role := merged.Team[roleName]
 		role.Model = tierStr
 		merged.Team[roleName] = role
+	}
+	return nil
+}
+
+// RunDoctor runs pre-flight diagnostics and reports environment, agent, config,
+// MCP, filesystem, and config-drift health. It is read-only and never modifies any files.
+//
+// Flags:
+//
+//	--json              Output structured JSON for CI integration.
+//	--verbose / -v      Show detail and fix hints for all checks.
+//	--category=<slug>   Run only the specified category (environment|agents|config|mcp|filesystem|drift).
+//	--check=<cat.name>  Run only a single named check (e.g. mcp.github).
+//
+// Exit code: 0 when all checks pass/warn/skip; non-zero when any check fails.
+func RunDoctor(args []string, stdout io.Writer) error {
+	var opts doctor.Options
+	for _, arg := range args {
+		switch {
+		case arg == "--json":
+			opts.JSON = true
+		case arg == "--verbose" || arg == "-v":
+			opts.Verbose = true
+		case strings.HasPrefix(arg, "--category="):
+			opts.Category = strings.TrimPrefix(arg, "--category=")
+		case strings.HasPrefix(arg, "--check="):
+			opts.Check = strings.TrimPrefix(arg, "--check=")
+		case arg == "-h" || arg == "--help":
+			fmt.Fprintln(stdout, "Usage: squadai doctor [--json] [--verbose] [--category=<slug>] [--check=<cat.name>]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Run pre-flight diagnostics across six check categories: Environment, AI Agents,")
+			fmt.Fprintln(stdout, "Project Configuration, MCP Servers, Filesystem, and Config Drift. Read-only.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json                    Output structured JSON for CI integration.")
+			fmt.Fprintln(stdout, "  --verbose / -v            Show detail and fix hints for all checks.")
+			fmt.Fprintln(stdout, "  --category=<slug>         Run only one category.")
+			fmt.Fprintln(stdout, "                            Slugs: environment, agents, config, mcp, filesystem, drift")
+			fmt.Fprintln(stdout, "  --check=<category.name>   Run only a single named check (e.g. --check=mcp.github).")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Exit code: 0 = all pass/warn/skip, 1 = any fail.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  squadai doctor")
+			fmt.Fprintln(stdout, "  squadai doctor --json")
+			fmt.Fprintln(stdout, "  squadai doctor --verbose")
+			fmt.Fprintln(stdout, "  squadai doctor --category=mcp")
+			fmt.Fprintln(stdout, "  squadai doctor --check=mcp.github")
+			return nil
+		}
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	adapters := DetectAdapters(homeDir)
+	catalog := domain.DefaultMCPCatalog()
+
+	d := doctor.New(homeDir, projectDir, adapters, catalog)
+	results, err := d.Run(context.Background(), opts)
+	if err != nil {
+		return fmt.Errorf("doctor: %w", err)
+	}
+
+	if opts.JSON {
+		return doctor.RenderJSON(stdout, results, Version)
+	}
+
+	doctor.RenderHuman(stdout, results, Version, opts.Verbose)
+
+	// Exit code 1 if any check failed.
+	for _, r := range results {
+		if r.Status == doctor.CheckFail {
+			return fmt.Errorf("doctor found issues that need attention")
+		}
 	}
 	return nil
 }
