@@ -1016,3 +1016,47 @@ func TestValidator_NonHybridMode_PassedThrough(t *testing.T) {
 		}
 	}
 }
+
+// ─── TeamRole model tier validation ─────────────────────────────────────────
+
+func TestValidateProject_TeamRole_ValidModelTier(t *testing.T) {
+	for _, tier := range []string{"premium", "standard", "cheap"} {
+		cfg := &domain.ProjectConfig{
+			Version:    1,
+			Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+			Team: map[string]domain.TeamRole{
+				"orchestrator": {Description: "Orchestrator", Mode: "subagent", Model: tier},
+			},
+		}
+		issues := ValidateProject(cfg)
+		if len(issues) != 0 {
+			t.Errorf("tier %q should be valid, got issues: %v", tier, issues)
+		}
+	}
+}
+
+func TestValidateProject_TeamRole_EmptyModelTier_Valid(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Team: map[string]domain.TeamRole{
+			"orchestrator": {Description: "Orchestrator", Mode: "subagent"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	if len(issues) != 0 {
+		t.Errorf("empty model tier should be valid (uses default), got: %v", issues)
+	}
+}
+
+func TestValidateProject_TeamRole_InvalidModelTier(t *testing.T) {
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Team: map[string]domain.TeamRole{
+			"orchestrator": {Description: "Orchestrator", Mode: "subagent", Model: "balanced"},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, "unknown_model_tier")
+}
