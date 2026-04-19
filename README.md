@@ -234,8 +234,6 @@ Policy (locked fields)  >  Project config  >  User defaults
 | `team` | Policy-controlled. Required settings enforced, locked fields immutable. |
 | `personal` | User-controlled. Optional adapters and personal defaults. |
 
-> **Note:** `hybrid` mode is deprecated. SquadAI resolves it automatically based on `policy.json` presence.
-
 ---
 
 ## Commands
