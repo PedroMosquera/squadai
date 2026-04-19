@@ -18,6 +18,7 @@ type Executor struct {
 	projectDir     string
 	copilotCfg     domain.CopilotConfig
 	backupStore    *backup.Store // nil = no backup/rollback
+	sink           EventSink     // progress event sink; defaults to NopSink
 }
 
 // New returns an Executor configured with component installers and copilot manager.
@@ -35,7 +36,18 @@ func New(
 		projectDir:     projectDir,
 		copilotCfg:     copilotCfg,
 		backupStore:    backupStore,
+		sink:           NopSink{},
 	}
+}
+
+// WithSink sets the event sink for progress reporting.
+// Call before Execute. Returns e to allow method chaining.
+func (e *Executor) WithSink(s EventSink) *Executor {
+	if s == nil {
+		s = NopSink{}
+	}
+	e.sink = s
+	return e
 }
 
 // Execute runs all planned actions in order, collecting step results.
@@ -55,23 +67,47 @@ func (e *Executor) Execute(plan []domain.PlannedAction) (*domain.ApplyReport, er
 		Success: true,
 	}
 
+	total := len(plan)
+	e.sink.Send(Event{Type: EventPipelineStart, Total: total})
+
 	// Create backup if store is configured.
 	if e.backupStore != nil {
 		paths := collectTargetPaths(plan)
 		if len(paths) > 0 {
 			manifest, err := e.backupStore.SnapshotFiles(paths, "apply")
 			if err != nil {
+				e.sink.Send(Event{Type: EventPipelineDone, Total: total})
 				return nil, fmt.Errorf("%w: %v", domain.ErrBackupFailed, err)
 			}
 			report.BackupID = manifest.ID
 		}
 	}
 
+loop:
 	for i, action := range plan {
+		ev := Event{
+			Component: string(action.Component),
+			Adapter:   string(action.Agent),
+			Action:    string(action.Action),
+			Path:      action.TargetPath,
+			Index:     i,
+			Total:     total,
+		}
+
+		ev.Type = EventStepStart
+		e.sink.Send(ev)
+
 		result := e.executeOne(action)
 		report.Steps = append(report.Steps, result)
 
-		if result.Status == domain.StepFailed {
+		switch {
+		case result.Status == domain.StepFailed:
+			ev.Type = EventStepFailed
+			if result.Error != "" {
+				ev.Err = fmt.Errorf("%s", result.Error) //nolint:err113
+			}
+			e.sink.Send(ev)
+
 			report.Success = false
 
 			if e.backupStore != nil {
@@ -86,6 +122,7 @@ func (e *Executor) Execute(plan []domain.PlannedAction) (*domain.ApplyReport, er
 				// Rollback from backup.
 				if report.BackupID != "" {
 					if err := e.backupStore.Rollback(report.BackupID); err != nil {
+						e.sink.Send(Event{Type: EventPipelineDone, Total: total})
 						return report, fmt.Errorf("%w: %v", domain.ErrRollbackFailed, err)
 					}
 				}
@@ -105,12 +142,21 @@ func (e *Executor) Execute(plan []domain.PlannedAction) (*domain.ApplyReport, er
 					}
 				}
 
-				break
+				break loop
 			}
 			// Without backup store, continue executing remaining actions (legacy).
+
+		case action.Action == domain.ActionSkip:
+			ev.Type = EventStepSkipped
+			e.sink.Send(ev)
+
+		default:
+			ev.Type = EventStepDone
+			e.sink.Send(ev)
 		}
 	}
 
+	e.sink.Send(Event{Type: EventPipelineDone, Total: total})
 	return report, nil
 }
 
