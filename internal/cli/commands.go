@@ -1016,9 +1016,22 @@ func RunPlan(args []string, stdout io.Writer) error {
 
 // RunApply executes the plan with backup safety and step-level reporting.
 func RunApply(args []string, stdout io.Writer) error {
+	return runApplyImpl(args, stdout, nil)
+}
+
+// RunApplyWithProgress is like RunApply but forwards pipeline events to sink.
+// When sink is nil it behaves identically to RunApply.
+func RunApplyWithProgress(args []string, stdout io.Writer, sink pipeline.EventSink) error {
+	return runApplyImpl(args, stdout, sink)
+}
+
+// runApplyImpl is the shared implementation for RunApply and RunApplyWithProgress.
+// externalSink is used when non-nil; the --verbose flag creates its own internal sink.
+func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSink) error {
 	dryRun := false
 	jsonOut := false
 	force := false
+	verbose := false
 	setClaudeDefaultAgent := false
 	respectState := true
 	var explicitAgents []string
@@ -1031,6 +1044,8 @@ func RunApply(args []string, stdout io.Writer) error {
 			jsonOut = true
 		case arg == "--force":
 			force = true
+		case arg == "--verbose":
+			verbose = true
 		case arg == "--set-claude-default-agent":
 			setClaudeDefaultAgent = true
 		case arg == "--respect-state" || arg == "--respect-state=true":
@@ -1053,7 +1068,7 @@ func RunApply(args []string, stdout io.Writer) error {
 				}
 			}
 		case arg == "-h" || arg == "--help":
-			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--model role=tier,...]")
+			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--verbose] [--model role=tier,...]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -1067,6 +1082,7 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --dry-run           Preview the actions that would be executed without writing any files.")
 			fmt.Fprintln(stdout, "  --json              Output the execution report as JSON (includes backup ID and step results).")
 			fmt.Fprintln(stdout, "  --force             Apply with default config even when no project.json is found.")
+			fmt.Fprintln(stdout, "  --verbose           Stream per-step progress to stderr as each action executes.")
 			fmt.Fprintln(stdout, "  --agent=<csv>       Explicitly select agents to apply (e.g. opencode,cursor). Bypasses state filter.")
 			fmt.Fprintln(stdout, "  --model=role=tier,... Override model tier per role for this run (in-memory only).")
 			fmt.Fprintln(stdout, "                      Tiers: premium, standard, cheap. Example: --model=orchestrator=premium,implementer=cheap")
@@ -1079,6 +1095,7 @@ func RunApply(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  squadai apply --dry-run")
 			fmt.Fprintln(stdout, "  squadai apply --json")
 			fmt.Fprintln(stdout, "  squadai apply --force")
+			fmt.Fprintln(stdout, "  squadai apply --verbose")
 			fmt.Fprintln(stdout, "  squadai apply --no-respect-state")
 			fmt.Fprintln(stdout, "  squadai apply --model=orchestrator=premium,implementer=cheap")
 			return nil
@@ -1159,7 +1176,37 @@ func RunApply(args []string, stdout io.Writer) error {
 		store,
 	)
 
+	// Determine the effective event sink.
+	// --verbose takes precedence and creates its own channel sink.
+	// If externalSink was provided (e.g. from TUI), use it when not verbose.
+	var effectiveSink pipeline.EventSink
+	var verboseCh chan pipeline.Event
+	var verboseDone chan struct{}
+	if verbose {
+		verboseCh = make(chan pipeline.Event, len(actions)+4)
+		effectiveSink = pipeline.NewChannelSink(verboseCh, true)
+		verboseDone = make(chan struct{})
+		go func() {
+			defer close(verboseDone)
+			for ev := range verboseCh {
+				fmt.Fprintln(os.Stderr, ev.String())
+			}
+		}()
+	} else if externalSink != nil {
+		effectiveSink = externalSink
+	} else {
+		effectiveSink = pipeline.NopSink{}
+	}
+
+	exec.WithSink(effectiveSink)
 	report, execErr := exec.Execute(actions)
+
+	if verbose {
+		// Close the channel so the drainer goroutine exits, then wait for it.
+		close(verboseCh)
+		<-verboseDone
+	}
+
 	if execErr != nil {
 		if errors.Is(execErr, domain.ErrBackupFailed) {
 			return fmt.Errorf("backup failed before apply: %w", execErr)
