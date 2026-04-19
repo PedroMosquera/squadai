@@ -329,9 +329,43 @@ Download the binary for your architecture from [Releases](https://github.com/Ped
 curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
 ```
 
-### Homebrew
+### Homebrew (macOS / Linux)
 
-Coming soon.
+```sh
+brew install PedroMosquera/tap/squadai
+```
+
+To upgrade:
+
+```sh
+brew upgrade squadai
+```
+
+The formula is published to [PedroMosquera/homebrew-tap](https://github.com/PedroMosquera/homebrew-tap) automatically by every release.
+
+### Self-update (built-in)
+
+Once installed, squadai can check for and apply its own updates:
+
+```sh
+squadai update --enable-checks   # opt in to once-per-day background checks
+squadai update --check           # see if a newer release exists
+squadai update                   # download + stage the latest; applies on next launch
+```
+
+Updates are disabled by default to avoid background network activity. The self-updater skips the swap if the binary lives in a system-managed path (e.g. installed via Homebrew) — use `brew upgrade squadai` instead.
+
+### Windows
+
+Windows binaries (`squadai_<version>_windows_<arch>.zip`) are published to every release. Native installer support (Scoop / WinGet) is **coming soon**. For now:
+
+```powershell
+# Option 1: from source (requires Go 1.24+)
+go install github.com/PedroMosquera/squadai/cmd/squadai@latest
+
+# Option 2: download the .zip from https://github.com/PedroMosquera/squadai/releases/latest
+# and extract squadai.exe to a directory on your PATH.
+```
 
 ---
 
@@ -339,9 +373,9 @@ Coming soon.
 
 | Platform | Status |
 |----------|--------|
-| macOS (darwin/arm64, darwin/amd64) | Fully supported |
-| Linux (linux/amd64, linux/arm64) | Supported |
-| Windows | Planned |
+| macOS (darwin/arm64, darwin/amd64) | Fully supported — Homebrew + self-update |
+| Linux (linux/amd64, linux/arm64) | Fully supported — Homebrew + self-update |
+| Windows (windows/amd64, windows/arm64) | Binaries published — Scoop/WinGet planned |
 
 ---
 
