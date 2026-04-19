@@ -60,9 +60,9 @@ Run `squadai` with no arguments to launch the interactive TUI wizard (methodolog
 
 | Agent | Config File | Delegation | MCP Strategy |
 |-------|------------|------------|--------------|
-| OpenCode | `AGENTS.md` | native (sub-agent files in `.opencode/agents/`) | MergeIntoSettings (`.opencode/config.json` `"mcp"` key) |
-| Claude Code | `CLAUDE.md` | prompt (Task tool injection) | SeparateMCPFiles (`~/.claude/mcp/<server>.json`) |
-| VS Code Copilot | `.github/copilot-instructions.md` | solo (all-in-one prompt) | MCPConfigFile (`.vscode/mcp.json`) |
+| OpenCode | `AGENTS.md` | native (sub-agent files in `.opencode/agents/`) | MergeIntoSettings (`opencode.json` `"mcp"` key) |
+| Claude Code | `CLAUDE.md` | prompt (Task tool injection) | MCPConfigFile (`<project>/.mcp.json`) |
+| VS Code Copilot | `.instructions.md` | solo (all-in-one prompt) | MCPConfigFile (`.vscode/mcp.json`) |
 | Cursor | `.cursor/rules/squadai.mdc` | native (agent files in `.cursor/agents/`) | MCPConfigFile (`.cursor/mcp.json`) |
 | Windsurf | `.windsurf/rules/squadai.md` | solo + workflows | MCPConfigFile (`.windsurf/mcp_config.json`) |
 
@@ -102,7 +102,7 @@ Monorepo support: when multiple languages are detected, all language standards a
 |-----------|-----|-----------------|
 | Memory Protocol | `memory` | Session persistence files (`AGENTS.md`, `CLAUDE.md`) with marker blocks |
 | Team Rules | `rules` | Team coding standards injected into each agent's system prompt |
-| Editor Settings | `settings` | Agent-specific config files (`.opencode/config.json`, `.vscode/settings.json`, etc.) |
+| Editor Settings | `settings` | Agent-specific config files (`opencode.json`, `.vscode/settings.json`, etc.) |
 | MCP Servers | `mcp` | MCP server definitions in each agent's native format |
 | Team Agents | `agents` | Sub-agent role definitions (orchestrator, implementer, reviewer, etc.) |
 | Methodology Skills | `skills` | Skill files for each methodology phase (TDD red-green-refactor, SDD spec workflow, etc.) |

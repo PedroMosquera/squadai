@@ -647,6 +647,8 @@ func (i *Installer) buildTemplateDataFromAction(cfg *domain.MergedConfig, roleNa
 }
 
 // delegationStrategyForAgent returns the delegation strategy string for a known agent ID.
+// This is a fallback used when the adapter object is not available; callers should
+// prefer adapter.DelegationStrategy() when the adapter is accessible.
 func delegationStrategyForAgent(id domain.AgentID) string {
 	switch id {
 	case domain.AgentClaudeCode:
@@ -654,6 +656,8 @@ func delegationStrategyForAgent(id domain.AgentID) string {
 	case domain.AgentVSCodeCopilot, domain.AgentWindsurf:
 		return "solo"
 	default:
+		// Unknown agent — log a prominent warning and return the safe default.
+		fmt.Fprintf(os.Stderr, "WARNING: delegationStrategyForAgent: unknown agent %q, defaulting to \"native\"\n", id)
 		return "native"
 	}
 }

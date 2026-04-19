@@ -152,6 +152,22 @@ func (a *Adapter) WorkflowsDir(projectDir string) string {
 	return filepath.Join(projectDir, ".windsurf", "workflows")
 }
 
+// MCPRootKey returns "mcpServers" — Windsurf uses the standard mcpServers key.
+func (a *Adapter) MCPRootKey() string { return "mcpServers" }
+
+// MCPURLKey returns "serverUrl" — Windsurf uses a non-standard URL key.
+func (a *Adapter) MCPURLKey() string { return "serverUrl" }
+
+// MCPConfigPath returns <projectDir>/.windsurf/mcp_config.json.
+func (a *Adapter) MCPConfigPath(projectDir string) string {
+	return filepath.Join(projectDir, ".windsurf", "mcp_config.json")
+}
+
+// RulesFrontmatter returns YAML frontmatter for Windsurf's structured rules.
+func (a *Adapter) RulesFrontmatter() string {
+	return "---\ntrigger: always_on\n---\n\n"
+}
+
 // ConfigDir returns the root config directory for Windsurf.
 // On Windows it is %APPDATA%\Windsurf\User (falling back to homeDir\AppData\Roaming\Windsurf\User).
 // On all other platforms it is ~/.codeium/windsurf.

@@ -23,6 +23,9 @@ const (
 type Installer struct {
 	// content is the resolved team standards content to inject.
 	content string
+
+	// agentFrontmatter caches adapter-declared frontmatter per agent, populated during Plan.
+	agentFrontmatter map[domain.AgentID]string
 }
 
 // New returns a rules component installer with the resolved team standards content.
@@ -30,9 +33,12 @@ type Installer struct {
 //   - If TeamStandards is non-empty, use it directly (inline content).
 //   - If TeamStandardsFile is non-empty, read from .squadai/<path> in projectDir.
 //   - If both are empty, the installer produces no actions.
-func New(cfg domain.RulesConfig, projectDir string) *Installer {
-	content := resolveContent(cfg, projectDir)
-	return &Installer{content: content}
+func New(cfg domain.RulesConfig, projectDir string) (*Installer, error) {
+	content, err := resolveContent(cfg, projectDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve rules content: %w", err)
+	}
+	return &Installer{content: content, agentFrontmatter: make(map[domain.AgentID]string)}, nil
 }
 
 // ID returns the component identifier.
@@ -67,8 +73,12 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	actionID := fmt.Sprintf("%s-rules", adapter.ID())
 
+	// Cache adapter-declared frontmatter for use during Apply.
+	fm := adapter.RulesFrontmatter()
+	i.agentFrontmatter[adapter.ID()] = fm
+
 	// Structured rules (Windsurf/Cursor) use frontmatter comparison, not markers.
-	if fm := frontmatterForAgent(adapter.ID()); fm != "" {
+	if fm != "" {
 		expectedContent := fm + i.content
 		if !strings.HasSuffix(expectedContent, "\n") {
 			expectedContent += "\n"
@@ -160,7 +170,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	// Structured rules formats: Windsurf (.md with trigger frontmatter)
 	// and Cursor (.mdc with alwaysApply frontmatter) use full-file replacement
 	// with YAML frontmatter instead of marker-based injection.
-	if fm := frontmatterForAgent(action.Agent); fm != "" {
+	if fm := i.agentFrontmatter[action.Agent]; fm != "" {
 		updated = fm + i.content
 		if !strings.HasSuffix(updated, "\n") {
 			updated += "\n"
@@ -211,7 +221,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	doc := string(data)
 
 	// Structured rules (Windsurf/Cursor) use frontmatter, not markers.
-	if fm := frontmatterForAgent(adapter.ID()); fm != "" {
+	if fm := adapter.RulesFrontmatter(); fm != "" {
 		expectedContent := fm + i.content
 		if !strings.HasSuffix(expectedContent, "\n") {
 			expectedContent += "\n"
@@ -261,24 +271,11 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	return results, nil
 }
 
-// frontmatterForAgent returns the YAML frontmatter prefix for agents that use
-// structured rules files. Returns empty string for agents that use marker blocks.
-func frontmatterForAgent(agent domain.AgentID) string {
-	switch agent {
-	case domain.AgentWindsurf:
-		return "---\ntrigger: always_on\n---\n\n"
-	case domain.AgentCursor:
-		return "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n\n"
-	default:
-		return ""
-	}
-}
-
 // resolveContent resolves team standards content from RulesConfig.
-func resolveContent(cfg domain.RulesConfig, projectDir string) string {
+func resolveContent(cfg domain.RulesConfig, projectDir string) (string, error) {
 	// Inline content takes precedence.
 	if cfg.TeamStandards != "" {
-		return cfg.TeamStandards
+		return cfg.TeamStandards, nil
 	}
 
 	// File reference: relative to .squadai/ in projectDir.
@@ -286,10 +283,13 @@ func resolveContent(cfg domain.RulesConfig, projectDir string) string {
 		filePath := filepath.Join(projectDir, ".squadai", cfg.TeamStandardsFile)
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			return "" // silently skip if file not found
+			if os.IsNotExist(err) {
+				return "", nil // file not yet created — skip silently
+			}
+			return "", fmt.Errorf("read team standards file: %w", err)
 		}
-		return string(data)
+		return string(data), nil
 	}
 
-	return ""
+	return "", nil
 }

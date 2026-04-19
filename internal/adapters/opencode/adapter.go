@@ -164,3 +164,15 @@ func (a *Adapter) SupportsWorkflows() bool {
 func (a *Adapter) WorkflowsDir(_ string) string {
 	return ""
 }
+
+// MCPRootKey returns "mcp" — OpenCode merges MCP servers under the "mcp" key.
+func (a *Adapter) MCPRootKey() string { return "mcp" }
+
+// MCPURLKey returns "url" — OpenCode uses the standard URL key.
+func (a *Adapter) MCPURLKey() string { return "url" }
+
+// MCPConfigPath returns empty string — OpenCode uses MergeIntoSettings (no separate MCP file).
+func (a *Adapter) MCPConfigPath(_ string) string { return "" }
+
+// RulesFrontmatter returns empty string — OpenCode uses marker-based injection.
+func (a *Adapter) RulesFrontmatter() string { return "" }

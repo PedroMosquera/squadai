@@ -99,7 +99,7 @@ func (i *Installer) planClaudePlugin(adapter domain.Adapter, name string, plugin
 	description := fmt.Sprintf("plugin:claude:%s", name)
 
 	// Check if already enabled.
-	existing, err := readJSONFile(targetPath)
+	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil {
 		return domain.PlannedAction{}, fmt.Errorf("read settings for plugin %s: %w", name, err)
 	}
@@ -208,7 +208,7 @@ func (i *Installer) applyClaudePlugin(action domain.PlannedAction) error {
 		return fmt.Errorf("plugin %q not found in config", name)
 	}
 
-	existing, err := readJSONFile(action.TargetPath)
+	existing, err := fileutil.ReadJSONFile(action.TargetPath)
 	if err != nil {
 		return fmt.Errorf("read settings: %w", err)
 	}
@@ -307,7 +307,7 @@ func (i *Installer) verifyClaudePlugin(adapter domain.Adapter, name string, plug
 	targetPath := adapter.SettingsPath(homeDir)
 	checkName := fmt.Sprintf("plugin-%s-enabled", name)
 
-	existing, err := readJSONFile(targetPath)
+	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil || existing == nil {
 		return domain.VerifyResult{
 			Check:     checkName,
@@ -405,7 +405,7 @@ func (i *Installer) renderClaudePluginContent(action domain.PlannedAction) ([]by
 		return nil, fmt.Errorf("plugin %q not found in config", name)
 	}
 
-	existing, err := readJSONFile(action.TargetPath)
+	existing, err := fileutil.ReadJSONFile(action.TargetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read settings: %w", err)
 	}

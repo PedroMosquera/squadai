@@ -1810,10 +1810,14 @@ func (a *filterTestAdapter) ProjectCommandsDir(_ string) string          { retur
 func (a *filterTestAdapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationSoloAgent
 }
-func (a *filterTestAdapter) SupportsSubAgents() bool      { return false }
-func (a *filterTestAdapter) SubAgentsDir(_ string) string { return "" }
-func (a *filterTestAdapter) SupportsWorkflows() bool      { return false }
-func (a *filterTestAdapter) WorkflowsDir(_ string) string { return "" }
+func (a *filterTestAdapter) SupportsSubAgents() bool       { return false }
+func (a *filterTestAdapter) SubAgentsDir(_ string) string  { return "" }
+func (a *filterTestAdapter) SupportsWorkflows() bool       { return false }
+func (a *filterTestAdapter) WorkflowsDir(_ string) string  { return "" }
+func (a *filterTestAdapter) MCPRootKey() string            { return "mcpServers" }
+func (a *filterTestAdapter) MCPURLKey() string             { return "url" }
+func (a *filterTestAdapter) MCPConfigPath(_ string) string { return "" }
+func (a *filterTestAdapter) RulesFrontmatter() string      { return "" }
 
 func makeFilterAdapters(ids ...domain.AgentID) []domain.Adapter {
 	result := make([]domain.Adapter, 0, len(ids))

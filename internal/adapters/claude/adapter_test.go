@@ -166,7 +166,6 @@ func TestProjectPaths(t *testing.T) {
 		want string
 	}{
 		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, "CLAUDE.md")},
-		{"ProjectSettingsPath", a.ProjectSettingsPath(project), filepath.Join(project, ".claude", "settings.json")},
 		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".claude", "settings.json")},
 		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".claude", "skills")},
 	}
