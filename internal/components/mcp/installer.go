@@ -556,15 +556,29 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 }
 
 // serverToMap converts an MCPServerDef to a generic map for JSON output.
-// The agent parameter controls the URL field name (e.g. "serverUrl" for Windsurf).
-// Only non-zero fields are included.
+// The agent parameter controls the serialization format:
+//   - OpenCode (MergeIntoSettings): {"type": "local", "command": ["npx", "-y", "..."]}
+//   - Claude Code, VS Code, Cursor, Windsurf: {"command": "npx", "args": ["-y", "..."]}
+//     These agents expect command as a string and args as a separate array, with no "type" field.
 func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]interface{} {
-	m := map[string]interface{}{
-		"type": def.Type,
+	m := make(map[string]interface{})
+
+	if agent == domain.AgentOpenCode {
+		// OpenCode uses the array-style command with explicit type field.
+		m["type"] = def.Type
+		if len(def.Command) > 0 {
+			m["command"] = def.Command
+		}
+	} else {
+		// Claude Code, VS Code Copilot, Cursor, Windsurf use split command/args format.
+		if len(def.Command) > 0 {
+			m["command"] = def.Command[0]
+			if len(def.Command) > 1 {
+				m["args"] = def.Command[1:]
+			}
+		}
 	}
-	if len(def.Command) > 0 {
-		m["command"] = def.Command
-	}
+
 	if def.URL != "" {
 		m[urlKeyForAgent(agent)] = def.URL
 	}

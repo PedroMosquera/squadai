@@ -42,6 +42,23 @@ func (a mcpTestAdapter) RulesFrontmatter() string      { return "" }
 
 // ─── DefaultMCPServers ───────────────────────────────────────────────────────
 
+func TestDefaultMCPServers_MatchesCatalogCount(t *testing.T) {
+	servers := DefaultMCPServers()
+	catalog := domain.DefaultMCPCatalog()
+	if len(servers) != len(catalog) {
+		t.Errorf("DefaultMCPServers len = %d, want %d (must match catalog)", len(servers), len(catalog))
+	}
+}
+
+func TestDefaultMCPServers_AllCatalogEntriesPresent(t *testing.T) {
+	servers := DefaultMCPServers()
+	for _, entry := range domain.DefaultMCPCatalog() {
+		if _, ok := servers[entry.Name]; !ok {
+			t.Errorf("DefaultMCPServers missing catalog entry %q", entry.Name)
+		}
+	}
+}
+
 func TestDefaultMCPServers_HasContext7(t *testing.T) {
 	servers := DefaultMCPServers()
 	if _, ok := servers["context7"]; !ok {
