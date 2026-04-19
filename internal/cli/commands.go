@@ -3038,10 +3038,10 @@ func runDoctorFix(ctx context.Context, d *doctor.Doctor, results []doctor.CheckR
 	anyFailed := false
 	for _, fr := range fixResults {
 		if fr.Err != nil {
-			fmt.Fprintf(stdout, "  ❌ %s — error: %v\n", fr.CheckResult.Message, fr.Err)
+			fmt.Fprintf(stdout, "  ✗ %s — error: %v\n", fr.CheckResult.Message, fr.Err)
 			anyFailed = true
 		} else {
-			fmt.Fprintf(stdout, "  ✅ %s\n", fr.CheckResult.Message)
+			fmt.Fprintf(stdout, "  ✓ %s\n", fr.CheckResult.Message)
 		}
 	}
 
@@ -3063,12 +3063,12 @@ func runDoctorFix(ctx context.Context, d *doctor.Doctor, results []doctor.CheckR
 		if !fixedNames[r.Category+"."+r.Name] {
 			continue
 		}
-		icon := "✅"
+		icon := "✓"
 		if r.Status == doctor.CheckFail {
-			icon = "❌"
+			icon = "✗"
 			stillFailing = true
 		} else if r.Status == doctor.CheckWarn {
-			icon = "⚠️ "
+			icon = "⚠"
 		}
 		fmt.Fprintf(stdout, "  %s %s — %s\n", icon, r.Name, r.Status.String())
 	}
