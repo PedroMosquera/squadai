@@ -396,6 +396,7 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, projectDir string)
 }
 
 // applyMCPConfigFile writes all servers into the "mcpServers" key of a dedicated MCP config file.
+// Existing keys that are not managed (e.g. "inputs" for VS Code) are preserved.
 func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 	// Read existing file or start empty.
 	existing, err := readJSONFile(action.TargetPath)
@@ -413,6 +414,8 @@ func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 		serversMap[name] = serverToMap(def, action.Agent)
 	}
 	existing[rootKey] = serversMap
+	// Note: all other existing keys (e.g. "inputs" in VS Code mcp.json) are preserved
+	// because we only overwrite the servers root key.
 
 	// Marshal with indentation.
 	data, err := json.MarshalIndent(existing, "", "  ")
@@ -666,6 +669,7 @@ func (i *Installer) renderSeparateFileContent(action domain.PlannedAction) ([]by
 }
 
 // renderMCPConfigFileContent computes what applyMCPConfigFile would write.
+// Existing keys not managed by squadai (e.g. "inputs") are preserved.
 func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]byte, error) {
 	existing, err := readJSONFile(action.TargetPath)
 	if err != nil {

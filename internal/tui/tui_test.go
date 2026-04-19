@@ -668,12 +668,13 @@ func TestInitMethodology_ShowsTeamRoles(t *testing.T) {
 func TestInitMCP_ShowsCommandHint(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
-	m.mcpSelections = map[string]bool{"context7": true}
+	m.mcpSelections = catalogPreCheckedSelections()
 
 	view := m.View()
-	// DefaultMCPServers() context7 command is: npx -y @upstash/context7-mcp@latest
-	if !strings.Contains(view, "npx") {
-		t.Errorf("MCP screen should show command hint with 'npx', got:\n%s", view)
+	// The catalog-driven view now shows descriptions instead of commands.
+	// Verify that context7's description is shown.
+	if !strings.Contains(view, "documentation lookup") {
+		t.Errorf("MCP screen should show context7 description, got:\n%s", view)
 	}
 }
 
@@ -1819,3 +1820,170 @@ func TestInstallSummary_AllDeselectedExceptOne_ProceedsWithOne(t *testing.T) {
 		t.Error("one agent selected should dispatch a RunInit command")
 	}
 }
+
+// ─── MCP Catalog-driven screen ───────────────────────────────────────────────
+
+func TestInitMCP_CatalogShowsAllFiveItems(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = catalogPreCheckedSelections()
+
+	view := m.View()
+	catalog := domain.DefaultMCPCatalog()
+	if len(catalog) != 5 {
+		t.Fatalf("catalog size changed, expected 5, got %d", len(catalog))
+	}
+	for _, s := range catalog {
+		if !strings.Contains(view, s.Name) {
+			t.Errorf("MCP screen missing server %q", s.Name)
+		}
+		if !strings.Contains(view, s.Description) {
+			t.Errorf("MCP screen missing description for %q", s.Name)
+		}
+	}
+}
+
+func TestInitMCP_PreCheckedItemsStartSelected(t *testing.T) {
+	sel := catalogPreCheckedSelections()
+	catalog := domain.DefaultMCPCatalog()
+
+	for _, s := range catalog {
+		got := sel[s.Name]
+		if got != s.PreChecked {
+			t.Errorf("server %q: selected=%v, want %v (PreChecked)", s.Name, got, s.PreChecked)
+		}
+	}
+}
+
+func TestInitMCP_PreCheckedCount(t *testing.T) {
+	sel := catalogPreCheckedSelections()
+	var count int
+	for _, v := range sel {
+		if v {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("expected 2 pre-checked items, got %d", count)
+	}
+}
+
+func TestInitMCP_ToggleChangesSelection(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = catalogPreCheckedSelections()
+	m.initCursor = 0 // context7, which is pre-checked
+
+	// Space should toggle it off.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := updated.(Model)
+	if model.mcpSelections["context7"] {
+		t.Error("toggling pre-checked context7 should deselect it")
+	}
+}
+
+// ─── Remove Confirmation Screen ───────────────────────────────────────────────
+
+func TestMenuItems_ContainsRemove(t *testing.T) {
+	found := false
+	for _, item := range menuItems {
+		if item.command == "remove" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("menuItems should contain a 'remove' entry")
+	}
+}
+
+func TestMenu_RemoveItemLabel(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	view := m.View()
+	if !strings.Contains(view, "Remove SquadAI config") {
+		t.Error("menu should show 'Remove SquadAI config' item")
+	}
+}
+
+func TestMenu_SelectRemove_NavigatesToConfirmScreen(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	// Navigate to the remove item.
+	removeIdx := -1
+	for i, item := range menuItems {
+		if item.command == "remove" {
+			removeIdx = i
+			break
+		}
+	}
+	if removeIdx < 0 {
+		t.Fatal("remove menu item not found")
+	}
+	m.cursor = removeIdx
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if model.screen != screenRemoveConfirm {
+		t.Errorf("selecting remove should navigate to screenRemoveConfirm, got %v", model.screen)
+	}
+}
+
+func TestRemoveConfirm_ViewContainsExpectedText(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenRemoveConfirm
+	m.removePreview = "Files to delete (1):\n  AGENTS.md"
+
+	view := m.View()
+	if !strings.Contains(view, "Remove SquadAI Config") {
+		t.Error("confirmation screen should show title")
+	}
+	if !strings.Contains(view, "AGENTS.md") {
+		t.Error("confirmation screen should show preview content")
+	}
+	if !strings.Contains(view, "y/Enter") {
+		t.Error("confirmation screen should show key hints")
+	}
+}
+
+func TestRemoveConfirm_EscReturnsToMenu(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenRemoveConfirm
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+	if model.screen != screenMenu {
+		t.Errorf("esc on confirm should return to menu, got %v", model.screen)
+	}
+}
+
+func TestRemoveConfirm_NKeyReturnsToMenu(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenRemoveConfirm
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model := updated.(Model)
+	if model.screen != screenMenu {
+		t.Errorf("n on confirm should return to menu, got %v", model.screen)
+	}
+}
+
+func TestRemoveConfirm_YKeyStartsRunning(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenRemoveConfirm
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model := updated.(Model)
+	if model.screen != screenRunning {
+		t.Errorf("y on confirm should start running, got %v", model.screen)
+	}
+	if cmd == nil {
+		t.Error("y on confirm should dispatch a command")
+	}
+}
+
+// Suppress unused import warnings.
+var _ = fmt.Sprintf
+var _ lipgloss.Style

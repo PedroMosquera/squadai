@@ -10,6 +10,7 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
@@ -1908,4 +1909,200 @@ func TestRunDiff_MarkerInjection_ShowsMarkerTags(t *testing.T) {
 	if !strings.Contains(out, marker.OpenTag("memory")) && !strings.Contains(out, "+") {
 		t.Errorf("expected marker tags or '+' lines in diff output, got:\n%s", out)
 	}
+}
+
+// ─── Remove (metadata-based) ──────────────────────────────────────────────────
+
+func TestRemove_NoSidecar_IsNoop(t *testing.T) {
+	dir := t.TempDir()
+
+	report, err := Remove(RemoveOptions{ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(report.RemovedFiles) != 0 || len(report.CleanedFiles) != 0 || len(report.Errors) != 0 {
+		t.Errorf("expected empty report for no sidecar: %+v", report)
+	}
+}
+
+func TestRemove_DeletesCreatedFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a file and track it.
+	filePath := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(filePath, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := trackCreatedFileForTest(dir, "AGENTS.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Remove(RemoveOptions{ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(report.RemovedFiles) != 1 {
+		t.Errorf("expected 1 removed file, got %v", report.RemovedFiles)
+	}
+	if _, statErr := os.Stat(filePath); !os.IsNotExist(statErr) {
+		t.Error("created file should have been deleted")
+	}
+}
+
+func TestRemove_StripsMarkerBlocksPreservingUserContent(t *testing.T) {
+	dir := t.TempDir()
+
+	userContent := "# My Notes\n\nThis is user content.\n"
+	managedSection := "<!-- squadai:memory -->\nsome managed content\n<!-- /squadai:memory -->\n"
+	combined := userContent + "\n" + managedSection
+
+	filePath := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(filePath, []byte(combined), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeManagedKeysForTest(dir, "AGENTS.md", []string{"memory"}); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Remove(RemoveOptions{ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(report.CleanedFiles) != 1 {
+		t.Errorf("expected 1 cleaned file, got cleaned=%v removed=%v", report.CleanedFiles, report.RemovedFiles)
+	}
+
+	data, readErr := os.ReadFile(filePath)
+	if readErr != nil {
+		t.Fatalf("file should still exist: %v", readErr)
+	}
+	content := string(data)
+	if strings.Contains(content, "squadai:memory") {
+		t.Error("marker blocks should have been removed")
+	}
+	if !strings.Contains(content, "My Notes") {
+		t.Error("user content should be preserved")
+	}
+}
+
+func TestRemove_DeletesManagedFileWhenEmptyAfterStrip(t *testing.T) {
+	dir := t.TempDir()
+
+	// File contains ONLY managed marker content (no user content).
+	onlyManaged := "<!-- squadai:memory -->\nmanaged content\n<!-- /squadai:memory -->\n"
+	filePath := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(filePath, []byte(onlyManaged), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeManagedKeysForTest(dir, "AGENTS.md", []string{"memory"}); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Remove(RemoveOptions{ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(report.RemovedFiles) != 1 {
+		t.Errorf("expected 1 removed file (empty after strip), got removed=%v cleaned=%v", report.RemovedFiles, report.CleanedFiles)
+	}
+	if _, statErr := os.Stat(filePath); !os.IsNotExist(statErr) {
+		t.Error("file should have been deleted (no user content)")
+	}
+}
+
+func TestRemove_DryRun_ReportsWithoutWriting(t *testing.T) {
+	dir := t.TempDir()
+
+	filePath := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(filePath, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := trackCreatedFileForTest(dir, "AGENTS.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Remove(RemoveOptions{DryRun: true, ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !report.DryRun {
+		t.Error("report should indicate dry-run")
+	}
+	if len(report.RemovedFiles) != 1 {
+		t.Errorf("dry-run should report 1 file to remove, got %v", report.RemovedFiles)
+	}
+	// File must still exist.
+	if _, statErr := os.Stat(filePath); statErr != nil {
+		t.Error("dry-run must not delete files")
+	}
+}
+
+func TestRemove_JSON_ProducesValidOutput(t *testing.T) {
+	dir := t.TempDir()
+
+	filePath := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(filePath, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := trackCreatedFileForTest(dir, "AGENTS.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Remove(RemoveOptions{ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, marshalErr := json.Marshal(report)
+	if marshalErr != nil {
+		t.Fatalf("report should be JSON-serializable: %v", marshalErr)
+	}
+
+	var decoded RemoveReport
+	if decodeErr := json.Unmarshal(data, &decoded); decodeErr != nil {
+		t.Fatalf("JSON should decode back: %v", decodeErr)
+	}
+	if len(decoded.RemovedFiles) != 1 {
+		t.Errorf("decoded removed_files should have 1 entry, got %v", decoded.RemovedFiles)
+	}
+}
+
+func TestRemove_UserContentNeverTouched(t *testing.T) {
+	dir := t.TempDir()
+
+	// File has user content + managed block.
+	combined := "# User Header\n\nuser paragraph\n\n<!-- squadai:rules -->\nrules content\n<!-- /squadai:rules -->\n"
+	filePath := filepath.Join(dir, ".cursorrules")
+	if err := os.WriteFile(filePath, []byte(combined), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeManagedKeysForTest(dir, ".cursorrules", []string{"rules"}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Remove(RemoveOptions{ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(filePath)
+	content := string(data)
+	if !strings.Contains(content, "User Header") || !strings.Contains(content, "user paragraph") {
+		t.Error("user content outside marker blocks must never be touched")
+	}
+}
+
+// ─── helpers for Remove tests ─────────────────────────────────────────────────
+
+// trackCreatedFileForTest uses the managed package directly (avoiding os.Chdir).
+func trackCreatedFileForTest(projectRoot, relPath string) error {
+	return managed.TrackCreatedFile(projectRoot, relPath)
+}
+
+func writeManagedKeysForTest(projectRoot, configFile string, keys []string) error {
+	return managed.WriteManagedKeys(projectRoot, configFile, keys)
 }

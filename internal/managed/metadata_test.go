@@ -483,3 +483,38 @@ func TestConcurrent_TrackCreatedFile(t *testing.T) {
 		t.Errorf("expected exactly [AGENTS.md], got %v", files)
 	}
 }
+
+// ─── ListManagedFiles ─────────────────────────────────────────────────────────
+
+func TestListManagedFiles_MissingSidecar_ReturnsEmpty(t *testing.T) {
+	root := t.TempDir()
+	files, err := ListManagedFiles(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("expected empty, got %v", files)
+	}
+}
+
+func TestListManagedFiles_ReturnsSortedPaths(t *testing.T) {
+	root := t.TempDir()
+
+	if err := WriteManagedKeys(root, "z-file.md", []string{"k1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteManagedKeys(root, "a-file.md", []string{"k2"}); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := ListManagedFiles(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %v", files)
+	}
+	if files[0] != "a-file.md" || files[1] != "z-file.md" {
+		t.Errorf("expected sorted [a-file.md z-file.md], got %v", files)
+	}
+}

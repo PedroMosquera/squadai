@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -37,6 +38,7 @@ const (
 	screenInitInstallSummary // review and confirm before applying
 	screenSkillBrowser
 	screenInitApplyPrompt // "Apply now?" prompt after successful init
+	screenRemoveConfirm   // "Remove SquadAI config" confirmation screen
 )
 
 // menuItem is a selectable action.
@@ -54,6 +56,7 @@ var menuItems = []menuItem{
 	{label: "Browse Skills", command: "skills"},
 	{label: "Verify", command: "verify"},
 	{label: "Restore backup", command: "restore"},
+	{label: "Remove SquadAI config", command: "remove"},
 	{label: "Quit", command: "quit"},
 }
 
@@ -136,6 +139,9 @@ type Model struct {
 	// Init apply-prompt state.
 	initJustCompleted bool   // set before launching init; triggers apply-prompt on success
 	initOutput        string // stores init output while on apply-prompt screen
+
+	// Remove confirmation state.
+	removePreview string // dry-run output shown on confirmation screen
 }
 
 // NewModel creates a TUI model with the given state.
@@ -239,6 +245,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.err = nil
 				m.screen = screenResult
 				return m, nil
+			case "remove":
+				// Build a dry-run preview to show on the confirmation screen.
+				m.removePreview = buildRemovePreview(m.homeDir)
+				m.screen = screenRemoveConfirm
+				return m, nil
 			default:
 				m.screen = screenRunning
 				m.output = ""
@@ -312,20 +323,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case screenInitMCP:
-		mcpServers := cli.DefaultMCPServers()
-		mcpNames := sortedKeys(mcpServers)
+		catalog := domain.DefaultMCPCatalog()
 		switch key {
 		case "up", "k":
 			if m.initCursor > 0 {
 				m.initCursor--
 			}
 		case "down", "j":
-			if m.initCursor < len(mcpNames)-1 {
+			if m.initCursor < len(catalog)-1 {
 				m.initCursor++
 			}
 		case " ":
-			if len(mcpNames) > 0 && m.mcpSelections != nil {
-				name := mcpNames[m.initCursor]
+			if len(catalog) > 0 && m.mcpSelections != nil {
+				name := catalog[m.initCursor].Name
 				m.mcpSelections[name] = !m.mcpSelections[name]
 			}
 		case "enter":
@@ -390,8 +400,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.modelTier = tiers[m.initCursor]
-			// Initialize MCP selections with Context7 pre-selected.
-			m.mcpSelections = map[string]bool{"context7": true}
+			// Initialize MCP selections from catalog pre-checked defaults.
+			m.mcpSelections = catalogPreCheckedSelections()
 			m.initCursor = 0
 			m.screen = screenInitMCP
 			return m, nil
@@ -432,8 +442,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.setupPreset == domain.PresetCustom {
 				m.screen = screenInitMethodology
 			} else {
-				// Non-custom presets: initialize MCP selections with Context7 pre-selected.
-				m.mcpSelections = map[string]bool{"context7": true}
+				// Non-custom presets: initialize MCP selections from catalog pre-checked defaults.
+				m.mcpSelections = catalogPreCheckedSelections()
 				m.screen = screenInitMCP
 			}
 			return m, nil
@@ -621,6 +631,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenMenu
 			return m, nil
 		}
+
+	case screenRemoveConfirm:
+		switch key {
+		case "y", "enter":
+			m.screen = screenRunning
+			m.output = ""
+			m.err = nil
+			return m, func() tea.Msg {
+				var buf bytes.Buffer
+				err := cli.RunRemove([]string{"--force"}, &buf)
+				return commandResult{output: buf.String(), err: err}
+			}
+		case "n", "esc":
+			m.screen = screenMenu
+			return m, nil
+		}
 	}
 
 	return m, nil
@@ -704,6 +730,8 @@ func (m Model) View() string {
 		return m.viewSkillBrowser()
 	case screenInitApplyPrompt:
 		return m.viewInitApplyPrompt()
+	case screenRemoveConfirm:
+		return m.viewRemoveConfirm()
 	}
 	return ""
 }
@@ -935,37 +963,40 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
+// catalogPreCheckedSelections builds the initial mcpSelections map from the
+// curated catalog, pre-selecting all entries that have PreChecked == true.
+func catalogPreCheckedSelections() map[string]bool {
+	sel := make(map[string]bool)
+	for _, s := range domain.DefaultMCPCatalog() {
+		sel[s.Name] = s.PreChecked
+	}
+	return sel
+}
+
 // viewInitMCP renders the MCP server configuration screen.
 func (m Model) viewInitMCP() string {
-	mcpServers := cli.DefaultMCPServers()
-	names := sortedKeys(mcpServers)
+	catalog := domain.DefaultMCPCatalog()
 
 	var content strings.Builder
 	content.WriteString(headingStyle.Render("MCP Servers") + "\n\n")
 
-	for i, name := range names {
-		server := mcpServers[name]
-		var checked, checkedStr string
-		if m.mcpSelections != nil && m.mcpSelections[name] {
+	for i, server := range catalog {
+		var checked string
+		if m.mcpSelections != nil && m.mcpSelections[server.Name] {
 			checked = badgeActiveStyle.Render("[x]")
-			checkedStr = "[x]"
 		} else {
 			checked = badgeDisabledStyle.Render("[ ]")
-			checkedStr = "[ ]"
 		}
-		_ = checkedStr
 
 		var nameStr string
 		if i == m.initCursor {
-			nameStr = activeStyle.Render(name)
+			nameStr = activeStyle.Render(server.Name)
 		} else {
-			nameStr = name
+			nameStr = server.Name
 		}
 
 		content.WriteString(fmt.Sprintf("  %s %s\n", checked, nameStr))
-		if len(server.Command) > 0 {
-			content.WriteString(mutedStyle.Render("      "+strings.Join(server.Command, " ")) + "\n")
-		}
+		content.WriteString(mutedStyle.Render("      "+server.Description) + "\n")
 		content.WriteString("\n")
 	}
 
@@ -1401,4 +1432,65 @@ func Run(version string) error {
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = p.Run()
 	return err
+}
+
+// buildRemovePreview runs a dry-run of Remove and returns a human-readable
+// summary to show on the confirmation screen.
+func buildRemovePreview(homeDir string) string {
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return "Could not determine project directory."
+	}
+
+	report, err := cli.Remove(cli.RemoveOptions{DryRun: true, ProjectDir: projectDir})
+	if err != nil {
+		return fmt.Sprintf("Preview unavailable: %v", err)
+	}
+
+	if len(report.RemovedFiles) == 0 && len(report.CleanedFiles) == 0 {
+		return "No SquadAI-managed files found in this project."
+	}
+
+	var b strings.Builder
+	if len(report.RemovedFiles) > 0 {
+		b.WriteString(fmt.Sprintf("Files to delete (%d):\n", len(report.RemovedFiles)))
+		for _, f := range report.RemovedFiles {
+			rel, relErr := filepath.Rel(projectDir, f)
+			if relErr != nil {
+				rel = f
+			}
+			b.WriteString("  " + rel + "\n")
+		}
+	}
+	if len(report.CleanedFiles) > 0 {
+		b.WriteString(fmt.Sprintf("Files to strip markers from (%d):\n", len(report.CleanedFiles)))
+		for _, f := range report.CleanedFiles {
+			rel, relErr := filepath.Rel(projectDir, f)
+			if relErr != nil {
+				rel = f
+			}
+			b.WriteString("  " + rel + " (user content preserved)\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// viewRemoveConfirm renders the remove confirmation screen.
+func (m Model) viewRemoveConfirm() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Remove SquadAI Config") + "\n\n")
+	content.WriteString("This will remove all SquadAI-managed configuration from this project.\n\n")
+
+	if m.removePreview != "" {
+		content.WriteString(m.removePreview + "\n\n")
+	}
+
+	content.WriteString(errorStyle.Render("⚠ This action cannot be undone (a backup is created automatically).") + "\n\n")
+	content.WriteString("Confirm removal? [y/n]\n")
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("y/Enter: confirm   n/Esc: cancel"))
+	return b.String()
 }
