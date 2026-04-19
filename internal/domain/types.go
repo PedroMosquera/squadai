@@ -80,7 +80,6 @@ type OperationalMode string
 const (
 	ModeTeam     OperationalMode = "team"
 	ModePersonal OperationalMode = "personal"
-	ModeHybrid   OperationalMode = "hybrid"
 )
 
 // StepStatus is the outcome of a single pipeline step.

@@ -1,0 +1,46 @@
+schema: spec-driven
+
+context: |
+  SquadAI — CLI tool that standardizes AI coding agent configurations across a team.
+  Tech stack: Go 1.24, Bubbletea TUI, lipgloss, atomic file writes
+  Architecture: cmd/squadai entrypoint, internal/ packages
+    (adapters, components, planner, pipeline, verify, tui, cli, app, config, backup)
+  Adapters: 5 supported (opencode, claude, vscode, cursor, windsurf)
+  Methodologies: 3 (sdd, tdd, conventional) × roles × 3 delegation strategies
+  Build: goreleaser, CI: GitHub Actions
+  Style: gofmt, go vet
+
+rules:
+  proposal:
+    - State the WHY before the WHAT
+    - Identify affected internal/ packages
+    - Include rollback notes for risky changes
+  spec:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Document architecture decisions with rationale
+    - Note interface changes, breaking or otherwise
+  tasks:
+    - Group by phase (foundation, implementation, tests, docs)
+    - Use hierarchical numbering (1.1, 1.2)
+    - Tasks must be small enough for one session
+  verify:
+    - Run: go test ./...
+    - Run: go vet ./...
+    - Run: gofmt -l . (must be empty)
+    - Compare implementation against every spec scenario
+
+testing:
+  runner:
+    command: "go test ./..."
+    framework: "Go standard testing"
+  layers:
+    unit: { available: true, tool: "go test" }
+    integration: { available: true, tool: "internal/integration" }
+    tui: { available: true, tool: "bubbletea direct model.Update() simulation" }
+  coverage:
+    command: "go test -cover ./..."
+  quality:
+    type_checker: { command: "go vet ./..." }
+    formatter: { command: "gofmt" }

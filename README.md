@@ -226,7 +226,8 @@ Policy (locked fields)  >  Project config  >  User defaults
 |------|----------|
 | `team` | Policy-controlled. Required settings enforced, locked fields immutable. |
 | `personal` | User-controlled. Optional adapters and personal defaults. |
-| `hybrid` | Both active. Policy locked fields take precedence over user/project values. |
+
+> **Note:** `hybrid` mode is deprecated. SquadAI resolves it automatically based on `policy.json` presence.
 
 ---
 
@@ -237,8 +238,7 @@ Policy (locked fields)  >  Project config  >  User defaults
 | `squadai init` | Initialize project config and detect agents |
 | `squadai plan` | Compute and display the action plan |
 | `squadai diff` | Preview what apply would change (unified diffs) |
-| `squadai apply` | Execute plan with backup and rollback safety |
-| `squadai sync` | Idempotent reconciliation (alias for apply) |
+| `squadai apply` | Execute plan with backup and rollback safety (idempotent — re-run to sync) |
 | `squadai verify` | Run compliance checks and print health report |
 | `squadai status` | Show project health: adapters, components, managed files |
 | `squadai validate-policy` | Validate policy schema and lock/required consistency |
@@ -348,6 +348,14 @@ Coming soon.
 ## Roadmap
 
 V2 architecture is complete: 5 agents, 9 component installers, 3 methodologies, 3 delegation strategies, 3 MCP strategies, 1000+ tests. See the [V2.1 Follow-up Roadmap](.x9k4v/ROADMAP-V2.1.md) for activation, documentation, and distribution work in progress.
+
+---
+
+## Development Process
+
+SquadAI uses Spec-Driven Development for its own changes. The `openspec/` directory tracks
+in-flight specs (`changes/`), living specs (`specs/`), and completed work (`archive/`).
+See `openspec/config.yaml` for workflow rules and testing conventions.
 
 ---
 

@@ -72,7 +72,7 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 		&mockAdapter{id: domain.AgentClaudeCode, lane: domain.LanePersonal},
 		&mockAdapter{id: domain.AgentVSCodeCopilot, lane: domain.LanePersonal},
 	}
-	m := NewModel("1.0.0", domain.ModeHybrid, adapters, "/tmp/home")
+	m := NewModel("1.0.0", domain.ModePersonal, adapters, "/tmp/home")
 
 	view := m.View()
 	// Display names instead of raw IDs
@@ -85,8 +85,8 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 	if !strings.Contains(view, "VS Code Copilot") {
 		t.Error("should show VS Code Copilot")
 	}
-	if !strings.Contains(view, "Mode: hybrid") {
-		t.Error("should show hybrid mode")
+	if !strings.Contains(view, "Mode: personal") {
+		t.Error("should show personal mode")
 	}
 }
 
@@ -638,7 +638,6 @@ func TestMenu_AllItemsPresent(t *testing.T) {
 		"Init / Setup",
 		"Plan (dry-run)",
 		"Apply",
-		"Sync",
 		"Team Status",
 		"Verify",
 		"Restore Backup",
@@ -1128,7 +1127,6 @@ func TestMenu_AllItemsIncludingSkills(t *testing.T) {
 		"Init / Setup",
 		"Plan (dry-run)",
 		"Apply",
-		"Sync",
 		"Team Status",
 		"Browse Skills",
 		"Verify",
