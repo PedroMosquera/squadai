@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 // Store manages backup manifests and file snapshots on disk.
@@ -78,7 +80,7 @@ func (s *Store) SnapshotFiles(paths []string, command string) (*Manifest, error)
 		snap.ChecksumBefore = Checksum(data)
 
 		dest := filepath.Join(backupDir, snap.BackupFile)
-		if err := os.WriteFile(dest, data, 0644); err != nil {
+		if _, err := fileutil.WriteAtomic(dest, data, 0644); err != nil {
 			os.RemoveAll(backupDir)
 			return nil, fmt.Errorf("backup %s: %w", path, err)
 		}
@@ -221,7 +223,7 @@ func (s *Store) restoreFiles(id string) (*Manifest, error) {
 			return nil, fmt.Errorf("create dir for %s: %w", snap.Path, err)
 		}
 
-		if err := os.WriteFile(snap.Path, data, 0644); err != nil {
+		if _, err := fileutil.WriteAtomic(snap.Path, data, 0644); err != nil {
 			return nil, fmt.Errorf("restore %s: %w", snap.Path, err)
 		}
 	}
@@ -236,7 +238,7 @@ func (s *Store) writeManifest(id string, m *Manifest) error {
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
-	if err := os.WriteFile(path, append(data, '\n'), 0644); err != nil {
+	if _, err := fileutil.WriteAtomic(path, append(data, '\n'), 0644); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 	return nil

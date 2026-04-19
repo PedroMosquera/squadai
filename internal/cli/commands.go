@@ -792,7 +792,7 @@ func writeInitFile(stdout io.Writer, projectDir, path, content string, force boo
 		return
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if _, err := fileutil.WriteAtomic(path, []byte(content), 0644); err != nil {
 		fmt.Fprintf(stdout, "  error   %s: %v\n", rel, err)
 		return
 	}

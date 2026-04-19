@@ -134,12 +134,6 @@ func ConfigDir(homeDir string) string {
 	return filepath.Join(homeDir, ".claude")
 }
 
-// MCPDir returns the directory for per-server MCP configuration files.
-// Claude Code uses separate files per MCP server: ~/.claude/mcp/{name}.json
-func (a *Adapter) MCPDir(homeDir string) string {
-	return filepath.Join(ConfigDir(homeDir), "mcp")
-}
-
 // DelegationStrategy returns DelegationPromptBased — Claude Code uses Task tool delegation.
 func (a *Adapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationPromptBased

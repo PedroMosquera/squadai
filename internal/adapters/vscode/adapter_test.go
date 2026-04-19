@@ -214,6 +214,7 @@ func TestSupportsComponent_Supported(t *testing.T) {
 		domain.ComponentSettings,
 		domain.ComponentMCP,
 		domain.ComponentSkills,
+		domain.ComponentPlugins,
 	}
 	for _, c := range components {
 		if !a.SupportsComponent(c) {

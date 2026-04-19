@@ -63,8 +63,8 @@ Run `squadai` with no arguments to launch the interactive TUI wizard (methodolog
 | OpenCode | `AGENTS.md` | native (sub-agent files in `.opencode/agents/`) | MergeIntoSettings (`.opencode/config.json` `"mcp"` key) |
 | Claude Code | `CLAUDE.md` | prompt (Task tool injection) | SeparateMCPFiles (`~/.claude/mcp/<server>.json`) |
 | VS Code Copilot | `.github/copilot-instructions.md` | solo (all-in-one prompt) | MCPConfigFile (`.vscode/mcp.json`) |
-| Cursor | `.cursorrules` | native (agent files in `.cursor/agents/`) | MCPConfigFile (`.cursor/mcp.json`) |
-| Windsurf | `.windsurfrules` | solo + workflows | MCPConfigFile (`.windsurf/mcp_config.json`) |
+| Cursor | `.cursor/rules/squadai.mdc` | native (agent files in `.cursor/agents/`) | MCPConfigFile (`.cursor/mcp.json`) |
+| Windsurf | `.windsurf/rules/squadai.md` | solo + workflows | MCPConfigFile (`.windsurf/mcp_config.json`) |
 
 All detected agents are auto-enabled during `init`. The planner generates actions only for agents actually installed on each developer's machine.
 
