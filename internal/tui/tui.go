@@ -26,12 +26,12 @@ const (
 	screenMenu
 	screenRunning
 	screenResult
+	screenInitScope // first screen in init wizard: repo vs global
 	screenInitMethodology
 	screenTeamStatus
 	screenInitMCP
 	screenInitPlugins
 	screenInitModelTier
-	screenInitSummary
 	screenInitAdapters       // agent selection checkboxes
 	screenInitPreset         // setup preset radio (full-squad / lean / custom)
 	screenInitInstallSummary // review and confirm before applying
@@ -216,7 +216,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			selected := menuItems[m.cursor].command
 			switch selected {
 			case "init":
-				m.screen = screenInitMethodology
+				m.screen = screenInitScope
 				m.initCursor = 0
 				return m, nil
 			case "team-status":
@@ -260,6 +260,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case screenRunning:
 		// Ignore input while running.
 
+	case screenInitScope:
+		switch key {
+		case "up", "k":
+			if m.initCursor > 0 {
+				m.initCursor--
+			}
+		case "down", "j":
+			if m.initCursor < 1 {
+				m.initCursor++
+			}
+		case "enter":
+			m.initCursor = 0
+			m.screen = screenInitPreset
+			return m, nil
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		}
+
 	case screenInitMethodology:
 		methodologies := []domain.Methodology{
 			domain.MethodologyTDD,
@@ -277,13 +296,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.methodology = methodologies[m.initCursor]
-			// Initialize MCP selections with Context7 pre-selected
-			m.mcpSelections = map[string]bool{"context7": true}
 			m.initCursor = 0
-			m.screen = screenInitMCP
+			m.screen = screenInitModelTier
 			return m, nil
 		case "esc":
-			m.screen = screenMenu
+			m.screen = screenInitAdapters
 			return m, nil
 		}
 
@@ -312,12 +329,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.mcpSelections[name] = !m.mcpSelections[name]
 			}
 		case "enter":
-			m.pluginSelections = make(map[string]bool)
 			m.initCursor = 0
-			m.screen = screenInitPlugins
+			if m.setupPreset == domain.PresetCustom {
+				m.pluginSelections = make(map[string]bool)
+				m.screen = screenInitPlugins
+			} else {
+				m.screen = screenInitInstallSummary
+			}
 			return m, nil
 		case "esc":
-			m.screen = screenInitMethodology
+			if m.setupPreset == domain.PresetCustom {
+				m.screen = screenInitModelTier
+			} else {
+				m.screen = screenInitAdapters
+			}
 			return m, nil
 		}
 
@@ -339,13 +364,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pluginSelections[name] = !m.pluginSelections[name]
 			}
 		case "enter":
-			// Initialize agentSelections from detected adapters (all pre-checked).
-			m.agentSelections = make(map[string]bool)
-			for _, a := range m.adapters {
-				m.agentSelections[string(a.ID())] = true
-			}
 			m.initCursor = 0
-			m.screen = screenInitAdapters
+			m.screen = screenInitInstallSummary
 			return m, nil
 		case "esc":
 			m.screen = screenInitMCP
@@ -370,53 +390,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.modelTier = tiers[m.initCursor]
+			// Initialize MCP selections with Context7 pre-selected.
+			m.mcpSelections = map[string]bool{"context7": true}
 			m.initCursor = 0
-			m.screen = screenInitInstallSummary
+			m.screen = screenInitMCP
 			return m, nil
 		case "esc":
-			m.screen = screenInitPlugins
-			return m, nil
-		}
-
-	case screenInitSummary:
-		switch key {
-		case "enter":
-			m.screen = screenRunning
-			m.output = ""
-			m.err = nil
-			m.initJustCompleted = true
-			args := []string{"--methodology=" + string(m.methodology)}
-			// Add model tier if not default (always pass it through).
-			args = append(args, "--model-tier="+string(m.modelTier))
-			// Add MCP selections.
-			var mcpKeys []string
-			for k, selected := range m.mcpSelections {
-				if selected {
-					mcpKeys = append(mcpKeys, k)
-				}
-			}
-			if len(mcpKeys) > 0 {
-				sort.Strings(mcpKeys) // deterministic
-				args = append(args, "--mcp="+strings.Join(mcpKeys, ","))
-			}
-			// Add plugin selections.
-			var pluginKeys []string
-			for k, selected := range m.pluginSelections {
-				if selected {
-					pluginKeys = append(pluginKeys, k)
-				}
-			}
-			if len(pluginKeys) > 0 {
-				sort.Strings(pluginKeys) // deterministic
-				args = append(args, "--plugins="+strings.Join(pluginKeys, ","))
-			}
-			return m, func() tea.Msg {
-				var buf bytes.Buffer
-				err := cli.RunInit(args, &buf)
-				return commandResult{output: buf.String(), err: err}
-			}
-		case "esc":
-			m.screen = screenInitModelTier
+			m.screen = screenInitMethodology
 			return m, nil
 		}
 
@@ -449,10 +429,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.initCursor = 0
-			m.screen = screenInitPreset
+			if m.setupPreset == domain.PresetCustom {
+				m.screen = screenInitMethodology
+			} else {
+				// Non-custom presets: initialize MCP selections with Context7 pre-selected.
+				m.mcpSelections = map[string]bool{"context7": true}
+				m.screen = screenInitMCP
+			}
 			return m, nil
 		case "esc":
-			m.screen = screenInitPlugins
+			m.screen = screenInitPreset
 			return m, nil
 		}
 
@@ -477,20 +463,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case domain.PresetFullSquad:
 				m.methodology = domain.MethodologySDD
 				m.modelTier = domain.ModelTierBalanced
-				m.initCursor = 0
-				m.screen = screenInitInstallSummary
 			case domain.PresetLean:
 				m.methodology = domain.MethodologyConventional
 				m.modelTier = domain.ModelTierStarter
-				m.initCursor = 0
-				m.screen = screenInitInstallSummary
-			case domain.PresetCustom:
-				m.initCursor = 0
-				m.screen = screenInitMethodology
 			}
+			// All presets: initialize agentSelections from detected adapters (pre-checked).
+			m.agentSelections = make(map[string]bool)
+			for _, a := range m.adapters {
+				m.agentSelections[string(a.ID())] = true
+			}
+			m.initCursor = 0
+			m.screen = screenInitAdapters
 			return m, nil
 		case "esc":
-			m.screen = screenInitAdapters
+			m.screen = screenInitScope
 			return m, nil
 		}
 
@@ -580,7 +566,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return commandResult{output: buf.String(), err: err}
 			}
 		case "esc":
-			m.screen = screenInitPreset
+			if m.setupPreset == domain.PresetCustom {
+				m.screen = screenInitPlugins
+			} else {
+				m.screen = screenInitMCP
+			}
 			return m, nil
 		}
 
@@ -694,6 +684,8 @@ func (m Model) View() string {
 		return m.viewResult()
 	case screenInitMethodology:
 		return m.viewInitMethodology()
+	case screenInitScope:
+		return m.viewInitScope()
 	case screenTeamStatus:
 		return m.viewTeamStatus()
 	case screenInitMCP:
@@ -702,8 +694,6 @@ func (m Model) View() string {
 		return m.viewInitPlugins()
 	case screenInitModelTier:
 		return m.viewInitModelTier()
-	case screenInitSummary:
-		return m.viewInitSummary()
 	case screenInitAdapters:
 		return m.viewInitAdapters()
 	case screenInitPreset:
@@ -796,6 +786,35 @@ func (m Model) viewResult() string {
 	b.WriteString(m.renderPanel(strings.TrimRight(resultContent.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("Press any key to return to menu."))
+	return b.String()
+}
+
+// viewInitScope renders the scope selection screen (This Repo vs Global).
+func (m Model) viewInitScope() string {
+	scopes := []struct {
+		label string
+		desc  string
+	}{
+		{"This Repo", "Configure agents for the current project only"},
+		{"Global", "Configure agents globally for all projects"},
+	}
+
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Setup Scope") + "\n\n")
+	content.WriteString("Where do you want to apply the configuration?\n\n")
+
+	for i, s := range scopes {
+		if i == m.initCursor {
+			content.WriteString(activeStyle.Render("> "+s.label) + "  " + activeStyle.Render(s.desc) + "\n")
+		} else {
+			content.WriteString("  " + s.label + "  " + s.desc + "\n")
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: navigate   enter: select   esc: back"))
 	return b.String()
 }
 
@@ -1059,67 +1078,6 @@ func (m Model) viewInitModelTier() string {
 	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("↑/↓: navigate   enter: select   esc: back"))
-	return b.String()
-}
-
-// viewInitSummary renders the init summary confirmation screen.
-func (m Model) viewInitSummary() string {
-	var content strings.Builder
-	content.WriteString(headingStyle.Render("Setup Summary") + "\n\n")
-
-	content.WriteString(headingStyle.Render("Methodology") + ": ")
-	content.WriteString(methodologyBadgeStyle.Render(string(m.methodology)) + "\n")
-
-	team := domain.DefaultTeam(m.methodology)
-	content.WriteString(headingStyle.Render("Team") + fmt.Sprintf(": %d roles\n\n", len(team)))
-
-	content.WriteString(headingStyle.Render("MCP") + ":\n")
-	mcpNames := sortedKeys(m.mcpSelections)
-	hasMCP := false
-	for _, name := range mcpNames {
-		if m.mcpSelections[name] {
-			content.WriteString(fmt.Sprintf("  ✓ %s\n", name))
-			hasMCP = true
-		}
-	}
-	if !hasMCP {
-		content.WriteString(mutedStyle.Render("  (none)") + "\n")
-	}
-
-	content.WriteString("\n")
-	content.WriteString(headingStyle.Render("Plugins") + ":\n")
-	hasPlugins := false
-	pluginNames := sortedKeys(m.pluginSelections)
-	for _, name := range pluginNames {
-		if m.pluginSelections[name] {
-			content.WriteString(fmt.Sprintf("  ✓ %s\n", name))
-			hasPlugins = true
-		}
-	}
-	if !hasPlugins {
-		content.WriteString(mutedStyle.Render("  (none)") + "\n")
-	}
-
-	content.WriteString("\n")
-	content.WriteString(headingStyle.Render("Agents") + ":\n")
-	if len(m.adapters) == 0 {
-		content.WriteString(mutedStyle.Render("  (none detected)") + "\n")
-	} else {
-		for _, a := range m.adapters {
-			content.WriteString(fmt.Sprintf("  %s\n", a.ID()))
-		}
-	}
-
-	content.WriteString("\n")
-	content.WriteString("This will create:\n")
-	content.WriteString(mutedStyle.Render("  .squadai/project.json") + "\n")
-	content.WriteString(mutedStyle.Render("  Agent-specific config files (e.g., AGENTS.md, CLAUDE.md)") + "\n")
-	content.WriteString(mutedStyle.Render("  .squadai/skills/ directory") + "\n")
-
-	var b strings.Builder
-	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
-	b.WriteString("\n\n")
-	b.WriteString(mutedStyle.Render("enter: confirm  esc: go back"))
 	return b.String()
 }
 
