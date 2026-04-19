@@ -67,10 +67,11 @@ func TestRunApply_HelpText(t *testing.T) {
 
 func TestRunApplyWithProgress_VerboseFlag_OutputsToStderr(t *testing.T) {
 	// Set up a minimal project dir so RunApply can proceed.
+	// t.Chdir auto-restores the original cwd on cleanup; without it,
+	// later tests in the package fail with `getwd: no such file or directory`
+	// on Linux (macOS caches the cwd path string after rmdir, masking the bug).
 	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
+	t.Chdir(dir)
 
 	// Write a minimal project.json so apply doesn't fail on missing config guard.
 	proj := domain.ProjectConfig{
