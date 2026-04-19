@@ -16,19 +16,6 @@ squadai treats AI agent setup as **infrastructure**: a single declarative config
 
 ---
 
-## Technical Highlights
-
-- **Six-layer hexagonal architecture** with strict downward dependencies (domain → config → planner → pipeline → verifier → interfaces). Adapters and components depend only on `domain` interfaces. Full design in [`docs/architecture.md`](docs/architecture.md).
-- **One config, five agents** through a 3-strategy delegation abstraction (native sub-agent files, prompt-injected Task tool, solo all-in-one prompts) and a 3-strategy MCP installer (merge-into-settings, dedicated MCP file, embedded). Adding a new agent is a single adapter package.
-- **Idempotent, crash-safe apply pipeline** — atomic file writes via `fileutil.WriteAtomic`, automatic backup snapshots before every mutation, full rollback on failure, marker-block preservation so user content outside managed regions is never touched.
-- **Three-layer config merge with policy enforcement** — `policy.json` (locked) > `project.json` > user defaults. Locked fields cannot be overridden; missing required values fail validation at load time.
-- **Built-in health diagnostics** (`squadai doctor`) — ~22 checks across 6 categories with `--fix` auto-resolution. JSON files are validated by managed-key presence, markdown files by HTML marker integrity. Full details in `squadai doctor --help`.
-- **Cross-platform distribution** — goreleaser pipeline produces darwin/linux/windows × amd64/arm64 binaries plus `.deb`, `.rpm`, Homebrew tap, curl|sh installer, and built-in self-update — all from a single `git tag`.
-- **Dual interface from one core** — Bubbletea TUI wizard for interactive setup, scriptable CLI for CI/automation. Both share the same planner, pipeline, and verifier.
-- **AI-agent install protocol** — paste-prompt installation: agents read a numbered protocol from this README, detect OS, pick the best install method, and run health checks. See [Install via your AI agent](#install-via-your-ai-agent).
-
----
-
 ## What It Does
 
 One command configures every AI coding agent on your team to use the same methodology, team structure, MCP servers, and coding standards.
