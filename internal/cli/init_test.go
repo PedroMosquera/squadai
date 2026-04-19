@@ -1860,16 +1860,19 @@ func TestFilterAdapters_SelectSubset(t *testing.T) {
 	}
 }
 
-func TestFilterAdapters_AlwaysIncludesOpenCode(t *testing.T) {
-	detected := makeFilterAdapters(domain.AgentOpenCode, domain.AgentCursor)
-	// Selections without opencode explicitly listed.
+func TestFilterAdapters_SelectSubsetWithoutOpenCode(t *testing.T) {
+	detected := makeFilterAdapters(
+		domain.AgentOpenCode,
+		domain.AgentCursor,
+	)
+	// Selecting only cursor — OpenCode is no longer forced.
 	result := filterAdapters(detected, []string{"cursor"})
 	ids := make(map[string]bool)
 	for _, a := range result {
 		ids[string(a.ID())] = true
 	}
-	if !ids["opencode"] {
-		t.Error("opencode should always be included even when not in selections")
+	if ids["opencode"] {
+		t.Error("opencode should NOT be included when not explicitly selected")
 	}
 	if !ids["cursor"] {
 		t.Error("cursor should be included when in selections")
@@ -1878,13 +1881,10 @@ func TestFilterAdapters_AlwaysIncludesOpenCode(t *testing.T) {
 
 func TestFilterAdapters_UnknownAgentIgnored(t *testing.T) {
 	detected := makeFilterAdapters(domain.AgentOpenCode, domain.AgentCursor)
+	// "nonexistent" is not detected → result is empty.
 	result := filterAdapters(detected, []string{"nonexistent"})
-	// Only opencode should be present (always required); "nonexistent" is not detected.
-	if len(result) != 1 {
-		t.Errorf("filterAdapters([nonexistent]) = %d, want 1 (only opencode)", len(result))
-	}
-	if result[0].ID() != domain.AgentOpenCode {
-		t.Errorf("expected opencode, got %q", result[0].ID())
+	if len(result) != 0 {
+		t.Errorf("filterAdapters([nonexistent]) = %d, want 0 (no match)", len(result))
 	}
 }
 

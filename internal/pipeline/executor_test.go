@@ -10,6 +10,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/planner"
 )
@@ -500,6 +501,112 @@ func TestExecute_ActionDelete_NonexistentFile_NoError(t *testing.T) {
 
 	if report.Steps[0].Status != domain.StepSuccess {
 		t.Errorf("step status = %q, want success", report.Steps[0].Status)
+	}
+}
+
+// ─── File tracking (managed.TrackCreatedFile integration) ────────────────────
+
+// TestExecute_ActionCreate_TracksFile verifies that a successful ActionCreate
+// records the target file in the managed sidecar.
+func TestExecute_ActionCreate_TracksFile(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := fullConfig()
+	p := planner.New()
+	actions, err := p.Plan(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+
+	// Keep only ActionCreate steps to isolate the test.
+	var creates []domain.PlannedAction
+	for _, a := range actions {
+		if a.Action == domain.ActionCreate {
+			creates = append(creates, a)
+		}
+	}
+	if len(creates) == 0 {
+		t.Skip("no ActionCreate steps in plan; skip tracking test")
+	}
+
+	exec := New(p.ComponentInstallers(), p.CopilotManager(), project, cfg.Copilot, nil)
+	report, err := exec.Execute(creates)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !report.Success {
+		t.Fatalf("expected success")
+	}
+
+	tracked, err := managed.ListCreatedFiles(project)
+	if err != nil {
+		t.Fatalf("list created files: %v", err)
+	}
+	if len(tracked) == 0 {
+		t.Fatal("expected at least one file to be tracked after ActionCreate")
+	}
+
+	// Every tracked path should exist on disk relative to project.
+	for _, rel := range tracked {
+		full := filepath.Join(project, rel)
+		if _, statErr := os.Stat(full); statErr != nil {
+			t.Errorf("tracked file %q does not exist: %v", rel, statErr)
+		}
+	}
+}
+
+// TestExecute_ActionUpdate_DoesNotTrack verifies that ActionUpdate steps do NOT
+// add entries to the created-files list.
+func TestExecute_ActionUpdate_DoesNotTrack(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := opencode.New()
+
+	cfg := fullConfig()
+	p := planner.New()
+
+	// Run a first apply so the files exist — next plan will produce ActionUpdate.
+	actions, err := p.Plan(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("plan (first): %v", err)
+	}
+	exec := New(p.ComponentInstallers(), p.CopilotManager(), project, cfg.Copilot, nil)
+	if _, err := exec.Execute(actions); err != nil {
+		t.Fatalf("execute (first): %v", err)
+	}
+
+	// Clear the sidecar so we get a clean slate for the update run.
+	if err := managed.DeleteSidecar(project); err != nil {
+		t.Fatalf("delete sidecar: %v", err)
+	}
+
+	// Plan again — existing files should now produce ActionUpdate (or ActionSkip).
+	actions2, err := p.Plan(cfg, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("plan (second): %v", err)
+	}
+
+	exec2 := New(p.ComponentInstallers(), p.CopilotManager(), project, cfg.Copilot, nil)
+	if _, err := exec2.Execute(actions2); err != nil {
+		t.Fatalf("execute (second): %v", err)
+	}
+
+	tracked, err := managed.ListCreatedFiles(project)
+	if err != nil {
+		t.Fatalf("list created files: %v", err)
+	}
+	// ActionUpdate / ActionSkip steps should NOT populate created_files.
+	for _, a := range actions2 {
+		if a.Action == domain.ActionUpdate || a.Action == domain.ActionSkip {
+			for _, tf := range tracked {
+				rel, _ := filepath.Rel(project, a.TargetPath)
+				if tf == rel {
+					t.Errorf("update/skip action for %q was incorrectly tracked as created", rel)
+				}
+			}
+		}
 	}
 }
 

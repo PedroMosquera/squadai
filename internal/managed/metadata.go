@@ -22,7 +22,9 @@ const (
 
 // sidecarDoc is the on-disk structure of the sidecar file.
 type sidecarDoc struct {
+	Scope        string                      `json:"scope,omitempty"`
 	ManagedFiles map[string]managedFileEntry `json:"managed_files"`
+	CreatedFiles []string                    `json:"created_files,omitempty"`
 }
 
 // managedFileEntry tracks which keys are managed for a single config file.
@@ -106,6 +108,127 @@ func readSidecar(projectRoot string) (sidecarDoc, error) {
 	}
 
 	return doc, nil
+}
+
+// TrackCreatedFile records that SquadAI created the file at relPath.
+// Idempotent — calling twice does not duplicate the entry.
+func TrackCreatedFile(projectRoot, relPath string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range doc.CreatedFiles {
+		if f == relPath {
+			return nil // already tracked
+		}
+	}
+
+	doc.CreatedFiles = append(doc.CreatedFiles, relPath)
+	sort.Strings(doc.CreatedFiles)
+
+	return writeSidecar(projectRoot, doc)
+}
+
+// UntrackCreatedFile removes relPath from the created-files list.
+// No-op if not present.
+func UntrackCreatedFile(projectRoot, relPath string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	filtered := doc.CreatedFiles[:0]
+	for _, f := range doc.CreatedFiles {
+		if f != relPath {
+			filtered = append(filtered, f)
+		}
+	}
+	if len(filtered) == len(doc.CreatedFiles) {
+		return nil // not present, no-op
+	}
+	doc.CreatedFiles = filtered
+
+	return writeSidecar(projectRoot, doc)
+}
+
+// ListCreatedFiles returns all files SquadAI created (relative paths), sorted.
+// Returns an empty slice (not nil) when the sidecar does not exist.
+func ListCreatedFiles(projectRoot string) ([]string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]string, len(doc.CreatedFiles))
+	copy(out, doc.CreatedFiles)
+	return out, nil
+}
+
+// SetScope records the scope ("global" or "repo") in the sidecar.
+func SetScope(projectRoot, scope string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	doc.Scope = scope
+	return writeSidecar(projectRoot, doc)
+}
+
+// GetScope returns the scope from the sidecar, defaulting to "repo".
+func GetScope(projectRoot string) (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return "", err
+	}
+
+	if doc.Scope == "" {
+		return "repo", nil
+	}
+	return doc.Scope, nil
+}
+
+// DeleteSidecar removes the .squadai/managed.json file and the .squadai/ dir
+// if it becomes empty afterwards.
+func DeleteSidecar(projectRoot string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	path := SidecarPath(projectRoot)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete sidecar: %w", err)
+	}
+
+	dir := filepath.Join(projectRoot, sidecarDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read sidecar dir: %w", err)
+	}
+	if len(entries) == 0 {
+		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove sidecar dir: %w", err)
+		}
+	}
+	return nil
 }
 
 // writeSidecar marshals doc and writes it atomically to the sidecar path.

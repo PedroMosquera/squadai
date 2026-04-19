@@ -3,10 +3,12 @@ package pipeline
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/PedroMosquera/squadai/internal/backup"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
 // Executor runs a plan and produces a step-level report.
@@ -148,6 +150,14 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 			Action: action,
 			Status: domain.StepFailed,
 			Error:  err.Error(),
+		}
+	}
+
+	// Track newly created files in the managed sidecar for reversibility.
+	if action.Action == domain.ActionCreate && action.TargetPath != "" {
+		if relPath, relErr := filepath.Rel(e.projectDir, action.TargetPath); relErr == nil {
+			// Best-effort: ignore tracking errors so they don't fail the apply step.
+			_ = managed.TrackCreatedFile(e.projectDir, relPath)
 		}
 	}
 
