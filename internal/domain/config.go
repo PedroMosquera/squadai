@@ -182,7 +182,8 @@ func DefaultUserConfig() *UserConfig {
 			string(AgentClaudeCode): {Enabled: false},
 		},
 		Components: map[string]ComponentConfig{
-			string(ComponentMemory): {Enabled: true},
+			string(ComponentMemory):      {Enabled: true},
+			string(ComponentPermissions): {Enabled: true},
 		},
 		Paths: PathsConfig{
 			BackupDir: "~/.squadai/backups",

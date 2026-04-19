@@ -122,11 +122,12 @@ type Model struct {
 	quitting bool
 
 	// Init wizard state.
-	methodology      domain.Methodology
-	initCursor       int
-	mcpSelections    map[string]bool
-	pluginSelections map[string]bool
-	modelTier        domain.ModelTier
+	methodology        domain.Methodology
+	initCursor         int
+	mcpSelections      map[string]bool
+	pluginSelections   map[string]bool
+	permissionsEnabled bool // security overlay: deny .env reads, confirm dangerous commands
+	modelTier          domain.ModelTier
 
 	// Agent selection and preset (new screens).
 	agentSelections map[string]bool    // key=AgentID string, val=selected
@@ -152,12 +153,13 @@ type Model struct {
 // NewModel creates a TUI model with the given state.
 func NewModel(version string, mode domain.OperationalMode, adapters []domain.Adapter, homeDir string) Model {
 	return Model{
-		version:   version,
-		mode:      mode,
-		adapters:  adapters,
-		homeDir:   homeDir,
-		screen:    screenIntro,
-		modelTier: domain.ModelTierBalanced,
+		version:            version,
+		mode:               mode,
+		adapters:           adapters,
+		homeDir:            homeDir,
+		screen:             screenIntro,
+		modelTier:          domain.ModelTierBalanced,
+		permissionsEnabled: true, // security overlay is on by default
 	}
 }
 
@@ -593,6 +595,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Pass claude default agent flag when opted in.
 			if m.setClaudeDefaultAgent {
 				args = append(args, "--set-claude-default-agent")
+			}
+			// Pass permissions flag.
+			if !m.permissionsEnabled {
+				args = append(args, "--no-permissions")
 			}
 			return m, func() tea.Msg {
 				var buf bytes.Buffer
@@ -1373,6 +1379,11 @@ func (m Model) viewInitInstallSummary() string {
 		content.WriteString(fmt.Sprintf("  %-16s %s\n", "Methodology", methodDesc))
 	}
 	content.WriteString(fmt.Sprintf("  %-16s %s\n", "Model tier", tierName))
+	permStr := "enabled"
+	if !m.permissionsEnabled {
+		permStr = "disabled"
+	}
+	content.WriteString(fmt.Sprintf("  %-16s %s\n", "Permissions", permStr))
 
 	content.WriteString("\n")
 	content.WriteString(headingStyle.Render("Agents") + "\n")
