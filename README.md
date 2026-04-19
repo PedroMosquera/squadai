@@ -39,17 +39,22 @@ That's it. Every developer on the team gets identical agent configurations, rega
 # Install (macOS / Linux)
 brew install PedroMosquera/tap/squadai
 
-# Initialize with TDD methodology
-squadai init --methodology tdd
+# Launch the interactive wizard — recommended for first-time setup.
+# It guides you through methodology, MCP servers, plugins, and applies the config.
+squadai
 
-# Preview changes
-squadai plan --dry-run
+# Need help at any time
+squadai --help            # global help and command list
+squadai <command> --help  # detailed help for a specific command
+```
 
-# Apply configuration
-squadai apply
+Prefer scripting? Skip the wizard and run the steps directly:
 
-# Verify compliance
-squadai verify
+```sh
+squadai init --methodology tdd   # initialize project config
+squadai plan --dry-run           # preview changes
+squadai apply                    # apply configuration
+squadai verify                   # check compliance
 ```
 
 Other install methods (curl, deb/rpm, `go install`, AI agent) are documented in the [Installation](#installation) section.
@@ -237,6 +242,7 @@ Policy (locked fields)  >  Project config  >  User defaults
 
 | Command | Description |
 |---------|-------------|
+| `squadai` (no args) | Launch interactive TUI wizard (methodology, MCP, plugins, summary, menu) |
 | `squadai init` | Initialize project config and detect agents |
 | `squadai plan` | Compute and display the action plan |
 | `squadai diff` | Preview what apply would change (unified diffs) |
@@ -253,6 +259,7 @@ Policy (locked fields)  >  Project config  >  User defaults
 | `squadai restore <id>` | Restore files from a backup |
 | `squadai remove --force` | Remove all managed files and strip marker blocks |
 | `squadai version` | Print version |
+| `squadai help` / `--help` / `-h` | Show global help or per-command help (`squadai <command> --help`) |
 
 ### Flags
 
