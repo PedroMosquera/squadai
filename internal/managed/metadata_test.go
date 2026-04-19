@@ -222,3 +222,264 @@ func TestWriteManagedKeys_Idempotent(t *testing.T) {
 		t.Errorf("expected 2 keys after idempotent writes, got %d: %v", len(keys), keys)
 	}
 }
+
+// ─── TrackCreatedFile ─────────────────────────────────────────────────────────
+
+func TestTrackCreatedFile_Basic(t *testing.T) {
+	root := t.TempDir()
+
+	if err := TrackCreatedFile(root, "AGENTS.md"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(files) != 1 || files[0] != "AGENTS.md" {
+		t.Errorf("got %v, want [AGENTS.md]", files)
+	}
+}
+
+func TestTrackCreatedFile_Idempotent(t *testing.T) {
+	root := t.TempDir()
+
+	for i := 0; i < 3; i++ {
+		if err := TrackCreatedFile(root, "AGENTS.md"); err != nil {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+	}
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(files) != 1 {
+		t.Errorf("expected 1 file after idempotent track, got %d: %v", len(files), files)
+	}
+}
+
+func TestTrackCreatedFile_Multiple(t *testing.T) {
+	root := t.TempDir()
+
+	inputs := []string{"CLAUDE.md", "AGENTS.md", ".opencode/agents/reviewer.md"}
+	for _, f := range inputs {
+		if err := TrackCreatedFile(root, f); err != nil {
+			t.Fatalf("track %q: %v", f, err)
+		}
+	}
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+
+	want := []string{".opencode/agents/reviewer.md", "AGENTS.md", "CLAUDE.md"}
+	if len(files) != len(want) {
+		t.Fatalf("expected %d files, got %d: %v", len(want), len(files), files)
+	}
+	for i, w := range want {
+		if files[i] != w {
+			t.Errorf("files[%d] = %q, want %q", i, files[i], w)
+		}
+	}
+}
+
+// ─── UntrackCreatedFile ───────────────────────────────────────────────────────
+
+func TestUntrackCreatedFile_Exists(t *testing.T) {
+	root := t.TempDir()
+
+	if err := TrackCreatedFile(root, "AGENTS.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := TrackCreatedFile(root, "CLAUDE.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := UntrackCreatedFile(root, "AGENTS.md"); err != nil {
+		t.Fatalf("untrack: %v", err)
+	}
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "CLAUDE.md" {
+		t.Errorf("got %v, want [CLAUDE.md]", files)
+	}
+}
+
+func TestUntrackCreatedFile_NotPresent(t *testing.T) {
+	root := t.TempDir()
+
+	// Calling on missing entry should be a no-op with no error.
+	if err := UntrackCreatedFile(root, "nonexistent.md"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("expected empty, got %v", files)
+	}
+}
+
+// ─── ListCreatedFiles ─────────────────────────────────────────────────────────
+
+func TestListCreatedFiles_Empty(t *testing.T) {
+	root := t.TempDir()
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("expected empty list, got %v", files)
+	}
+}
+
+// ─── SetScope / GetScope ──────────────────────────────────────────────────────
+
+func TestSetScope_And_GetScope(t *testing.T) {
+	root := t.TempDir()
+
+	if err := SetScope(root, "global"); err != nil {
+		t.Fatalf("set scope: %v", err)
+	}
+
+	got, err := GetScope(root)
+	if err != nil {
+		t.Fatalf("get scope: %v", err)
+	}
+	if got != "global" {
+		t.Errorf("scope = %q, want global", got)
+	}
+}
+
+func TestGetScope_Default(t *testing.T) {
+	root := t.TempDir()
+
+	got, err := GetScope(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "repo" {
+		t.Errorf("default scope = %q, want repo", got)
+	}
+}
+
+// ─── DeleteSidecar ────────────────────────────────────────────────────────────
+
+func TestDeleteSidecar(t *testing.T) {
+	root := t.TempDir()
+
+	if err := TrackCreatedFile(root, "AGENTS.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := DeleteSidecar(root); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Sidecar file should be gone.
+	if _, err := os.Stat(SidecarPath(root)); !os.IsNotExist(err) {
+		t.Error("expected sidecar to be removed")
+	}
+
+	// Directory should also be gone (was empty after file removal).
+	dir := filepath.Join(root, ".squadai")
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Error("expected empty .squadai dir to be removed")
+	}
+}
+
+func TestDeleteSidecar_NonEmpty(t *testing.T) {
+	root := t.TempDir()
+
+	if err := TrackCreatedFile(root, "AGENTS.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add another file inside .squadai so the dir is non-empty after deletion.
+	dir := filepath.Join(root, ".squadai")
+	other := filepath.Join(dir, "other.txt")
+	if err := os.WriteFile(other, []byte("keep me"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := DeleteSidecar(root); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Sidecar file should be gone.
+	if _, err := os.Stat(SidecarPath(root)); !os.IsNotExist(err) {
+		t.Error("expected sidecar file to be removed")
+	}
+
+	// Directory should remain (other.txt still there).
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("expected .squadai dir to remain, got: %v", err)
+	}
+}
+
+// ─── Coexistence ─────────────────────────────────────────────────────────────
+
+func TestCreatedFiles_WithManagedKeys(t *testing.T) {
+	root := t.TempDir()
+
+	// Write managed keys for one file.
+	if err := WriteManagedKeys(root, "opencode.json", []string{"mcp", "model"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Track a created file.
+	if err := TrackCreatedFile(root, "AGENTS.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Both should coexist without interference.
+	keys, err := ReadManagedKeys(root, "opencode.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 2 {
+		t.Errorf("managed keys lost: got %v", keys)
+	}
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "AGENTS.md" {
+		t.Errorf("created files wrong: got %v", files)
+	}
+}
+
+// ─── Concurrent safety ────────────────────────────────────────────────────────
+
+func TestConcurrent_TrackCreatedFile(t *testing.T) {
+	root := t.TempDir()
+
+	const workers = 20
+	var wg sync.WaitGroup
+	wg.Add(workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			_ = TrackCreatedFile(root, "AGENTS.md")
+		}()
+	}
+	wg.Wait()
+
+	files, err := ListCreatedFiles(root)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(files) != 1 || files[0] != "AGENTS.md" {
+		t.Errorf("expected exactly [AGENTS.md], got %v", files)
+	}
+}

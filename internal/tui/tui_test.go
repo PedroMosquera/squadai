@@ -1611,7 +1611,7 @@ func TestInitAdapters_ShowsAllFiveAgents(t *testing.T) {
 	}
 }
 
-func TestInitAdapters_OpenCodeIsLocked(t *testing.T) {
+func TestInitAdapters_OpenCodeCanBeToggled(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, []domain.Adapter{
 		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
 	}, "/tmp/home")
@@ -1621,12 +1621,20 @@ func TestInitAdapters_OpenCodeIsLocked(t *testing.T) {
 	}
 	m.initCursor = 0 // opencode is first
 
-	// Toggle opencode with space — should have no effect.
+	// Toggle opencode with space — should deselect it.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model := updated.(Model)
 
+	if model.agentSelections[string(domain.AgentOpenCode)] {
+		t.Error("toggling opencode should deselect it — it is no longer locked")
+	}
+
+	// Toggle again — should re-select it.
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model = updated.(Model)
+
 	if !model.agentSelections[string(domain.AgentOpenCode)] {
-		t.Error("toggling opencode should have no effect — it must stay checked")
+		t.Error("toggling opencode again should re-select it")
 	}
 }
 
@@ -1857,6 +1865,8 @@ func TestInstallSummary_Enter_GoesToApplyPrompt(t *testing.T) {
 	m.setupPreset = domain.PresetFullSquad
 	m.mcpSelections = map[string]bool{"context7": true}
 	m.pluginSelections = make(map[string]bool)
+	// At least one agent must be selected to proceed.
+	m.agentSelections = map[string]bool{string(domain.AgentOpenCode): true}
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
@@ -1878,5 +1888,81 @@ func TestInstallSummary_Esc_GoesToPreset(t *testing.T) {
 
 	if model.screen != screenInitPreset {
 		t.Errorf("screen = %d, want screenInitPreset (%d) after esc on install summary", model.screen, screenInitPreset)
+	}
+}
+
+// ─── Empty-selection guard tests ──────────────────────────────────────────────
+
+func TestInstallSummary_EmptySelection_GoesBackToAdapters(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.methodology = domain.MethodologySDD
+	m.modelTier = domain.ModelTierBalanced
+	// No agents selected.
+	m.agentSelections = make(map[string]bool)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) when no agents selected", model.screen, screenInitAdapters)
+	}
+	if cmd != nil {
+		t.Error("empty selection should not dispatch a RunInit command")
+	}
+	if !strings.Contains(model.output, "No agents selected") {
+		t.Errorf("output should contain 'No agents selected', got: %q", model.output)
+	}
+}
+
+func TestInstallSummary_NilSelection_GoesBackToAdapters(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.methodology = domain.MethodologySDD
+	// agentSelections is nil (never initialized).
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenInitAdapters {
+		t.Errorf("screen = %d, want screenInitAdapters (%d) when agentSelections is nil", model.screen, screenInitAdapters)
+	}
+	if cmd != nil {
+		t.Error("nil selection should not dispatch a RunInit command")
+	}
+}
+
+func TestInitAdapters_ViewDoesNotShowRequiredLabel(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, []domain.Adapter{
+		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
+	}, "/tmp/home")
+	m.screen = screenInitAdapters
+	m.agentSelections = map[string]bool{string(domain.AgentOpenCode): true}
+
+	view := m.View()
+	if strings.Contains(view, "(required)") {
+		t.Error("adapters view should NOT contain '(required)' label — OpenCode is no longer locked")
+	}
+}
+
+func TestInstallSummary_AllDeselectedExceptOne_ProceedsWithOne(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitInstallSummary
+	m.methodology = domain.MethodologySDD
+	m.modelTier = domain.ModelTierBalanced
+	// Only cursor selected.
+	m.agentSelections = map[string]bool{
+		string(domain.AgentOpenCode): false,
+		string(domain.AgentCursor):   true,
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+
+	if model.screen != screenRunning {
+		t.Errorf("screen = %d, want screenRunning (%d) when one agent selected", model.screen, screenRunning)
+	}
+	if cmd == nil {
+		t.Error("one agent selected should dispatch a RunInit command")
 	}
 }

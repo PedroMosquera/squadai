@@ -2225,8 +2225,8 @@ func DetectAdapters(homeDir string) []domain.Adapter {
 }
 
 // filterAdapters returns only adapters whose ID is in the selections set.
-// OpenCode is always included regardless of selections (team-required adapter).
 // If selections is nil/empty, returns detected unchanged (backward-compatible).
+// If selections is non-empty but no detected adapter matches, returns an empty slice.
 func filterAdapters(detected []domain.Adapter, selections []string) []domain.Adapter {
 	if len(selections) == 0 {
 		return detected
@@ -2235,8 +2235,6 @@ func filterAdapters(detected []domain.Adapter, selections []string) []domain.Ada
 	for _, s := range selections {
 		allowed[strings.TrimSpace(s)] = true
 	}
-	// OpenCode is always required.
-	allowed[string(domain.AgentOpenCode)] = true
 
 	var result []domain.Adapter
 	for _, a := range detected {

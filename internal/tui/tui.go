@@ -344,8 +344,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			for _, a := range m.adapters {
 				m.agentSelections[string(a.ID())] = true
 			}
-			// OpenCode is always required.
-			m.agentSelections[string(domain.AgentOpenCode)] = true
 			m.initCursor = 0
 			m.screen = screenInitAdapters
 			return m, nil
@@ -441,15 +439,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.initCursor++
 			}
 		case " ":
-			// Toggle selection; OpenCode cannot be deselected.
+			// Toggle selection.
 			if m.initCursor < len(allAgents) {
 				id := string(allAgents[m.initCursor])
-				if id != string(domain.AgentOpenCode) {
-					if m.agentSelections == nil {
-						m.agentSelections = make(map[string]bool)
-					}
-					m.agentSelections[id] = !m.agentSelections[id]
+				if m.agentSelections == nil {
+					m.agentSelections = make(map[string]bool)
 				}
+				m.agentSelections[id] = !m.agentSelections[id]
 			}
 		case "enter":
 			m.initCursor = 0
@@ -501,6 +497,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case screenInitInstallSummary:
 		switch key {
 		case "enter":
+			// Guard: do not proceed if no agents are selected.
+			var selectedAgents []string
+			for id, selected := range m.agentSelections {
+				if selected {
+					selectedAgents = append(selectedAgents, id)
+				}
+			}
+			if len(selectedAgents) == 0 {
+				m.output = "No agents selected. Nothing to configure."
+				m.screen = screenInitAdapters
+				return m, nil
+			}
 			m.screen = screenRunning
 			m.output = ""
 			m.err = nil
@@ -1151,14 +1159,10 @@ func (m Model) viewInitAdapters() string {
 
 	for i, agentID := range allAgents {
 		id := string(agentID)
-		isOpenCode := id == string(domain.AgentOpenCode)
 		isDetected := detectedSet[id]
 
 		// Determine checked state.
 		checked := m.agentSelections != nil && m.agentSelections[id]
-		if isOpenCode {
-			checked = true // always checked
-		}
 
 		var checkStr string
 		if checked {
@@ -1181,10 +1185,7 @@ func (m Model) viewInitAdapters() string {
 			nameStr = id
 		}
 
-		switch {
-		case isOpenCode:
-			suffix = mutedStyle.Render("(required)")
-		case !isDetected:
+		if !isDetected {
 			suffix = mutedStyle.Render("(not detected)")
 		}
 
@@ -1312,8 +1313,7 @@ func (m Model) viewInitInstallSummary() string {
 	hasAny := false
 	for _, agentID := range allAgents {
 		id := string(agentID)
-		isOpenCode := id == string(domain.AgentOpenCode)
-		selected := (m.agentSelections != nil && m.agentSelections[id]) || isOpenCode
+		selected := m.agentSelections != nil && m.agentSelections[id]
 		if !selected {
 			continue
 		}
@@ -1322,11 +1322,7 @@ func (m Model) viewInitInstallSummary() string {
 		if strategy == "" {
 			strategy = knownStrategies[id]
 		}
-		var suffix string
-		if isOpenCode {
-			suffix = mutedStyle.Render("(required)")
-		}
-		content.WriteString(fmt.Sprintf("  %-20s %-8s %s\n", id, strategy, suffix))
+		content.WriteString(fmt.Sprintf("  %-20s %-8s\n", id, strategy))
 	}
 	if !hasAny {
 		content.WriteString(mutedStyle.Render("  (none selected)") + "\n")
