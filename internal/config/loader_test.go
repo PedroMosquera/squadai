@@ -31,8 +31,8 @@ func TestLoadUser_ValidJSON_ParsesCorrectly(t *testing.T) {
 	if loaded.Version != 1 {
 		t.Errorf("Version = %d, want 1", loaded.Version)
 	}
-	if loaded.Mode != domain.ModeHybrid {
-		t.Errorf("Mode = %q, want %q", loaded.Mode, domain.ModeHybrid)
+	if loaded.Mode != domain.ModePersonal {
+		t.Errorf("Mode = %q, want %q", loaded.Mode, domain.ModePersonal)
 	}
 	if !loaded.Adapters[string(domain.AgentOpenCode)].Enabled {
 		t.Error("opencode adapter should be enabled by default")

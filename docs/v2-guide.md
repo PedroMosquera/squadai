@@ -591,7 +591,8 @@ Locked fields cannot be overridden by project or user config. See [`docs/policy.
 |------|----------|
 | `team` | Policy-controlled. Required settings enforced, locked fields immutable. |
 | `personal` | User-controlled. Optional adapters and personal defaults. |
-| `hybrid` | Both active. Policy locked fields take precedence over user/project values. |
+
+> **Note:** `hybrid` mode is deprecated. If your config uses `hybrid`, SquadAI will resolve it to `team` (if `policy.json` exists) or `personal` (if not), and print a deprecation warning.
 
 ---
 
@@ -641,13 +642,7 @@ squadai apply [--dry-run] [--json]
 
 All managed files are backed up before changes. If any step fails, all completed changes are rolled back. The backup ID is printed for manual recovery.
 
-### `squadai sync`
-
-Idempotent reconciliation. Identical to `apply` but emphasizes that running it multiple times produces the same result. Safe for CI.
-
-```sh
-squadai sync [--dry-run] [--json]
-```
+> **`apply` is idempotent** — re-running it produces the same result. There is no separate `sync` command.
 
 ### `squadai verify`
 

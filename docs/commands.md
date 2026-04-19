@@ -95,9 +95,7 @@ If a team policy is active, any overridden user/project values are reported unde
 
 ```sh
 $ squadai plan
-Mode: hybrid
-
-Planned actions (2):
+Mode: team
   create   Install memory protocol for opencode         ~/.opencode/memory/protocol.md
   create   Write copilot instructions                   .github/copilot-instructions.md
 
@@ -198,17 +196,7 @@ Dry run: 2 action(s) would be executed.
 
 On failure, the output includes the backup ID and instructions for manual restore.
 
----
-
-## `squadai sync`
-
-Idempotent reconciliation to desired state.
-
-```sh
-squadai sync [--dry-run] [--json]
-```
-
-Semantically identical to `apply`. The planner automatically skips actions where the current state matches the desired state, making repeated runs safe and no-op when everything is current.
+> **`apply` is idempotent** — re-running it is safe and skips up-to-date files automatically.
 
 ---
 
@@ -258,9 +246,7 @@ $ squadai status
 Project: my-project
 Language: Go
 Methodology: tdd
-Mode: hybrid
-
-Adapters (3 detected):
+Mode: team
   opencode       enabled   delegation: native
   claude-code    enabled   delegation: prompt
   cursor         enabled   delegation: native

@@ -53,7 +53,6 @@ var menuItems = []menuItem{
 	{label: "Init / Setup", command: "init", description: "Configure agents, MCP servers, and team methodology for this project"},
 	{label: "Plan (dry-run)", command: "plan", description: "Preview what files would be created or updated without making changes"},
 	{label: "Apply", command: "apply", description: "Write all planned config files to disk (agents, MCP, rules, etc.)"},
-	{label: "Sync", command: "sync", description: "Re-apply config after manual changes to .squadai/project.json"},
 	{label: "Team Status", command: "team-status", description: "Show which agents are configured and their team role assignments"},
 	{label: "Browse Skills", command: "skills", description: "Explore and install community skills (code review, testing, etc.)"},
 	{label: "Verify", command: "verify", description: "Check that all generated files match the expected configuration"},
@@ -719,8 +718,6 @@ func (m Model) runCommand(command string) tea.Cmd {
 				applyArgs = append(applyArgs, "--set-claude-default-agent")
 			}
 			err = cli.RunApply(applyArgs, &buf)
-		case "sync":
-			err = cli.RunSync(nil, &buf)
 		case "verify":
 			err = cli.RunVerify(nil, &buf)
 		}
@@ -1057,10 +1054,8 @@ func cliHelpText() string {
   squadai plan             Preview planned changes (dry-run)
   squadai plan --json      Output plan as JSON
 
-  squadai apply            Write all config files to disk
+  squadai apply            Write all config files to disk (idempotent — re-run to sync)
   squadai apply --json     Output result as JSON
-
-  squadai sync             Re-apply after manual config changes
 
   squadai verify           Check generated files match config
   squadai verify --json    Output result as JSON

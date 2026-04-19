@@ -50,7 +50,7 @@ Core types and interfaces with no filesystem dependencies. Defines:
 - **Methodology** — `tdd`, `sdd`, `conventional`
 - **DelegationStrategy** — `native` (OpenCode, Cursor), `prompt` (Claude Code), `solo` (VS Code, Windsurf)
 - **ComponentID** — `memory`, `rules`, `settings`, `mcp`, `agents`, `skills`, `commands`, `plugins`, `workflows`
-- **OperationalMode** — `team`, `personal`, `hybrid`
+- **OperationalMode** — `team`, `personal` (`hybrid` is a deprecated alias, resolved at load time)
 - **PlannedAction** — a single step the planner produces
 - **StepResult** — outcome of executing one action
 - **ApplyReport** — full result of a plan execution

@@ -42,9 +42,6 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "apply":
 		return cli.RunApply(args[1:], stdout)
 
-	case "sync":
-		return cli.RunSync(args[1:], stdout)
-
 	case "verify":
 		return cli.RunVerify(args[1:], stdout)
 
@@ -106,7 +103,6 @@ Commands:
   plan               Compute action plan (use --dry-run to preview)
   diff               Show what apply would change as unified diffs
   apply              Execute plan with backup and rollback safety
-  sync               Idempotent reconciliation to desired state
   verify             Print compliance and health report
   status             Show project configuration summary
   backup create      Snapshot managed files
@@ -118,7 +114,7 @@ Commands:
   version            Print version
 
 Flags:
-  --dry-run          Preview changes without applying (plan, apply, sync)
+  --dry-run          Preview changes without applying (plan, apply)
   --json             Machine-readable JSON output (all commands)
   -h, --help         Show this help
 

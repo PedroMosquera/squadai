@@ -651,51 +651,51 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 		t.Fatalf("plan team-only: %v", err)
 	}
 
-	// Plan with OpenCode + personal adapters (hybrid scenario).
+	// Plan with OpenCode + personal adapters (personal/multi-adapter scenario).
 	claudeAdapter := claude.New()
 	allAdapters := []domain.Adapter{ocAdapter, claudeAdapter}
 
-	hybridActions, err := p.Plan(merged, allAdapters, home, project)
+	personalActions, err := p.Plan(merged, allAdapters, home, project)
 	if err != nil {
-		t.Fatalf("plan hybrid: %v", err)
+		t.Fatalf("plan personal: %v", err)
 	}
 
-	// The hybrid plan should include the same team actions plus personal ones.
+	// The personal plan should include the same team actions plus personal ones.
 	// Extract team-only actions from both plans for comparison.
 	teamOnly := filterByAgent(teamActions, domain.AgentOpenCode)
-	teamFromHybrid := filterByAgent(hybridActions, domain.AgentOpenCode)
+	teamFromPersonal := filterByAgent(personalActions, domain.AgentOpenCode)
 
-	if len(teamOnly) != len(teamFromHybrid) {
-		t.Errorf("team actions changed: team-only=%d, from-hybrid=%d", len(teamOnly), len(teamFromHybrid))
+	if len(teamOnly) != len(teamFromPersonal) {
+		t.Errorf("team actions changed: team-only=%d, from-personal=%d", len(teamOnly), len(teamFromPersonal))
 	}
 
 	for i := range teamOnly {
-		if i >= len(teamFromHybrid) {
+		if i >= len(teamFromPersonal) {
 			break
 		}
-		if teamOnly[i].ID != teamFromHybrid[i].ID {
-			t.Errorf("team action[%d] ID mismatch: %q vs %q", i, teamOnly[i].ID, teamFromHybrid[i].ID)
+		if teamOnly[i].ID != teamFromPersonal[i].ID {
+			t.Errorf("team action[%d] ID mismatch: %q vs %q", i, teamOnly[i].ID, teamFromPersonal[i].ID)
 		}
-		if teamOnly[i].Action != teamFromHybrid[i].Action {
-			t.Errorf("team action[%d] type mismatch: %q vs %q", i, teamOnly[i].Action, teamFromHybrid[i].Action)
+		if teamOnly[i].Action != teamFromPersonal[i].Action {
+			t.Errorf("team action[%d] type mismatch: %q vs %q", i, teamOnly[i].Action, teamFromPersonal[i].Action)
 		}
-		if teamOnly[i].TargetPath != teamFromHybrid[i].TargetPath {
-			t.Errorf("team action[%d] path mismatch: %q vs %q", i, teamOnly[i].TargetPath, teamFromHybrid[i].TargetPath)
+		if teamOnly[i].TargetPath != teamFromPersonal[i].TargetPath {
+			t.Errorf("team action[%d] path mismatch: %q vs %q", i, teamOnly[i].TargetPath, teamFromPersonal[i].TargetPath)
 		}
 	}
 
 	// Also check copilot action is present in both plans.
 	teamCopilot := filterByCopilot(teamActions)
-	hybridCopilot := filterByCopilot(hybridActions)
-	if len(teamCopilot) != len(hybridCopilot) {
-		t.Errorf("copilot actions changed: team=%d, hybrid=%d", len(teamCopilot), len(hybridCopilot))
+	personalCopilot := filterByCopilot(personalActions)
+	if len(teamCopilot) != len(personalCopilot) {
+		t.Errorf("copilot actions changed: team=%d, personal=%d", len(teamCopilot), len(personalCopilot))
 	}
 
-	// Execute the hybrid plan to verify it succeeds end-to-end.
+	// Execute the personal plan to verify it succeeds end-to-end.
 	exec := pipeline.New(p.ComponentInstallers(), p.CopilotManager(), project, merged.Copilot, nil)
-	report, execErr := exec.Execute(hybridActions)
+	report, execErr := exec.Execute(personalActions)
 	if execErr != nil {
-		t.Fatalf("hybrid execute: %v", execErr)
+		t.Fatalf("personal execute: %v", execErr)
 	}
 	if !report.Success {
 		for _, s := range report.Steps {
@@ -703,7 +703,7 @@ func TestPersonalLane_TeamModeUnaffected(t *testing.T) {
 				t.Errorf("step %q failed: %s", s.Action.ID, s.Error)
 			}
 		}
-		t.Fatal("hybrid apply should succeed")
+		t.Fatal("personal apply should succeed")
 	}
 
 	// Verify: team files exist.

@@ -258,20 +258,6 @@ func isMCPConfigFileAdapter(adapter domain.Adapter) bool {
 	return false
 }
 
-// mcpConfigFilePath returns the path to the MCP config file for MCPConfigFile adapters.
-// Claude Code uses .mcp.json at project root; VS Code uses .vscode/mcp.json;
-// Cursor and Windsurf use their ProjectConfigFile.
-func mcpConfigFilePath(adapter domain.Adapter, projectDir string) string {
-	switch adapter.ID() {
-	case domain.AgentClaudeCode:
-		return filepath.Join(projectDir, ".mcp.json")
-	case domain.AgentVSCodeCopilot:
-		return filepath.Join(projectDir, ".vscode", "mcp.json")
-	default:
-		return adapter.ProjectConfigFile(projectDir)
-	}
-}
-
 // planMCPConfigFile plans actions for the MCPConfigFile strategy.
 // All servers are merged into a dedicated MCP config file under the adapter's root key.
 func (i *Installer) planMCPConfigFile(adapter domain.Adapter, targetPath string) ([]domain.PlannedAction, error) {
@@ -644,27 +630,4 @@ func mcpKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPSer
 	expectedJSON, _ := json.Marshal(expectedMap)
 	actualJSON, _ := json.Marshal(mcpVal)
 	return string(expectedJSON) == string(actualJSON)
-}
-
-// readJSONFile reads a JSON file into a generic map.
-// Returns nil, nil if the file does not exist.
-func readJSONFile(path string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if len(data) == 0 {
-		return nil, nil
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
-	return result, nil
 }
