@@ -1,6 +1,13 @@
 ---
 description: Implements according to specification with strict spec compliance
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: true
 ---
 
 # Implementer

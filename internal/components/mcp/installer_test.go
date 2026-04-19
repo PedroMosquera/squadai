@@ -186,7 +186,8 @@ func TestPlan_Claude_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"url": "https://mcp.context7.com/mcp",
+				"type": "http",
+				"url":  "https://mcp.context7.com/mcp",
 			},
 		},
 	})
@@ -211,7 +212,8 @@ func TestPlan_Claude_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"url": "https://wrong.com",
+				"type": "http",
+				"url":  "https://wrong.com",
 			},
 		},
 	})
@@ -509,9 +511,9 @@ func TestApply_Claude_MCPConfigFile_CreatesFile(t *testing.T) {
 	if ctx7["url"] != "https://mcp.context7.com/mcp" {
 		t.Errorf("url = %v, want https://mcp.context7.com/mcp", ctx7["url"])
 	}
-	// Claude Code format: no "type" field, command is string + args.
-	if _, hasType := ctx7["type"]; hasType {
-		t.Error("Claude Code format must NOT include 'type' field")
+	// Claude Code remote servers must include "type": "http".
+	if ctx7["type"] != "http" {
+		t.Errorf("Claude Code remote type = %v, want \"http\"", ctx7["type"])
 	}
 }
 
@@ -750,9 +752,9 @@ func TestServerToMap_ClaudeCode_RemoteServer(t *testing.T) {
 	}
 	m := serverToMap(def, domain.AgentClaudeCode)
 
-	// No type, no command, just url.
-	if _, hasType := m["type"]; hasType {
-		t.Error("Claude Code remote must NOT include 'type' field")
+	// Claude Code remote requires "type": "http".
+	if m["type"] != "http" {
+		t.Errorf("Claude Code remote type = %v, want \"http\"", m["type"])
 	}
 	if m["url"] != "https://mcp.context7.com/mcp" {
 		t.Errorf("url = %v, want https://mcp.context7.com/mcp", m["url"])
@@ -926,7 +928,8 @@ func TestPlan_VSCode_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"servers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"url": "https://mcp.context7.com/mcp",
+				"type": "http",
+				"url":  "https://mcp.context7.com/mcp",
 			},
 		},
 	})
@@ -952,7 +955,8 @@ func TestPlan_VSCode_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"servers": map[string]interface{}{
 			"context7": map[string]interface{}{
-				"url": "https://old-url.com/mcp",
+				"type": "http",
+				"url":  "https://old-url.com/mcp",
 			},
 		},
 	})
@@ -1001,9 +1005,9 @@ func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
 	if server["url"] != "https://mcp.context7.com/mcp" {
 		t.Errorf("url = %v, want https://mcp.context7.com/mcp", server["url"])
 	}
-	// VS Code format: no "type" field.
-	if _, hasType := server["type"]; hasType {
-		t.Error("VS Code format must NOT include 'type' field")
+	// VS Code remote servers must include "type": "http".
+	if server["type"] != "http" {
+		t.Errorf("VS Code remote type = %v, want \"http\"", server["type"])
 	}
 
 	// Check that _agent_manager is NOT written into the config doc.

@@ -1,6 +1,13 @@
 ---
 description: Proposes high-level solutions with tradeoff analysis
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: false
+  edit: false
 ---
 
 # Proposer

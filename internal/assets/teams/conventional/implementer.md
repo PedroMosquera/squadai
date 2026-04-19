@@ -1,6 +1,13 @@
 ---
 description: Implements features and fixes with general-purpose coding
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: true
 ---
 
 # Implementer

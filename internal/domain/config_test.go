@@ -128,7 +128,7 @@ func TestDefaultMCPCatalog_ReturnsFiveServers(t *testing.T) {
 	}
 }
 
-func TestDefaultMCPCatalog_ExactlyTwoPreChecked(t *testing.T) {
+func TestDefaultMCPCatalog_ExactlyOnePreChecked(t *testing.T) {
 	catalog := DefaultMCPCatalog()
 	var preChecked []string
 	for _, s := range catalog {
@@ -136,12 +136,12 @@ func TestDefaultMCPCatalog_ExactlyTwoPreChecked(t *testing.T) {
 			preChecked = append(preChecked, s.Name)
 		}
 	}
-	if len(preChecked) != 2 {
-		t.Errorf("expected 2 pre-checked servers, got %d: %v", len(preChecked), preChecked)
+	if len(preChecked) != 1 {
+		t.Errorf("expected 1 pre-checked server, got %d: %v", len(preChecked), preChecked)
 	}
 }
 
-func TestDefaultMCPCatalog_PreCheckedAreContext7AndGitHub(t *testing.T) {
+func TestDefaultMCPCatalog_PreCheckedIsContext7(t *testing.T) {
 	catalog := DefaultMCPCatalog()
 	preChecked := make(map[string]bool)
 	for _, s := range catalog {
@@ -149,10 +149,8 @@ func TestDefaultMCPCatalog_PreCheckedAreContext7AndGitHub(t *testing.T) {
 			preChecked[s.Name] = true
 		}
 	}
-	for _, expected := range []string{"context7", "github"} {
-		if !preChecked[expected] {
-			t.Errorf("expected %q to be pre-checked", expected)
-		}
+	if !preChecked["context7"] {
+		t.Error("expected context7 to be pre-checked")
 	}
 }
 

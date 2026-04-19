@@ -1,6 +1,13 @@
 ---
 description: Reviews code quality, patterns, and correctness
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: false
+  edit: false
 ---
 
 # Reviewer

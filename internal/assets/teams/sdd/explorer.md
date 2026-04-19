@@ -1,6 +1,13 @@
 ---
 description: Researches requirements and constraints by analyzing the codebase
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: false
+  edit: false
 ---
 
 # Explorer

@@ -1,6 +1,13 @@
 ---
 description: Reviews code for TDD compliance and quality
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: false
+  edit: false
 ---
 
 # Reviewer

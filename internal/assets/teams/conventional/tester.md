@@ -1,6 +1,13 @@
 ---
 description: Writes and maintains tests for coverage and quality
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: true
 ---
 
 # Tester

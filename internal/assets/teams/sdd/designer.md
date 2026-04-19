@@ -1,6 +1,13 @@
 ---
 description: Designs architecture and interfaces from the specification
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: false
 ---
 
 # Designer

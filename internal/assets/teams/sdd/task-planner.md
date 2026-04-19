@@ -1,6 +1,13 @@
 ---
 description: Breaks the design into dependency-ordered implementation tasks
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: false
 ---
 
 # Task Planner

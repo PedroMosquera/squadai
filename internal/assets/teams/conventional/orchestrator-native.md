@@ -1,3 +1,15 @@
+---
+description: Orchestrates the development workflow by delegating tasks to specialized sub-agents
+mode: primary
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: true
+---
+
 # {{.Methodology}} Orchestrator
 
 ## Identity

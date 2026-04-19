@@ -1,6 +1,13 @@
 ---
 description: Diagnoses and fixes failing tests using the 4-phase debug protocol
 mode: subagent
+tools:
+  read: true
+  glob: true
+  grep: true
+  bash: true
+  write: true
+  edit: true
 ---
 
 # Debugger
