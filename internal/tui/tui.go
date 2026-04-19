@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/cli"
+	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -40,6 +42,7 @@ const (
 	screenInitApplyPrompt    // "Apply now?" prompt after successful init
 	screenRemoveConfirm      // "Remove SquadAI config" confirmation screen
 	screenClaudeDefaultAgent // "Set orchestrator as default Claude agent?" yes/no
+	screenDoctor             // pre-flight diagnostics screen
 )
 
 // menuItem is a selectable action.
@@ -54,6 +57,7 @@ var menuItems = []menuItem{
 	{label: "Plan (dry-run)", command: "plan", description: "Preview what files would be created or updated without making changes"},
 	{label: "Apply", command: "apply", description: "Write all planned config files to disk (agents, MCP, rules, etc.)"},
 	{label: "Team Status", command: "team-status", description: "Show which agents are configured and their team role assignments"},
+	{label: "Doctor", command: "doctor", description: "Run pre-flight diagnostics: environment, agents, config, MCP, filesystem"},
 	{label: "Browse Skills", command: "skills", description: "Explore and install community skills (code review, testing, etc.)"},
 	{label: "Verify", command: "verify", description: "Check that all generated files match the expected configuration"},
 	{label: "Restore Backup", command: "restore", description: "Restore files from a backup created before apply or remove"},
@@ -148,6 +152,10 @@ type Model struct {
 
 	// Remove confirmation state.
 	removePreview string // dry-run output shown on confirmation screen
+
+	// Doctor screen state.
+	doctorResults []doctor.CheckResult
+	doctorFixMsg  string // message shown after auto-fix attempt
 }
 
 // NewModel creates a TUI model with the given state.
@@ -167,6 +175,17 @@ func NewModel(version string, mode domain.OperationalMode, adapters []domain.Ada
 type commandResult struct {
 	output string
 	err    error
+}
+
+// doctorCheckResult carries doctor check results from a tea.Cmd.
+type doctorCheckResult struct {
+	results []doctor.CheckResult
+	err     error
+}
+
+// doctorFixDone carries the message to display after --fix attempt.
+type doctorFixDone struct {
+	msg string
 }
 
 // Init is the bubbletea init function.
@@ -195,6 +214,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.initJustCompleted = false
 			m.screen = screenResult
 		}
+		return m, nil
+	case doctorCheckResult:
+		m.doctorResults = msg.results
+		// Stay on screenDoctor (was already set when cmd was launched).
+		return m, nil
+	case doctorFixDone:
+		m.doctorFixMsg = msg.msg
 		return m, nil
 	}
 	return m, nil
@@ -235,6 +261,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case "team-status":
 				m.screen = screenTeamStatus
 				return m, nil
+			case "doctor":
+				m.doctorResults = nil
+				m.doctorFixMsg = ""
+				m.screen = screenDoctor
+				return m, m.runDoctorCmd()
 			case "skills":
 				cat, err := loadSkillCatalog()
 				m.skillCat = cat
@@ -332,6 +363,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "esc", "enter", "q":
 			m.screen = screenMenu
+			return m, nil
+		}
+
+	case screenDoctor:
+		switch key {
+		case "f":
+			if len(m.doctorResults) > 0 {
+				return m, m.runDoctorFixCmd()
+			}
+		case "esc", "q":
+			m.screen = screenMenu
+			m.doctorResults = nil
+			m.doctorFixMsg = ""
 			return m, nil
 		}
 
@@ -794,6 +838,8 @@ func (m Model) View() string {
 		return m.viewRemoveConfirm()
 	case screenClaudeDefaultAgent:
 		return m.viewClaudeDefaultAgent()
+	case screenDoctor:
+		return m.viewDoctor()
 	}
 	return ""
 }
@@ -1658,4 +1704,148 @@ func (m Model) viewClaudeDefaultAgent() string {
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("y/Enter: yes   n: no   esc: back"))
 	return b.String()
+}
+
+// runDoctorCmd returns a tea.Cmd that runs all doctor checks and returns results.
+func (m Model) runDoctorCmd() tea.Cmd {
+	homeDir := m.homeDir
+	adapters := m.adapters
+	return func() tea.Msg {
+		projectDir, err := os.Getwd()
+		if err != nil {
+			return doctorCheckResult{err: fmt.Errorf("resolve working directory: %w", err)}
+		}
+		d := doctor.New(homeDir, projectDir, adapters, domain.DefaultMCPCatalog())
+		results, err := d.Run(context.Background(), doctor.Options{})
+		return doctorCheckResult{results: results, err: err}
+	}
+}
+
+// runDoctorFixCmd returns a tea.Cmd that runs fixers for all auto-fixable failures.
+func (m Model) runDoctorFixCmd() tea.Cmd {
+	homeDir := m.homeDir
+	adapters := m.adapters
+	results := m.doctorResults
+	return func() tea.Msg {
+		projectDir, err := os.Getwd()
+		if err != nil {
+			return doctorFixDone{msg: fmt.Sprintf("Error: %v", err)}
+		}
+		d := doctor.New(homeDir, projectDir, adapters, domain.DefaultMCPCatalog())
+		fixResults := d.Fix(context.Background(), results)
+
+		var fixable int
+		for _, r := range results {
+			if r.AutoFixable && r.Status == doctor.CheckFail {
+				fixable++
+			}
+		}
+		if fixable == 0 {
+			return doctorFixDone{msg: "No auto-fixable issues."}
+		}
+
+		var sb strings.Builder
+		for _, fr := range fixResults {
+			if fr.Err != nil {
+				sb.WriteString(fmt.Sprintf("❌ %s — %v\n", fr.CheckResult.Name, fr.Err))
+			} else {
+				sb.WriteString(fmt.Sprintf("✅ %s — fixed\n", fr.CheckResult.Name))
+			}
+		}
+		return doctorFixDone{msg: strings.TrimRight(sb.String(), "\n")}
+	}
+}
+
+// viewDoctor renders the doctor screen with check results grouped by category.
+func (m Model) viewDoctor() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("SquadAI Doctor") + "\n\n")
+
+	if m.doctorResults == nil {
+		content.WriteString(mutedStyle.Render("Running checks...") + "\n")
+	} else if len(m.doctorResults) == 0 {
+		content.WriteString(mutedStyle.Render("No checks returned.") + "\n")
+	} else {
+		// Group by category.
+		catOrder := []string{
+			"Environment",
+			"AI Agents",
+			"Project Configuration",
+			"MCP Servers",
+			"Filesystem",
+			"Config Drift",
+		}
+		grouped := make(map[string][]doctor.CheckResult)
+		for _, r := range m.doctorResults {
+			grouped[r.Category] = append(grouped[r.Category], r)
+		}
+
+		for _, catName := range catOrder {
+			items, ok := grouped[catName]
+			if !ok {
+				continue
+			}
+			content.WriteString(headingStyle.Render(catName) + "\n")
+			for _, r := range items {
+				icon := doctorStatusIcon(r.Status)
+				content.WriteString(fmt.Sprintf("  %s  %s\n", icon, r.Message))
+			}
+			content.WriteString("\n")
+		}
+
+		// Summary.
+		var pass, warns, fails, skips int
+		var hasFixable bool
+		for _, r := range m.doctorResults {
+			switch r.Status {
+			case doctor.CheckPass:
+				pass++
+			case doctor.CheckWarn:
+				warns++
+			case doctor.CheckFail:
+				fails++
+				if r.AutoFixable {
+					hasFixable = true
+				}
+			case doctor.CheckSkip:
+				skips++
+			}
+		}
+		summary := fmt.Sprintf("pass: %d  warn: %d  fail: %d  skip: %d", pass, warns, fails, skips)
+		if fails > 0 {
+			content.WriteString(errorStyle.Render(summary) + "\n")
+		} else if warns > 0 {
+			content.WriteString(authBadgeStyle.Render(summary) + "\n")
+		} else {
+			content.WriteString(successStyle.Render(summary) + "\n")
+		}
+
+		if m.doctorFixMsg != "" {
+			content.WriteString("\n")
+			content.WriteString(mutedStyle.Render(m.doctorFixMsg) + "\n")
+		} else if hasFixable {
+			content.WriteString("\n")
+			content.WriteString(mutedStyle.Render("Press f to auto-fix fixable issues.") + "\n")
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("f: auto-fix   esc: back to menu"))
+	return b.String()
+}
+
+// doctorStatusIcon returns a lipgloss-styled status icon string for a CheckStatus.
+func doctorStatusIcon(s doctor.CheckStatus) string {
+	switch s {
+	case doctor.CheckPass:
+		return successStyle.Render("✅")
+	case doctor.CheckWarn:
+		return authBadgeStyle.Render("⚠️ ")
+	case doctor.CheckFail:
+		return errorStyle.Render("❌")
+	default:
+		return mutedStyle.Render("──")
+	}
 }

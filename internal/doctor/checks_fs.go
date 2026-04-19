@@ -27,6 +27,18 @@ func (d *Doctor) checkWriteAccess(dir, label string) CheckResult {
 	info, err := os.Stat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
+			// ~/.squadai/ is auto-fixable; project dir is not (needs init).
+			if label == "~/.squadai/" {
+				return CheckResult{
+					Category:    catFS,
+					Name:        name,
+					Status:      CheckFail,
+					Message:     fmt.Sprintf("%s does not exist yet", label),
+					Detail:      dir,
+					FixHint:     "Create ~/.squadai directory",
+					AutoFixable: true,
+				}
+			}
 			return warn(catFS, name,
 				fmt.Sprintf("%s does not exist yet", label),
 				dir,
