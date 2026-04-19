@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -132,12 +131,9 @@ func maybeStartBackgroundCheck(stderr io.Writer) context.CancelFunc {
 
 	go func() {
 		if err := update.Run(ctx, Version, stderr); err != nil {
-			if errors.Is(err, update.ErrDevBuild) ||
-				errors.Is(err, update.ErrUpToDate) ||
-				errors.Is(err, update.ErrNoRelease) {
-				// Expected non-error conditions — silent.
-			}
-			// All other errors are silently dropped in background mode.
+			// Expected non-error conditions are silent; all other errors
+			// are silently dropped in background mode.
+			_ = err
 		}
 
 		// Persist the check timestamp regardless of result.

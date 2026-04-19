@@ -109,6 +109,6 @@ func parseNodeMajor(v string) int {
 		return 0
 	}
 	var major int
-	fmt.Sscanf(parts[0], "%d", &major)
+	_, _ = fmt.Sscanf(parts[0], "%d", &major)
 	return major
 }
