@@ -16,6 +16,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/cli"
 	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/pipeline"
 )
 
 // Ensure badgeDisabledStyle is used (it renders unchecked checkboxes).
@@ -156,6 +157,11 @@ type Model struct {
 	// Doctor screen state.
 	doctorResults []doctor.CheckResult
 	doctorFixMsg  string // message shown after auto-fix attempt
+
+	// Apply-with-progress state.
+	applyProgressCh <-chan pipeline.Event // receives events while apply runs
+	applyEvents     []pipeline.Event      // accumulated recent events
+	applyTotal      int                   // total steps, set on EventPipelineStart
 }
 
 // NewModel creates a TUI model with the given state.
@@ -186,6 +192,23 @@ type doctorCheckResult struct {
 // doctorFixDone carries the message to display after --fix attempt.
 type doctorFixDone struct {
 	msg string
+}
+
+// pipelineEventMsg wraps a single pipeline.Event received during apply.
+type pipelineEventMsg struct {
+	event pipeline.Event
+}
+
+// listenForPipelineEvent returns a tea.Cmd that reads one event from ch and
+// returns it as a pipelineEventMsg. When ch is closed the command returns nil.
+func listenForPipelineEvent(ch <-chan pipeline.Event) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return pipelineEventMsg{event: ev}
+	}
 }
 
 // Init is the bubbletea init function.
@@ -222,6 +245,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case doctorFixDone:
 		m.doctorFixMsg = msg.msg
 		return m, nil
+	case pipelineEventMsg:
+		ev := msg.event
+		if ev.Type == pipeline.EventPipelineStart {
+			m.applyTotal = ev.Total
+		}
+		// Keep a rolling window of the last 8 events for display.
+		m.applyEvents = append(m.applyEvents, ev)
+		if len(m.applyEvents) > 8 {
+			m.applyEvents = m.applyEvents[len(m.applyEvents)-8:]
+		}
+		// Schedule the next read from the channel.
+		return m, listenForPipelineEvent(m.applyProgressCh)
 	}
 	return m, nil
 }
@@ -297,6 +332,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.screen = screenRunning
 				m.output = ""
 				m.err = nil
+				if selected == "apply" {
+					return m, m.runApplyWithProgress()
+				}
 				return m, m.runCommand(selected)
 			}
 		case "q":
@@ -664,7 +702,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenRunning
 			m.output = ""
 			m.err = nil
-			return m, m.runCommand("apply")
+			return m, m.runApplyWithProgress()
 		case "n", "esc":
 			// Show the stored init output on the result screen.
 			m.output = m.initOutput
@@ -774,6 +812,33 @@ func (m Model) runCommand(command string) tea.Cmd {
 
 		return commandResult{output: buf.String(), err: err}
 	}
+}
+
+// runApplyWithProgress starts the apply pipeline with a ChannelSink so the TUI
+// can render per-step progress. It returns the two tea.Cmd values that must be
+// batched: one that runs apply in a goroutine, and one that begins reading from
+// the event channel. The Model's applyProgressCh field is set before returning.
+func (m *Model) runApplyWithProgress() tea.Cmd {
+	ch := make(chan pipeline.Event, 64)
+	m.applyProgressCh = ch
+	m.applyEvents = nil
+	m.applyTotal = 0
+
+	applyArgs := []string{}
+	if m.setClaudeDefaultAgent {
+		applyArgs = append(applyArgs, "--set-claude-default-agent")
+	}
+
+	sink := pipeline.NewChannelSink(ch, false) // non-blocking: TUI may lag
+
+	runCmd := func() tea.Msg {
+		var buf bytes.Buffer
+		err := cli.RunApplyWithProgress(applyArgs, &buf, sink)
+		close(ch) // signal that no more events are coming
+		return commandResult{output: buf.String(), err: err}
+	}
+
+	return tea.Batch(runCmd, listenForPipelineEvent(ch))
 }
 
 // panelWidth returns the width for panel content, accounting for border and padding.
@@ -902,7 +967,71 @@ func (m Model) viewMenu() string {
 }
 
 func (m Model) viewRunning() string {
+	if len(m.applyEvents) > 0 {
+		return m.viewApplyProgress()
+	}
 	return mutedStyle.Render("Running...") + "\n"
+}
+
+// viewApplyProgress renders live progress events for the apply command.
+func (m Model) viewApplyProgress() string {
+	var content strings.Builder
+
+	// Counter header.
+	var done int
+	for _, ev := range m.applyEvents {
+		if ev.Type == pipeline.EventStepDone || ev.Type == pipeline.EventStepSkipped || ev.Type == pipeline.EventStepFailed {
+			done++
+		}
+	}
+	total := m.applyTotal
+	if total > 0 {
+		content.WriteString(headingStyle.Render(fmt.Sprintf("Applying… [%d/%d]", done, total)))
+	} else {
+		content.WriteString(headingStyle.Render("Applying…"))
+	}
+	content.WriteString("\n\n")
+
+	// Show last events.
+	const maxShow = 8
+	events := m.applyEvents
+	if len(events) > maxShow {
+		events = events[len(events)-maxShow:]
+	}
+	for _, ev := range events {
+		switch ev.Type {
+		case pipeline.EventStepStart:
+			content.WriteString(mutedStyle.Render("  → " + shortEventLine(ev)))
+		case pipeline.EventStepDone:
+			content.WriteString(successStyle.Render("  ✓ " + shortEventLine(ev)))
+		case pipeline.EventStepSkipped:
+			content.WriteString(mutedStyle.Render("  · " + shortEventLine(ev)))
+		case pipeline.EventStepFailed:
+			content.WriteString(errorStyle.Render("  ✗ " + shortEventLine(ev)))
+		default:
+			continue
+		}
+		content.WriteString("\n")
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	return b.String()
+}
+
+// shortEventLine returns a compact single-line description for a step event.
+func shortEventLine(ev pipeline.Event) string {
+	base := string(ev.Component)
+	if ev.Adapter != "" {
+		base += " · " + ev.Adapter
+	}
+	if ev.Action != "" && ev.Type == pipeline.EventStepStart {
+		base += " · " + ev.Action
+	}
+	if ev.Type == pipeline.EventStepFailed && ev.Err != nil {
+		base += " — " + ev.Err.Error()
+	}
+	return base
 }
 
 func (m Model) viewResult() string {

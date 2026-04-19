@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -606,6 +607,163 @@ func TestExecute_ActionUpdate_DoesNotTrack(t *testing.T) {
 					t.Errorf("update/skip action for %q was incorrectly tracked as created", rel)
 				}
 			}
+		}
+	}
+}
+
+// ─── Event emission tests ────────────────────────────────────────────────────
+
+// TestExecute_EmitsEvents_ThreeSkipActions verifies that executing 3 skip
+// actions emits: PipelineStart + 3*(StepStart+StepSkipped) + PipelineDone.
+func TestExecute_EmitsEvents_ThreeSkipActions(t *testing.T) {
+	project := t.TempDir()
+
+	actions := []domain.PlannedAction{
+		{ID: "a1", Action: domain.ActionSkip, Component: domain.ComponentMemory, Agent: domain.AgentOpenCode},
+		{ID: "a2", Action: domain.ActionSkip, Component: domain.ComponentRules, Agent: domain.AgentOpenCode},
+		{ID: "a3", Action: domain.ActionSkip, Component: domain.ComponentSettings, Agent: domain.AgentOpenCode},
+	}
+
+	ch := make(chan Event, 20)
+	sink := NewChannelSink(ch, true)
+
+	exec := New(nil, copilot.New(), project, domain.CopilotConfig{}, nil)
+	exec.WithSink(sink)
+	_, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	close(ch)
+
+	var events []Event
+	for ev := range ch {
+		events = append(events, ev)
+	}
+
+	// Expected: PipelineStart + 3*(StepStart + StepSkipped) + PipelineDone = 8 events.
+	wantLen := 1 + 3*2 + 1
+	if len(events) != wantLen {
+		t.Fatalf("expected %d events, got %d", wantLen, len(events))
+	}
+
+	if events[0].Type != EventPipelineStart {
+		t.Errorf("event[0] type = %v, want EventPipelineStart", events[0].Type)
+	}
+	if events[0].Total != 3 {
+		t.Errorf("PipelineStart.Total = %d, want 3", events[0].Total)
+	}
+	if events[len(events)-1].Type != EventPipelineDone {
+		t.Errorf("last event type = %v, want EventPipelineDone", events[len(events)-1].Type)
+	}
+
+	var starts, skips int
+	for _, ev := range events {
+		switch ev.Type {
+		case EventStepStart:
+			starts++
+		case EventStepSkipped:
+			skips++
+		}
+	}
+	if starts != 3 {
+		t.Errorf("expected 3 StepStart events, got %d", starts)
+	}
+	if skips != 3 {
+		t.Errorf("expected 3 StepSkipped events, got %d", skips)
+	}
+}
+
+// TestExecute_EmitsEvents_StepFailed verifies that a failed action emits
+// EventStepFailed with a non-nil Err, then EventPipelineDone after the loop.
+func TestExecute_EmitsEvents_StepFailed(t *testing.T) {
+	project := t.TempDir()
+
+	actions := []domain.PlannedAction{
+		{
+			ID:        "broken",
+			Component: domain.ComponentID("ghost"),
+			Action:    domain.ActionCreate,
+			Agent:     domain.AgentOpenCode,
+		},
+	}
+
+	ch := make(chan Event, 20)
+	sink := NewChannelSink(ch, true)
+
+	exec := New(
+		map[domain.ComponentID]domain.ComponentInstaller{},
+		copilot.New(),
+		project,
+		domain.CopilotConfig{},
+		nil,
+	)
+	exec.WithSink(sink)
+	_, err := exec.Execute(actions)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	close(ch)
+
+	var events []Event
+	for ev := range ch {
+		events = append(events, ev)
+	}
+
+	// Expected: PipelineStart + StepStart + StepFailed + PipelineDone = 4.
+	if len(events) != 4 {
+		t.Fatalf("expected 4 events, got %d: %v", len(events), events)
+	}
+
+	failedIdx := -1
+	for i, ev := range events {
+		if ev.Type == EventStepFailed {
+			failedIdx = i
+		}
+	}
+	if failedIdx < 0 {
+		t.Fatal("expected at least one EventStepFailed")
+	}
+	if events[failedIdx].Err == nil {
+		t.Error("EventStepFailed should carry a non-nil Err")
+	}
+
+	if events[len(events)-1].Type != EventPipelineDone {
+		t.Errorf("last event should be EventPipelineDone, got %v", events[len(events)-1].Type)
+	}
+}
+
+// TestExecute_EmitsEvents_Index_Total verifies Index and Total fields are correct.
+func TestExecute_EmitsEvents_Index_Total(t *testing.T) {
+	project := t.TempDir()
+	total := 4
+
+	actions := make([]domain.PlannedAction, total)
+	for i := range actions {
+		actions[i] = domain.PlannedAction{
+			ID:     fmt.Sprintf("a%d", i),
+			Action: domain.ActionSkip,
+		}
+	}
+
+	ch := make(chan Event, 32)
+	sink := NewChannelSink(ch, true)
+	exec := New(nil, copilot.New(), project, domain.CopilotConfig{}, nil)
+	exec.WithSink(sink)
+	_, _ = exec.Execute(actions)
+	close(ch)
+
+	for ev := range ch {
+		if ev.Type == EventPipelineStart || ev.Type == EventPipelineDone {
+			if ev.Total != total {
+				t.Errorf("%v.Total = %d, want %d", ev.Type, ev.Total, total)
+			}
+			continue
+		}
+		if ev.Total != total {
+			t.Errorf("event.Total = %d, want %d", ev.Total, total)
+		}
+		if ev.Index < 0 || ev.Index >= total {
+			t.Errorf("event.Index = %d out of range [0, %d)", ev.Index, total)
 		}
 	}
 }
