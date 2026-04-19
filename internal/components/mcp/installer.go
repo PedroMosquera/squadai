@@ -321,19 +321,22 @@ func (i *Installer) applySeparateFile(action domain.PlannedAction) error {
 }
 
 // isMCPConfigFileAdapter checks if the adapter uses the MCPConfigFile strategy.
-// VS Code Copilot, Cursor, and Windsurf use a dedicated MCP config file with "mcpServers" key.
+// Claude Code, VS Code Copilot, Cursor, and Windsurf use a dedicated MCP config file.
 func isMCPConfigFileAdapter(adapter domain.Adapter) bool {
 	switch adapter.ID() {
-	case domain.AgentVSCodeCopilot, domain.AgentCursor, domain.AgentWindsurf:
+	case domain.AgentClaudeCode, domain.AgentVSCodeCopilot, domain.AgentCursor, domain.AgentWindsurf:
 		return true
 	}
 	return false
 }
 
 // mcpConfigFilePath returns the path to the MCP config file for MCPConfigFile adapters.
-// VS Code uses a separate mcp.json; Cursor and Windsurf use their ProjectConfigFile.
+// Claude Code uses .mcp.json at project root; VS Code uses .vscode/mcp.json;
+// Cursor and Windsurf use their ProjectConfigFile.
 func mcpConfigFilePath(adapter domain.Adapter, projectDir string) string {
 	switch adapter.ID() {
+	case domain.AgentClaudeCode:
+		return filepath.Join(projectDir, ".mcp.json")
 	case domain.AgentVSCodeCopilot:
 		return filepath.Join(projectDir, ".vscode", "mcp.json")
 	default:

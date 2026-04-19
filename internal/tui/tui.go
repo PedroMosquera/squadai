@@ -311,6 +311,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenInitModelTier
 			return m, nil
 		case "esc":
+			m.initCursor = 0
 			m.screen = screenInitAdapters
 			return m, nil
 		}
@@ -348,6 +349,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "esc":
+			m.initCursor = 0
 			if m.setupPreset == domain.PresetCustom {
 				m.screen = screenInitModelTier
 			} else {
@@ -378,6 +380,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenInitInstallSummary
 			return m, nil
 		case "esc":
+			m.initCursor = 0
 			m.screen = screenInitMCP
 			return m, nil
 		}
@@ -406,6 +409,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenInitMCP
 			return m, nil
 		case "esc":
+			m.initCursor = 0
 			m.screen = screenInitMethodology
 			return m, nil
 		}
@@ -448,6 +452,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "esc":
+			m.initCursor = 0
 			m.screen = screenInitPreset
 			return m, nil
 		}
@@ -486,6 +491,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenInitAdapters
 			return m, nil
 		case "esc":
+			m.initCursor = 0
 			m.screen = screenInitScope
 			return m, nil
 		}

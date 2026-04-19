@@ -89,6 +89,22 @@ func (e *Executor) Execute(plan []domain.PlannedAction) (*domain.ApplyReport, er
 						return report, fmt.Errorf("%w: %v", domain.ErrRollbackFailed, err)
 					}
 				}
+
+				// Clean up managed sidecar entries for files tracked during
+				// the failed apply sequence. The backup restore already removed
+				// the newly created files from disk; we must keep the sidecar
+				// consistent so the next apply sees a clean state.
+				for _, step := range report.Steps[:i] {
+					if step.Status == domain.StepSuccess &&
+						step.Action.Action == domain.ActionCreate &&
+						step.Action.TargetPath != "" {
+						if relPath, relErr := filepath.Rel(e.projectDir, step.Action.TargetPath); relErr == nil {
+							// Best-effort: ignore untrack errors.
+							_ = managed.UntrackCreatedFile(e.projectDir, relPath)
+						}
+					}
+				}
+
 				break
 			}
 			// Without backup store, continue executing remaining actions (legacy).

@@ -150,9 +150,9 @@ func TestPlan_OpenCode_MissingMCPKey_ReturnsUpdate(t *testing.T) {
 	}
 }
 
-// ─── Plan (Claude Code — SeparateMCPFiles) ──────────────────────────────────
+// ─── Plan (Claude Code — MCPConfigFile) ─────────────────────────────────────
 
-func TestPlan_Claude_SeparateFiles_ReturnsCreate(t *testing.T) {
+func TestPlan_Claude_MCPConfigFile_ReturnsCreate(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
@@ -163,36 +163,34 @@ func TestPlan_Claude_SeparateFiles_ReturnsCreate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(actions) != 1 {
-		t.Fatalf("expected 1 action (one server), got %d", len(actions))
+		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
 	if actions[0].Action != domain.ActionCreate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
 	}
-	// Should target ~/.claude/mcp/context7.json
-	expected := filepath.Join(home, ".claude", "mcp", "context7.json")
+	// Should target <project>/.mcp.json
+	expected := filepath.Join(project, ".mcp.json")
 	if actions[0].TargetPath != expected {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
 	}
 }
 
-func TestPlan_Claude_SeparateFiles_UpToDate_ReturnsSkip(t *testing.T) {
+func TestPlan_Claude_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
 	inst := newTestInstaller()
 
-	// Write existing file matching expected content.
-	mcpDir := filepath.Join(home, ".claude", "mcp")
-	if err := os.MkdirAll(mcpDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	expected := serverToJSON(domain.MCPServerDef{
-		Type: "remote",
-		URL:  "https://mcp.context7.com/mcp",
-	}, domain.AgentClaudeCode)
-	if err := os.WriteFile(filepath.Join(mcpDir, "context7.json"), expected, 0644); err != nil {
-		t.Fatal(err)
-	}
+	// Write existing .mcp.json with matching content.
+	targetPath := filepath.Join(project, ".mcp.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"context7": map[string]interface{}{
+				"type": "remote",
+				"url":  "https://mcp.context7.com/mcp",
+			},
+		},
+	})
 
 	actions, _ := inst.Plan(adapter, home, project)
 	if len(actions) != 1 {
@@ -203,20 +201,22 @@ func TestPlan_Claude_SeparateFiles_UpToDate_ReturnsSkip(t *testing.T) {
 	}
 }
 
-func TestPlan_Claude_SeparateFiles_Outdated_ReturnsUpdate(t *testing.T) {
+func TestPlan_Claude_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
 	inst := newTestInstaller()
 
-	// Write existing file with wrong content.
-	mcpDir := filepath.Join(home, ".claude", "mcp")
-	if err := os.MkdirAll(mcpDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(mcpDir, "context7.json"), []byte(`{"type":"remote","url":"https://old.com"}`), 0644); err != nil {
-		t.Fatal(err)
-	}
+	// Write existing .mcp.json with wrong content.
+	targetPath := filepath.Join(project, ".mcp.json")
+	writeTestJSON(t, targetPath, map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"context7": map[string]interface{}{
+				"type": "remote",
+				"url":  "https://wrong.com",
+			},
+		},
+	})
 
 	actions, _ := inst.Plan(adapter, home, project)
 	if actions[0].Action != domain.ActionUpdate {
@@ -224,7 +224,7 @@ func TestPlan_Claude_SeparateFiles_Outdated_ReturnsUpdate(t *testing.T) {
 	}
 }
 
-func TestPlan_Claude_MultipleServers_SeparateFiles(t *testing.T) {
+func TestPlan_Claude_MCPConfigFile_MultipleServers(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
@@ -237,19 +237,16 @@ func TestPlan_Claude_MultipleServers_SeparateFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 2 {
-		t.Fatalf("expected 2 actions (one per server), got %d", len(actions))
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action (single config file), got %d", len(actions))
 	}
-
-	// Both should be Create actions targeting separate files.
-	for _, a := range actions {
-		if a.Action != domain.ActionCreate {
-			t.Errorf("Action = %q, want %q", a.Action, domain.ActionCreate)
-		}
-		dir := filepath.Dir(a.TargetPath)
-		if filepath.Base(dir) != "mcp" {
-			t.Errorf("file should be in mcp/ dir, got %s", dir)
-		}
+	if actions[0].Action != domain.ActionCreate {
+		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
+	}
+	// Target should be .mcp.json at project root.
+	expected := filepath.Join(project, ".mcp.json")
+	if actions[0].TargetPath != expected {
+		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
 	}
 }
 
@@ -476,9 +473,9 @@ func TestApply_UpdatesOutdatedMCP(t *testing.T) {
 	}
 }
 
-// ─── Apply (Claude Code — SeparateMCPFiles) ─────────────────────────────────
+// ─── Apply (Claude Code — MCPConfigFile) ─────────────────────────────────────
 
-func TestApply_Claude_SeparateFile_CreatesFile(t *testing.T) {
+func TestApply_Claude_MCPConfigFile_CreatesFile(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
@@ -493,7 +490,8 @@ func TestApply_Claude_SeparateFile_CreatesFile(t *testing.T) {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
-	data, err := os.ReadFile(actions[0].TargetPath)
+	targetPath := filepath.Join(project, ".mcp.json")
+	data, err := os.ReadFile(targetPath)
 	if err != nil {
 		t.Fatalf("file not created: %v", err)
 	}
@@ -502,15 +500,23 @@ func TestApply_Claude_SeparateFile_CreatesFile(t *testing.T) {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if doc["type"] != "remote" {
-		t.Errorf("type = %v, want remote", doc["type"])
+	servers, ok := doc["mcpServers"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected mcpServers key, got %T", doc["mcpServers"])
 	}
-	if doc["url"] != "https://mcp.context7.com/mcp" {
-		t.Errorf("url = %v, want https://mcp.context7.com/mcp", doc["url"])
+	ctx7, ok := servers["context7"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected context7 server")
+	}
+	if ctx7["type"] != "remote" {
+		t.Errorf("type = %v, want remote", ctx7["type"])
+	}
+	if ctx7["url"] != "https://mcp.context7.com/mcp" {
+		t.Errorf("url = %v, want https://mcp.context7.com/mcp", ctx7["url"])
 	}
 }
 
-func TestApply_Claude_SeparateFile_Idempotent(t *testing.T) {
+func TestApply_Claude_MCPConfigFile_Idempotent(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
@@ -521,7 +527,8 @@ func TestApply_Claude_SeparateFile_Idempotent(t *testing.T) {
 	if err := inst.Apply(actions[0]); err != nil {
 		t.Fatal(err)
 	}
-	first, _ := os.ReadFile(actions[0].TargetPath)
+	targetPath := filepath.Join(project, ".mcp.json")
+	first, _ := os.ReadFile(targetPath)
 
 	// Second plan — should be Skip.
 	actions2, _ := inst.Plan(adapter, home, project)
@@ -529,7 +536,7 @@ func TestApply_Claude_SeparateFile_Idempotent(t *testing.T) {
 		t.Fatalf("second plan should be Skip, got %q", actions2[0].Action)
 	}
 
-	second, _ := os.ReadFile(actions[0].TargetPath)
+	second, _ := os.ReadFile(targetPath)
 	if string(first) != string(second) {
 		t.Error("content should not change")
 	}
@@ -623,9 +630,9 @@ func TestVerify_NoServers_ReturnsNil(t *testing.T) {
 	}
 }
 
-// ─── Verify (Claude Code — SeparateMCPFiles) ────────────────────────────────
+// ─── Verify (Claude Code — MCPConfigFile) ────────────────────────────────────
 
-func TestVerify_Claude_SeparateFiles_AllPass(t *testing.T) {
+func TestVerify_Claude_MCPConfigFile_AllPass(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
@@ -652,7 +659,7 @@ func TestVerify_Claude_SeparateFiles_AllPass(t *testing.T) {
 	}
 }
 
-func TestVerify_Claude_SeparateFiles_FailsWhenMissing(t *testing.T) {
+func TestVerify_Claude_MCPConfigFile_FailsWhenMissing(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	adapter := claude.New()
@@ -663,7 +670,7 @@ func TestVerify_Claude_SeparateFiles_FailsWhenMissing(t *testing.T) {
 		t.Fatal("expected verify results")
 	}
 	if results[0].Passed {
-		t.Error("should fail when MCP file missing")
+		t.Error("should fail when .mcp.json is missing")
 	}
 }
 
@@ -1344,7 +1351,7 @@ func TestRoundTrip_AllAgents_CorrectFormat(t *testing.T) {
 		strategy      string // "merge", "separate", "configfile"
 	}{
 		{"OpenCode", opencode.New(), "mcp", "url", "merge"},
-		{"Claude", claude.New(), "", "url", "separate"},
+		{"Claude", claude.New(), "mcpServers", "url", "configfile"},
 		{"VSCode", vscode.New(), "servers", "url", "configfile"},
 		{"Cursor", cursor.New(), "mcpServers", "url", "configfile"},
 		{"Windsurf", windsurf.New(), "mcpServers", "serverUrl", "configfile"},

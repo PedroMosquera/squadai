@@ -1111,10 +1111,10 @@ func TestFullPipeline_SDD_ClaudeCode(t *testing.T) {
 	assertFileExists(t, claudeMD, "SDD/Claude: CLAUDE.md")
 	assertFileContains(t, claudeMD, "squadai", "SDD/Claude: CLAUDE.md has marker")
 
-	// ~/.claude/mcp/context7.json must exist (SeparateMCPFiles strategy).
-	mcpFile := filepath.Join(home, ".claude", "mcp", "context7.json")
+	// ~/.mcp.json must exist at project root (MCPConfigFile strategy).
+	mcpFile := filepath.Join(project, ".mcp.json")
 	assertFileExists(t, mcpFile, "SDD/Claude: context7.json MCP file")
-	assertJSONKey(t, mcpFile, "command", "SDD/Claude: context7.json has command")
+	assertJSONKey(t, mcpFile, "mcpServers", "SDD/Claude: context7.json has mcpServers key")
 
 	// Verify passes.
 	v := verify.New()
@@ -1264,8 +1264,8 @@ func TestMCPInstallation_OpenCode_MergeIntoSettings(t *testing.T) {
 	}
 }
 
-// TestMCPInstallation_ClaudeCode_SeparateFiles verifies Claude creates ~/.claude/mcp/{name}.json.
-func TestMCPInstallation_ClaudeCode_SeparateFiles(t *testing.T) {
+// TestMCPInstallation_ClaudeCode_MCPConfigFile verifies Claude creates .mcp.json at project root.
+func TestMCPInstallation_ClaudeCode_MCPConfigFile(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 
@@ -1277,10 +1277,10 @@ func TestMCPInstallation_ClaudeCode_SeparateFiles(t *testing.T) {
 		t.Fatal("apply should succeed")
 	}
 
-	// ~/.claude/mcp/context7.json must exist.
-	mcpFile := filepath.Join(home, ".claude", "mcp", "context7.json")
-	assertFileExists(t, mcpFile, "MCP/Claude: ~/.claude/mcp/context7.json")
-	assertJSONKey(t, mcpFile, "command", "MCP/Claude: context7.json has command array")
+	// <project>/.mcp.json must exist with mcpServers key.
+	mcpFile := filepath.Join(project, ".mcp.json")
+	assertFileExists(t, mcpFile, "MCP/Claude: .mcp.json")
+	assertJSONKey(t, mcpFile, "mcpServers", "MCP/Claude: .mcp.json has mcpServers key")
 }
 
 // TestMCPInstallation_VSCode_MCPConfigFile verifies VS Code uses .vscode/mcp.json with servers.
@@ -1877,10 +1877,10 @@ func TestMultiAdapter_PlanCoversAll(t *testing.T) {
 		t.Error("expected OpenCode actions to target project paths")
 	}
 
-	// Verify Claude Code targets home-level MCP paths (~/.claude/mcp/).
+	// Verify Claude Code targets project-level paths (e.g. .mcp.json, CLAUDE.md).
 	hasClaudeMCPPath := false
 	for _, a := range ccActions {
-		if strings.Contains(a.TargetPath, ".claude") {
+		if strings.Contains(a.TargetPath, ".mcp.json") || strings.Contains(a.TargetPath, ".claude") {
 			hasClaudeMCPPath = true
 			break
 		}

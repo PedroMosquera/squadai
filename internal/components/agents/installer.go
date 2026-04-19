@@ -23,6 +23,7 @@ type Installer struct {
 	agents     map[string]domain.AgentDef // custom agents from config
 	config     *domain.MergedConfig       // team config for template rendering (nil = V1 behavior)
 	projectDir string
+	adapters   map[domain.AgentID]domain.Adapter // adapters registered during Plan, used in Apply
 }
 
 // New returns an agents installer configured from the merged agent definitions.
@@ -44,6 +45,7 @@ func New(agents map[string]domain.AgentDef, cfg *domain.MergedConfig, projectDir
 		agents:     resolved,
 		config:     cfg,
 		projectDir: projectDir,
+		adapters:   make(map[domain.AgentID]domain.Adapter),
 	}
 }
 
@@ -54,6 +56,9 @@ func (i *Installer) ID() domain.ComponentID {
 
 // Plan determines what agent file actions are needed for the given adapter.
 func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]domain.PlannedAction, error) {
+	// Register adapter for use in Apply (which doesn't receive the adapter).
+	i.adapters[adapter.ID()] = adapter
+
 	var actions []domain.PlannedAction
 
 	// Phase 1: Team-based agents (V2 behavior).
@@ -368,7 +373,7 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 	agentsSubdir := strings.TrimPrefix(filepath.Dir(action.TargetPath), i.projectDir)
 	_ = agentsSubdir
 
-	data := buildTemplateDataFromAction(i.config, i.projectDir, roleName, action.Agent)
+	data := i.buildTemplateDataFromAction(i.config, roleName, action.Agent)
 
 	var templateContent string
 	if roleName == "orchestrator" {
@@ -405,7 +410,7 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 	}
 
 	methodology := string(i.config.Methodology)
-	data := buildTemplateDataFromAction(i.config, i.projectDir, "orchestrator", action.Agent)
+	data := i.buildTemplateDataFromAction(i.config, "orchestrator", action.Agent)
 
 	templatePath := "teams/" + methodology + "/orchestrator-" + variant + ".md"
 	rendered, err := renderTemplate("orchestrator", assets.MustRead(templatePath), data)
@@ -604,37 +609,26 @@ func verifyFileContent(path, expected, checkName string) domain.VerifyResult {
 	}
 }
 
-// buildTemplateDataFromAction constructs TemplateData using the stored projectDir.
-// Used in Apply where we don't have homeDir/projectDir as parameters.
-func buildTemplateDataFromAction(cfg *domain.MergedConfig, projectDir string, roleName string, agentID domain.AgentID) TemplateData {
+// buildTemplateDataFromAction constructs TemplateData using the adapter's path methods.
+// The adapter is looked up from the installer's registered adapters map.
+func (i *Installer) buildTemplateDataFromAction(cfg *domain.MergedConfig, roleName string, agentID domain.AgentID) TemplateData {
 	_, hasContext7 := cfg.MCP["context7"]
 
-	// Derive agentsDir and skillsDir from config and a reconstructed adapter-like lookup.
-	// We use projectDir stored in the installer since Apply doesn't receive it.
 	var agentsDir, skillsDir string
+	var delegationStrategy string
 
-	// Determine typical paths based on agent ID pattern.
-	switch agentID {
-	case domain.AgentOpenCode:
-		agentsDir = filepath.Join(projectDir, ".opencode", "agents")
-		skillsDir = filepath.Join(projectDir, ".opencode", "skills")
-	case domain.AgentCursor:
-		agentsDir = filepath.Join(projectDir, ".cursor", "agents")
-		skillsDir = filepath.Join(projectDir, ".cursor", "skills")
-	case domain.AgentClaudeCode:
-		skillsDir = filepath.Join(projectDir, ".claude", "skills")
-	case domain.AgentVSCodeCopilot:
-		skillsDir = filepath.Join(projectDir, ".copilot", "skills")
-	case domain.AgentWindsurf:
-		skillsDir = filepath.Join(projectDir, ".windsurf", "skills")
-	default:
-		agentsDir = filepath.Join(projectDir, ".opencode", "agents")
-		skillsDir = filepath.Join(projectDir, ".opencode", "skills")
+	if adapter, ok := i.adapters[agentID]; ok {
+		agentsDir = adapter.ProjectAgentsDir(i.projectDir)
+		skillsDir = adapter.ProjectSkillsDir(i.projectDir)
+		delegationStrategy = string(adapter.DelegationStrategy())
+	} else {
+		// Fallback: should not happen if Plan was called first.
+		delegationStrategy = delegationStrategyForAgent(agentID)
 	}
 
 	return TemplateData{
 		Methodology:        string(cfg.Methodology),
-		DelegationStrategy: delegationStrategyForAgent(agentID),
+		DelegationStrategy: delegationStrategy,
 		Language:           cfg.Meta.Language,
 		Languages:          cfg.Meta.Languages,
 		TestCommand:        cfg.Meta.TestCommand,
@@ -686,7 +680,7 @@ func (i *Installer) renderNativeAgentContent(action domain.PlannedAction) (strin
 	}
 	roleName := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
 	methodology := string(i.config.Methodology)
-	data := buildTemplateDataFromAction(i.config, i.projectDir, roleName, action.Agent)
+	data := i.buildTemplateDataFromAction(i.config, roleName, action.Agent)
 
 	var templateContent string
 	if roleName == "orchestrator" {
@@ -707,7 +701,7 @@ func (i *Installer) renderMarkerInjectionContent(action domain.PlannedAction, va
 		return "", fmt.Errorf("renderMarkerInjectionContent: config is nil")
 	}
 	methodology := string(i.config.Methodology)
-	data := buildTemplateDataFromAction(i.config, i.projectDir, "orchestrator", action.Agent)
+	data := i.buildTemplateDataFromAction(i.config, "orchestrator", action.Agent)
 	templatePath := "teams/" + methodology + "/orchestrator-" + variant + ".md"
 	rendered, err := renderTemplate("orchestrator", assets.MustRead(templatePath), data)
 	if err != nil {

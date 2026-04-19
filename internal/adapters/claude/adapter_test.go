@@ -264,12 +264,3 @@ func TestAdapter_WorkflowsDir(t *testing.T) {
 		t.Error("WorkflowsDir should be empty for Claude Code")
 	}
 }
-
-func TestAdapter_MCPDir(t *testing.T) {
-	a := New()
-	home := "/Users/test"
-	want := filepath.Join(home, ".claude", "mcp")
-	if got := a.MCPDir(home); got != want {
-		t.Errorf("MCPDir = %q, want %q", got, want)
-	}
-}

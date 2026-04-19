@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 const (
@@ -121,5 +122,6 @@ func WriteJSON(path string, v interface{}) error {
 		return err
 	}
 
-	return os.WriteFile(path, append(data, '\n'), 0644)
+	_, err = fileutil.WriteAtomic(path, append(data, '\n'), 0644)
+	return err
 }
