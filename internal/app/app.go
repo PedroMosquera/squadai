@@ -1,11 +1,16 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/PedroMosquera/squadai/internal/cli"
+	"github.com/PedroMosquera/squadai/internal/state"
 	"github.com/PedroMosquera/squadai/internal/tui"
+	"github.com/PedroMosquera/squadai/internal/update"
 )
 
 // Version is set from main via ldflags at build time.
@@ -14,7 +19,16 @@ var Version = "dev"
 // Run is the top-level entry point. It parses args and dispatches to subcommands.
 // When no args are given, it launches the interactive TUI.
 func Run(args []string, stdout, stderr io.Writer) error {
+	// Phase 1: apply any pending update before doing anything else.
+	// (Non-fatal — apply writes its own warnings to stderr.)
+	if err := update.Apply(stderr); err != nil {
+		fmt.Fprintf(stderr, "squadai: warning: %v\n", err)
+	}
+
 	if len(args) == 0 {
+		// Start background update check, then launch TUI.
+		cancelBg := maybeStartBackgroundCheck(stderr)
+		defer cancelBg()
 		return tui.Run(Version)
 	}
 
@@ -30,6 +44,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		printUsage(stdout)
 		return nil
 
+	case "update":
+		return cli.RunUpdate(args[1:], stdout, stderr)
+
 	case "init":
 		return cli.RunInit(args[1:], stdout)
 
@@ -43,6 +60,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return cli.RunDiff(args[1:], stdout)
 
 	case "apply":
+		cancelBg := maybeStartBackgroundCheck(stderr)
+		defer cancelBg()
 		return cli.RunApply(args[1:], stdout)
 
 	case "verify":
@@ -83,6 +102,56 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	}
 }
 
+// maybeStartBackgroundCheck spawns a goroutine to check for updates if
+// update checks are enabled and 24 hours have elapsed since the last check.
+// It returns a cancel function that should be deferred by the caller.
+func maybeStartBackgroundCheck(stderr io.Writer) context.CancelFunc {
+	if update.IsDevBuild(Version) {
+		return func() {}
+	}
+
+	statePath, err := state.DefaultPath()
+	if err != nil {
+		return func() {}
+	}
+
+	s, err := state.Load(statePath)
+	if err != nil {
+		return func() {}
+	}
+
+	if !s.UpdateChecksEnabled {
+		return func() {}
+	}
+
+	if time.Since(s.LastUpdateCheck) < 24*time.Hour {
+		return func() {}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		if err := update.Run(ctx, Version, stderr); err != nil {
+			if errors.Is(err, update.ErrDevBuild) ||
+				errors.Is(err, update.ErrUpToDate) ||
+				errors.Is(err, update.ErrNoRelease) {
+				// Expected non-error conditions — silent.
+			}
+			// All other errors are silently dropped in background mode.
+		}
+
+		// Persist the check timestamp regardless of result.
+		s2, loadErr := state.Load(statePath)
+		if loadErr != nil {
+			return
+		}
+		s2.LastUpdateCheck = time.Now()
+		_ = state.Save(statePath, s2) // best effort
+	}()
+
+	return cancel
+}
+
 func printBackupUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage: squadai backup <subcommand> [flags]
 
@@ -118,6 +187,7 @@ Commands:
   backup prune       Remove old backups (keep N most recent)
   restore <id>       Restore from a backup
   remove             Remove all managed files (use --force to confirm)
+  update             Check for updates and download (see 'squadai update --help')
   version            Print version
 
 Flags:

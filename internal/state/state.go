@@ -19,8 +19,10 @@ const (
 
 // State holds persisted install state for SquadAI.
 type State struct {
-	InstalledAgents []string  `json:"installed_agents"`
-	LastApply       time.Time `json:"last_apply,omitempty"`
+	InstalledAgents     []string  `json:"installed_agents"`
+	LastApply           time.Time `json:"last_apply,omitempty"`
+	LastUpdateCheck     time.Time `json:"last_update_check,omitempty"`
+	UpdateChecksEnabled bool      `json:"update_checks_enabled,omitempty"`
 }
 
 // DefaultPath returns the canonical path to the state file: ~/.squadai/state.json.
@@ -63,8 +65,10 @@ func Save(path string, s *State) error {
 	copy(sorted, s.InstalledAgents)
 	sort.Strings(sorted)
 	out := &State{
-		InstalledAgents: sorted,
-		LastApply:       s.LastApply,
+		InstalledAgents:     sorted,
+		LastApply:           s.LastApply,
+		LastUpdateCheck:     s.LastUpdateCheck,
+		UpdateChecksEnabled: s.UpdateChecksEnabled,
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

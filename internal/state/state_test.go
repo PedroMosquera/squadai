@@ -219,6 +219,53 @@ func TestDefaultPath_ExpandsHome(t *testing.T) {
 	}
 }
 
+// ─── UpdateChecks fields ──────────────────────────────────────────────────────
+
+func TestSaveLoad_UpdateChecksFields(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "state.json")
+
+	ts := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	original := &State{
+		InstalledAgents:     []string{"claude"},
+		LastUpdateCheck:     ts,
+		UpdateChecksEnabled: true,
+	}
+	if err := Save(path, original); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !loaded.LastUpdateCheck.Equal(ts) {
+		t.Errorf("LastUpdateCheck: want %v, got %v", ts, loaded.LastUpdateCheck)
+	}
+	if !loaded.UpdateChecksEnabled {
+		t.Error("UpdateChecksEnabled should be true")
+	}
+}
+
+func TestLoad_BackwardCompat_MissingUpdateFields(t *testing.T) {
+	// Old state.json without update fields must load without error.
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "state.json")
+	old := `{"installed_agents":["opencode"],"last_apply":"2026-01-01T00:00:00Z"}`
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.UpdateChecksEnabled {
+		t.Error("UpdateChecksEnabled should default to false")
+	}
+	if !s.LastUpdateCheck.IsZero() {
+		t.Error("LastUpdateCheck should default to zero")
+	}
+}
+
 // ─── JSON output is deterministic ────────────────────────────────────────────
 
 func TestSave_JSONDeterministic(t *testing.T) {
