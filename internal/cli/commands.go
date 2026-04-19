@@ -2192,6 +2192,7 @@ func RunRemove(args []string, stdout io.Writer) error {
 		}
 
 		// Classify each path as would-delete or would-strip.
+		var wouldDelete []string
 		for _, path := range paths {
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -2205,6 +2206,7 @@ func RunRemove(args []string, stdout io.Writer) error {
 				result.Stripped = append(result.Stripped, path)
 			} else {
 				result.Deleted = append(result.Deleted, path)
+				wouldDelete = append(wouldDelete, path)
 			}
 		}
 
@@ -2213,6 +2215,10 @@ func RunRemove(args []string, stdout io.Writer) error {
 		if info, err := os.Stat(squadaiDir); err == nil && info.IsDir() {
 			result.Deleted = append(result.Deleted, squadaiDir)
 		}
+
+		// Report directories that would become empty after removing the files above.
+		wouldRemoveDirs := dryRunEmptyManagedDirs(projectDir, wouldDelete)
+		result.Deleted = append(result.Deleted, wouldRemoveDirs...)
 
 		if jsonOut {
 			data, err := json.MarshalIndent(result, "", "  ")
@@ -2317,6 +2323,10 @@ func RunRemove(args []string, stdout io.Writer) error {
 		deleted = append(deleted, squadaiDir)
 	}
 
+	// Remove any empty parent directories left behind after file deletion.
+	removedDirs := removeEmptyManagedDirs(projectDir, deleted)
+	deleted = append(deleted, removedDirs...)
+
 	fmt.Fprintf(stdout, "Removed %d files, stripped markers from %d files.\n", len(deleted), len(stripped))
 	for _, p := range deleted {
 		fmt.Fprintf(stdout, "  deleted: %s\n", p)
@@ -2338,6 +2348,95 @@ func collectAllTargetPaths(actions []domain.PlannedAction) []string {
 		}
 	}
 	return paths
+}
+
+// dryRunEmptyManagedDirs computes which ancestor directories of the given
+// paths WOULD become empty if those paths were deleted. It does not modify
+// the filesystem. Used by the dry-run branch of RunRemove.
+func dryRunEmptyManagedDirs(projectDir string, wouldDeletePaths []string) []string {
+	// Build a set of paths that would be deleted so we can simulate their removal.
+	willDelete := make(map[string]bool, len(wouldDeletePaths))
+	for _, p := range wouldDeletePaths {
+		willDelete[p] = true
+	}
+
+	// Collect all ancestor directories up to projectDir.
+	candidates := make(map[string]bool)
+	for _, p := range wouldDeletePaths {
+		dir := filepath.Dir(p)
+		for dir != projectDir && dir != "/" && dir != "." && len(dir) > len(projectDir) {
+			candidates[dir] = true
+			dir = filepath.Dir(dir)
+		}
+	}
+
+	// Sort deepest-first.
+	sorted := make([]string, 0, len(candidates))
+	for d := range candidates {
+		sorted = append(sorted, d)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return len(sorted[i]) > len(sorted[j]) })
+
+	// Simulate deletion: for each candidate dir, check if all its current entries
+	// are in the willDelete set (files) or in the would-be-removed dirs set (dirs).
+	wouldRemove := make(map[string]bool)
+	var result []string
+	for _, dir := range sorted {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		allGone := true
+		for _, e := range entries {
+			entryPath := filepath.Join(dir, e.Name())
+			if !willDelete[entryPath] && !wouldRemove[entryPath] {
+				allGone = false
+				break
+			}
+		}
+		if allGone {
+			wouldRemove[dir] = true
+			result = append(result, dir)
+		}
+	}
+	return result
+}
+
+// removeEmptyManagedDirs removes empty directories that were left behind after
+// deleting managed files. It walks deepest-first so that nested empty dirs are
+// handled correctly (.claude/agents → .claude). Only directories that are
+// ancestors of deleted paths (up to projectDir) are considered.
+func removeEmptyManagedDirs(projectDir string, deletedPaths []string) []string {
+	// Collect all ancestor directories of deleted files, stopping at projectDir.
+	candidates := make(map[string]bool)
+	for _, p := range deletedPaths {
+		dir := filepath.Dir(p)
+		for dir != projectDir && dir != "/" && dir != "." && len(dir) > len(projectDir) {
+			candidates[dir] = true
+			dir = filepath.Dir(dir)
+		}
+	}
+
+	// Sort deepest-first (longest path first) to handle nested dirs correctly.
+	sorted := make([]string, 0, len(candidates))
+	for d := range candidates {
+		sorted = append(sorted, d)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return len(sorted[i]) > len(sorted[j]) })
+
+	var removed []string
+	for _, dir := range sorted {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue // dir may have already been removed by a parent removal
+		}
+		if len(entries) == 0 {
+			if err := os.Remove(dir); err == nil {
+				removed = append(removed, dir)
+			}
+		}
+	}
+	return removed
 }
 
 // DetectAdapters returns all registered adapters that are installed or have config.

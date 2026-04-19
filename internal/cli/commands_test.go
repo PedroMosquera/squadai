@@ -2106,3 +2106,123 @@ func trackCreatedFileForTest(projectRoot, relPath string) error {
 func writeManagedKeysForTest(projectRoot, configFile string, keys []string) error {
 	return managed.WriteManagedKeys(projectRoot, configFile, keys)
 }
+
+// ─── removeEmptyManagedDirs unit tests ──────────────────────────────────────
+
+// TestRemoveEmptyManagedDirs_CleansEmptyClaudeDir verifies that after deleting
+// .claude/agents/foo.md the empty .claude/agents/ and .claude/ dirs are removed.
+func TestRemoveEmptyManagedDirs_CleansEmptyClaudeDir(t *testing.T) {
+	dir := t.TempDir()
+
+	// Simulate: .claude/agents/ exists but its file was already deleted (empty dir).
+	agentsDir := filepath.Join(dir, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	deletedPaths := []string{filepath.Join(agentsDir, "orchestrator.md")}
+	removed := removeEmptyManagedDirs(dir, deletedPaths)
+
+	// Both .claude/agents/ and .claude/ should have been removed.
+	if _, err := os.Stat(agentsDir); !os.IsNotExist(err) {
+		t.Errorf(".claude/agents/ should have been removed, err=%v", err)
+	}
+	claudeDir := filepath.Join(dir, ".claude")
+	if _, err := os.Stat(claudeDir); !os.IsNotExist(err) {
+		t.Errorf(".claude/ should have been removed, err=%v", err)
+	}
+	if len(removed) < 2 {
+		t.Errorf("expected at least 2 removed dirs, got %d: %v", len(removed), removed)
+	}
+}
+
+// TestRemoveEmptyManagedDirs_CleansEmptyCursorDir verifies that after deleting
+// .cursor/rules/foo.mdc the empty parent dirs are removed.
+func TestRemoveEmptyManagedDirs_CleansEmptyCursorDir(t *testing.T) {
+	dir := t.TempDir()
+
+	rulesDir := filepath.Join(dir, ".cursor", "rules")
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	deletedPaths := []string{filepath.Join(rulesDir, "team-standards.mdc")}
+	removed := removeEmptyManagedDirs(dir, deletedPaths)
+
+	if _, err := os.Stat(rulesDir); !os.IsNotExist(err) {
+		t.Errorf(".cursor/rules/ should have been removed")
+	}
+	cursorDir := filepath.Join(dir, ".cursor")
+	if _, err := os.Stat(cursorDir); !os.IsNotExist(err) {
+		t.Errorf(".cursor/ should have been removed")
+	}
+	if len(removed) < 2 {
+		t.Errorf("expected at least 2 removed dirs, got %d: %v", len(removed), removed)
+	}
+}
+
+// TestRemoveEmptyManagedDirs_PreservesNonEmptyDirs verifies that when a
+// user file exists alongside managed files, the parent dir is preserved.
+func TestRemoveEmptyManagedDirs_PreservesNonEmptyDirs(t *testing.T) {
+	dir := t.TempDir()
+
+	claudeDir := filepath.Join(dir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	// User-owned file that should NOT be removed.
+	userFile := filepath.Join(claudeDir, "user-thing.md")
+	if err := os.WriteFile(userFile, []byte("# User notes\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Simulate: managed settings.json was deleted.
+	deletedPaths := []string{filepath.Join(claudeDir, "settings.json")}
+	removed := removeEmptyManagedDirs(dir, deletedPaths)
+
+	// .claude/ must NOT be removed because user-thing.md is still there.
+	if _, err := os.Stat(claudeDir); err != nil {
+		t.Errorf(".claude/ should still exist, got err: %v", err)
+	}
+	if _, err := os.Stat(userFile); err != nil {
+		t.Errorf("user file should still exist, got err: %v", err)
+	}
+	if len(removed) != 0 {
+		t.Errorf("expected no dirs removed, got %v", removed)
+	}
+}
+
+// TestDryRunEmptyManagedDirs_ReportsWouldRemoveDirs verifies that the dry-run
+// helper reports directories that would become empty without modifying anything.
+func TestDryRunEmptyManagedDirs_ReportsWouldRemoveDirs(t *testing.T) {
+	dir := t.TempDir()
+
+	agentsDir := filepath.Join(dir, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	// The file still EXISTS on disk (dry-run: we haven't deleted it yet).
+	agentFile := filepath.Join(agentsDir, "orchestrator.md")
+	if err := os.WriteFile(agentFile, []byte("# orchestrator\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Simulate: we would delete agentFile.
+	wouldDelete := []string{agentFile}
+	wouldRemove := dryRunEmptyManagedDirs(dir, wouldDelete)
+
+	// File and dirs should STILL exist (dry-run).
+	if _, err := os.Stat(agentFile); err != nil {
+		t.Errorf("dry-run must not delete files: %v", err)
+	}
+	if _, err := os.Stat(agentsDir); err != nil {
+		t.Errorf("dry-run must not remove dirs: %v", err)
+	}
+
+	// But the helper should REPORT both dirs.
+	if len(wouldRemove) < 2 {
+		t.Errorf("expected at least 2 dirs in report, got %d: %v", len(wouldRemove), wouldRemove)
+	}
+}
