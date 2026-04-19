@@ -144,16 +144,18 @@ func TestPlan_OpenCode_Outdated_ReturnsUpdate(t *testing.T) {
 
 // ─── Plan (unsupported adapters) ────────────────────────────────────────────
 
-func TestPlan_Claude_NoTeam_ReturnsNil(t *testing.T) {
+// ─── Plan (Claude Code — now native) ───────────────────────────────────────
+
+func TestPlan_Claude_NoTeam_ReturnsEmpty(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
-	// Claude does not support ComponentAgents (no ProjectAgentsDir), so custom
-	// agents return nil. With no team config, this is the expected empty result.
-	inst := New(testAgents(), nil, project)
+	// Claude supports ComponentAgents now, but with no team config the custom
+	// agent (reviewer) will be planned for .claude/agents/.
+	inst := New(nil, nil, project) // no agents, no config
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
 	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for claude without team, got %d", len(actions))
+		t.Errorf("expected 0 actions for claude without agents/team, got %d", len(actions))
 	}
 }
 
@@ -631,9 +633,10 @@ func TestPlanTeamNative_Cursor_TDD(t *testing.T) {
 	}
 }
 
-// ─── Team: Prompt delegation (Claude Code) ─────────────────────────────────
+// ─── Team: Native delegation (Claude Code) ─────────────────────────────────
+// Claude Code now uses DelegationNativeAgents — agents go to .claude/agents/.
 
-func TestPlanTeamPrompt_TDD_SingleAction(t *testing.T) {
+func TestPlanTeamNative_Claude_TDD_SixActions(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
 	cfg := tddTeamConfig()
@@ -643,12 +646,13 @@ func TestPlanTeamPrompt_TDD_SingleAction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action for Claude Code TDD, got %d", len(actions))
+	// TDD: orchestrator + brainstormer + planner + implementer + reviewer + debugger = 6
+	if len(actions) != 6 {
+		t.Errorf("expected 6 actions for Claude Code TDD native, got %d", len(actions))
 	}
 }
 
-func TestPlanTeamPrompt_TargetIsRulesFile(t *testing.T) {
+func TestPlanTeamNative_Claude_OrchestratorPath(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
 	cfg := tddTeamConfig()
@@ -658,13 +662,24 @@ func TestPlanTeamPrompt_TargetIsRulesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	expected := adapter.ProjectRulesFile(project) // CLAUDE.md
-	if actions[0].TargetPath != expected {
-		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+
+	expected := filepath.Join(project, ".claude", "agents", "orchestrator.md")
+	found := false
+	for _, a := range actions {
+		if strings.HasSuffix(a.TargetPath, "/orchestrator.md") {
+			found = true
+			if a.TargetPath != expected {
+				t.Errorf("orchestrator path = %q, want %q", a.TargetPath, expected)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("orchestrator.md action not found for Claude Code")
 	}
 }
 
-func TestApplyTeamPrompt_InjectsMarkerBlock(t *testing.T) {
+func TestApplyTeamNative_Claude_WritesFrontmatterTranslated(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
 	cfg := tddTeamConfig()
@@ -674,58 +689,151 @@ func TestApplyTeamPrompt_InjectsMarkerBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan error: %v", err)
 	}
-	if err := inst.Apply(actions[0]); err != nil {
-		t.Fatalf("Apply failed: %v", err)
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply(%q) failed: %v", a.TargetPath, err)
+		}
 	}
 
-	data, err := os.ReadFile(actions[0].TargetPath)
+	// Orchestrator file should have Claude-native frontmatter.
+	data, err := os.ReadFile(filepath.Join(project, ".claude", "agents", "orchestrator.md"))
 	if err != nil {
-		t.Fatalf("rules file not found: %v", err)
+		t.Fatalf("orchestrator.md not found: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "<!-- squadai:team -->") {
-		t.Error("should contain opening team marker")
+
+	// Claude-native fields must be present.
+	if !strings.Contains(content, "name: orchestrator") {
+		t.Error("Claude agent should have name: orchestrator")
 	}
-	if !strings.Contains(content, "<!-- /squadai:team -->") {
-		t.Error("should contain closing team marker")
+	if !strings.Contains(content, "color: blue") {
+		t.Error("Orchestrator should have color: blue")
+	}
+	if !strings.Contains(content, "model: inherit") {
+		t.Error("Claude agent should have model: inherit")
+	}
+	if !strings.Contains(content, "memory: project") {
+		t.Error("Claude agent should have memory: project")
+	}
+
+	// OpenCode-only field must be stripped.
+	if strings.Contains(content, "mode:") {
+		t.Error("mode field should be stripped from Claude frontmatter")
 	}
 }
 
-func TestApplyTeamPrompt_PreservesExistingContent(t *testing.T) {
+func TestApplyTeamNative_Claude_DoesNotWriteSettings_WhenOptOut(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	cfg := tddTeamConfig()
+	// Default: SetClaudeDefaultAgent is false
+	inst := New(nil, cfg, project)
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("plan error: %v", err)
+	}
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+	}
+
+	settingsPath := filepath.Join(project, ".claude", "settings.json")
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Error("settings.json should not be written when SetClaudeDefaultAgent=false")
+	}
+}
+
+func TestApplyTeamNative_Claude_WritesSettings_WhenOptIn(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	cfg := tddTeamConfig()
+	inst := New(nil, cfg, project, Options{SetClaudeDefaultAgent: true})
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("plan error: %v", err)
+	}
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+	}
+
+	settingsPath := filepath.Join(project, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("settings.json should be written: %v", err)
+	}
+	if !strings.Contains(string(data), `"agent"`) {
+		t.Error("settings.json should contain the agent field")
+	}
+	if !strings.Contains(string(data), `"orchestrator"`) {
+		t.Error("settings.json should set agent to orchestrator")
+	}
+}
+
+func TestApplyTeamNative_Claude_PreservesExistingSettingsKeys(t *testing.T) {
+	project := t.TempDir()
+	adapter := claude.New()
+	cfg := tddTeamConfig()
+	inst := New(nil, cfg, project, Options{SetClaudeDefaultAgent: true})
+
+	// Write pre-existing settings.
+	claudeDir := filepath.Join(project, ".claude")
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	existing := `{"theme":"dark","fontSize":14}` + "\n"
+	if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(existing), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+	}
+
+	data, _ := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	content := string(data)
+
+	if !strings.Contains(content, `"theme"`) {
+		t.Error("existing theme key should be preserved")
+	}
+	if !strings.Contains(content, `"fontSize"`) {
+		t.Error("existing fontSize key should be preserved")
+	}
+	if !strings.Contains(content, `"agent"`) {
+		t.Error("agent key should be added")
+	}
+}
+
+func TestVerifyTeamNative_Claude_AfterApply_AllPass(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
 	cfg := tddTeamConfig()
 	inst := New(nil, cfg, project)
 
-	// Write existing content to the rules file.
-	rulesPath := adapter.ProjectRulesFile(project)
-	if err := os.MkdirAll(filepath.Dir(rulesPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	existingContent := "# Existing Content\n\nSome user rules here.\n"
-	if err := os.WriteFile(rulesPath, []byte(existingContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
-	if err := inst.Apply(actions[0]); err != nil {
-		t.Fatalf("Apply failed: %v", err)
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
 	}
 
-	data, _ := os.ReadFile(rulesPath)
-	content := string(data)
-	if !strings.Contains(content, "# Existing Content") {
-		t.Error("should preserve existing content")
+	results, err := inst.Verify(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
 	}
-	if !strings.Contains(content, "Some user rules here.") {
-		t.Error("should preserve user rules")
-	}
-	if !marker.HasSection(content, "team") {
-		t.Error("should have team marker section")
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("check %q failed: %s", r.Check, r.Message)
+		}
 	}
 }
-
-// ─── Team: Solo delegation (VS Code, Windsurf) ─────────────────────────────
 
 func TestPlanTeamSolo_TDD_SingleAction_VSCode(t *testing.T) {
 	project := t.TempDir()
@@ -786,30 +894,6 @@ func TestApplyTeamSolo_InjectsMarkerBlock(t *testing.T) {
 func TestVerifyTeamNative_AfterApply_AllPass(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
-	cfg := tddTeamConfig()
-	inst := New(nil, cfg, project)
-
-	actions, _ := inst.Plan(adapter, t.TempDir(), project)
-	for _, a := range actions {
-		if err := inst.Apply(a); err != nil {
-			t.Fatalf("Apply failed: %v", err)
-		}
-	}
-
-	results, err := inst.Verify(adapter, t.TempDir(), project)
-	if err != nil {
-		t.Fatalf("Verify failed: %v", err)
-	}
-	for _, r := range results {
-		if !r.Passed {
-			t.Errorf("check %q failed: %s", r.Check, r.Message)
-		}
-	}
-}
-
-func TestVerifyTeamPrompt_AfterApply_AllPass(t *testing.T) {
-	project := t.TempDir()
-	adapter := claude.New()
 	cfg := tddTeamConfig()
 	inst := New(nil, cfg, project)
 

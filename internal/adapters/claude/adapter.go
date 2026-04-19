@@ -92,7 +92,8 @@ func (a *Adapter) SettingsPath(homeDir string) string {
 func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
 	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings,
-		domain.ComponentSkills, domain.ComponentMCP, domain.ComponentPlugins:
+		domain.ComponentSkills, domain.ComponentMCP, domain.ComponentPlugins,
+		domain.ComponentAgents:
 		return true
 	default:
 		return false
@@ -109,9 +110,9 @@ func (a *Adapter) ProjectRulesFile(projectDir string) string {
 	return filepath.Join(projectDir, "CLAUDE.md")
 }
 
-// ProjectAgentsDir returns empty string — Claude Code does not support project agents.
-func (a *Adapter) ProjectAgentsDir(_ string) string {
-	return ""
+// ProjectAgentsDir returns <projectDir>/.claude/agents — Claude Code native sub-agent directory.
+func (a *Adapter) ProjectAgentsDir(projectDir string) string {
+	return filepath.Join(projectDir, ".claude", "agents")
 }
 
 // ProjectSkillsDir returns <projectDir>/.claude/skills.
@@ -129,19 +130,19 @@ func ConfigDir(homeDir string) string {
 	return filepath.Join(homeDir, ".claude")
 }
 
-// DelegationStrategy returns DelegationPromptBased — Claude Code uses Task tool delegation.
+// DelegationStrategy returns DelegationNativeAgents — Claude Code supports .claude/agents/*.md sub-agents.
 func (a *Adapter) DelegationStrategy() domain.DelegationStrategy {
-	return domain.DelegationPromptBased
+	return domain.DelegationNativeAgents
 }
 
-// SupportsSubAgents returns false — Claude Code does not create named sub-agent files.
+// SupportsSubAgents returns true — Claude Code supports named sub-agent files.
 func (a *Adapter) SupportsSubAgents() bool {
-	return false
+	return true
 }
 
-// SubAgentsDir returns empty string — Claude Code does not support sub-agent files.
-func (a *Adapter) SubAgentsDir(_ string) string {
-	return ""
+// SubAgentsDir returns ~/.claude/agents — the user-scope sub-agents directory.
+func (a *Adapter) SubAgentsDir(homeDir string) string {
+	return filepath.Join(ConfigDir(homeDir), "agents")
 }
 
 // SupportsWorkflows returns false — Claude Code does not support workflow files.

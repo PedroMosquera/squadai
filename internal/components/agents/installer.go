@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
 	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
@@ -14,6 +15,13 @@ import (
 )
 
 const teamSectionID = "team"
+
+// Options controls optional behavior of the agents installer.
+type Options struct {
+	// SetClaudeDefaultAgent writes .claude/settings.json with the orchestrator as
+	// the default agent when Claude Code's native delegation is active.
+	SetClaudeDefaultAgent bool
+}
 
 // Installer implements domain.ComponentInstaller for agent definitions.
 // It writes .opencode/agents/<name>.md files with YAML frontmatter.
@@ -24,13 +32,19 @@ type Installer struct {
 	config     *domain.MergedConfig       // team config for template rendering (nil = V1 behavior)
 	projectDir string
 	adapters   map[domain.AgentID]domain.Adapter // adapters registered during Plan, used in Apply
+	opts       Options
 }
 
 // New returns an agents installer configured from the merged agent definitions.
 // cfg may be nil for backward compatibility (V1 behavior: only custom agents).
-func New(agents map[string]domain.AgentDef, cfg *domain.MergedConfig, projectDir string) *Installer {
+// An optional Options value controls extra behavior (e.g. SetClaudeDefaultAgent).
+func New(agentDefs map[string]domain.AgentDef, cfg *domain.MergedConfig, projectDir string, opts ...Options) *Installer {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	resolved := make(map[string]domain.AgentDef)
-	for name, def := range agents {
+	for name, def := range agentDefs {
 		// Resolve prompt content from file if needed.
 		if def.Prompt == "" && def.PromptFile != "" && projectDir != "" {
 			filePath := filepath.Join(projectDir, ".squadai", def.PromptFile)
@@ -46,6 +60,7 @@ func New(agents map[string]domain.AgentDef, cfg *domain.MergedConfig, projectDir
 		config:     cfg,
 		projectDir: projectDir,
 		adapters:   make(map[domain.AgentID]domain.Adapter),
+		opts:       o,
 	}
 }
 
@@ -195,6 +210,12 @@ func (i *Installer) planNativeAgents(adapter domain.Adapter, homeDir, projectDir
 
 // planNativeAgentFile produces a single PlannedAction for a native agent file.
 func (i *Installer) planNativeAgentFile(adapter domain.Adapter, agentsDir, roleName, content string) (domain.PlannedAction, error) {
+	translated, err := i.maybeTranslateContent(adapter.ID(), roleName, content)
+	if err != nil {
+		return domain.PlannedAction{}, fmt.Errorf("translate frontmatter for %s: %w", roleName, err)
+	}
+	content = translated
+
 	targetPath := filepath.Join(agentsDir, roleName+".md")
 	actionID := fmt.Sprintf("%s-team-%s", adapter.ID(), roleName)
 	description := fmt.Sprintf("team:native:%s", roleName)
@@ -391,13 +412,29 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 		return fmt.Errorf("render team agent %s: %w", roleName, err)
 	}
 
+	// Translate frontmatter to Claude-native format when applicable.
+	translated, err := i.maybeTranslateContent(action.Agent, roleName, rendered)
+	if err != nil {
+		return fmt.Errorf("translate frontmatter for %s: %w", roleName, err)
+	}
+
 	dir := filepath.Dir(action.TargetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create agents dir: %w", err)
 	}
 
-	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(rendered), 0644); err != nil {
+	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(translated), 0644); err != nil {
 		return fmt.Errorf("write team agent %s: %w", roleName, err)
+	}
+
+	// For Claude Code: optionally write .claude/settings.json to set the orchestrator
+	// as the default agent when the user confirmed it in the wizard.
+	if roleName == "orchestrator" &&
+		action.Agent == domain.AgentClaudeCode &&
+		i.opts.SetClaudeDefaultAgent {
+		if err := claude.WriteDefaultAgentSettings(i.projectDir, "orchestrator"); err != nil {
+			return fmt.Errorf("write claude default agent settings: %w", err)
+		}
 	}
 
 	return nil
@@ -528,10 +565,14 @@ func (i *Installer) verifyTeamAgents(adapter domain.Adapter, homeDir, projectDir
 		}
 
 		// Verify orchestrator.
-		orchestratorContent, err := renderTemplate("orchestrator",
+		orchestratorRendered, err := renderTemplate("orchestrator",
 			assets.MustRead("teams/"+methodology+"/orchestrator-native.md"), data)
 		if err != nil {
 			return nil, fmt.Errorf("render orchestrator for verify: %w", err)
+		}
+		orchestratorContent, err := i.maybeTranslateContent(adapter.ID(), "orchestrator", orchestratorRendered)
+		if err != nil {
+			return nil, fmt.Errorf("translate orchestrator for verify: %w", err)
 		}
 		results = append(results, verifyFileContent(
 			filepath.Join(agentsDir, "orchestrator.md"),
@@ -550,9 +591,13 @@ func (i *Installer) verifyTeamAgents(adapter domain.Adapter, homeDir, projectDir
 			if renderErr != nil {
 				return nil, fmt.Errorf("render %s for verify: %w", roleName, renderErr)
 			}
+			translated, transErr := i.maybeTranslateContent(adapter.ID(), roleName, rendered)
+			if transErr != nil {
+				return nil, fmt.Errorf("translate %s for verify: %w", roleName, transErr)
+			}
 			results = append(results, verifyFileContent(
 				filepath.Join(agentsDir, roleName+".md"),
-				rendered, "team-"+roleName))
+				translated, "team-"+roleName))
 		}
 
 	case domain.DelegationPromptBased, domain.DelegationSoloAgent:
@@ -651,8 +696,6 @@ func (i *Installer) buildTemplateDataFromAction(cfg *domain.MergedConfig, roleNa
 // prefer adapter.DelegationStrategy() when the adapter is accessible.
 func delegationStrategyForAgent(id domain.AgentID) string {
 	switch id {
-	case domain.AgentClaudeCode:
-		return "prompt"
 	case domain.AgentVSCodeCopilot, domain.AgentWindsurf:
 		return "solo"
 	default:
@@ -696,7 +739,11 @@ func (i *Installer) renderNativeAgentContent(action domain.PlannedAction) (strin
 			return "", fmt.Errorf("read team agent template %s: %w", roleName, err)
 		}
 	}
-	return renderTemplate(roleName, templateContent, data)
+	rendered, err := renderTemplate(roleName, templateContent, data)
+	if err != nil {
+		return "", fmt.Errorf("render team agent template %s: %w", roleName, err)
+	}
+	return i.maybeTranslateContent(action.Agent, roleName, rendered)
 }
 
 // renderMarkerInjectionContent computes the content for a prompt/solo marker injection.
@@ -780,4 +827,15 @@ func sortedTeamRoles(m map[string]domain.TeamRole) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// maybeTranslateContent translates the rendered agent content to the adapter-native
+// frontmatter format. For Claude Code, this converts OpenCode-style YAML frontmatter
+// to Claude's native format (name, color, model, memory fields; stripped mode field).
+// For all other adapters the content is returned unchanged.
+func (i *Installer) maybeTranslateContent(agentID domain.AgentID, roleName, content string) (string, error) {
+	if agentID != domain.AgentClaudeCode {
+		return content, nil
+	}
+	return claude.TranslateFrontmatter(content, roleName, "project")
 }
