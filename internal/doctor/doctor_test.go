@@ -150,9 +150,15 @@ func TestEnvironmentCategory(t *testing.T) {
 		"node --version": []byte("v20.11.0"),
 	}}
 	d := newTestDoctor(t, looker, runner)
+	// Stub the review-screen hook for this test so checkReviewScreen passes
+	// deterministically; real builds set it via app.init.
+	prev := ReviewScreenWiredHook
+	ReviewScreenWiredHook = func() bool { return true }
+	t.Cleanup(func() { ReviewScreenWiredHook = prev })
+
 	results := d.runEnvironment(context.Background())
-	if len(results) != 4 {
-		t.Fatalf("expected 4 results, got %d", len(results))
+	if len(results) != 5 {
+		t.Fatalf("expected 5 results, got %d", len(results))
 	}
 	for _, r := range results {
 		if r.Status != CheckPass {

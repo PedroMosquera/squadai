@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/PedroMosquera/squadai/internal/cli"
+	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/state"
 	"github.com/PedroMosquera/squadai/internal/tui"
 	"github.com/PedroMosquera/squadai/internal/update"
@@ -14,6 +15,17 @@ import (
 
 // Version is set from main via ldflags at build time.
 var Version = "dev"
+
+// init wires the review-prompt hooks from the tui package into the cli package.
+// This breaks what would otherwise be a cli→tui→cli import cycle: the cli
+// package declares the hook variables and calls them; the app package — which
+// imports both — injects the concrete implementation at process start.
+func init() {
+	cli.ReviewPromptHook = tui.RunReviewPrompt
+	cli.IsTTYHook = tui.IsTTY
+	cli.ReviewScreenWired = true
+	doctor.ReviewScreenWiredHook = func() bool { return cli.ReviewScreenWired }
+}
 
 // Run is the top-level entry point. It parses args and dispatches to subcommands.
 // When no args are given, it launches the interactive TUI.

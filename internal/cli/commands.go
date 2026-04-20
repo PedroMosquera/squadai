@@ -984,7 +984,10 @@ func RunPlan(args []string, stdout io.Writer) error {
 	}
 
 	if jsonOut {
-		data, _ := json.MarshalIndent(actions, "", "  ")
+		data, err := json.MarshalIndent(actions, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal plan actions: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		return nil
 	}
@@ -1032,6 +1035,8 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	jsonOut := false
 	force := false
 	verbose := false
+	noReview := false
+	overwriteUnmanaged := false
 	setClaudeDefaultAgent := false
 	respectState := true
 	var explicitAgents []string
@@ -1046,6 +1051,10 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			force = true
 		case arg == "--verbose":
 			verbose = true
+		case arg == "--no-review":
+			noReview = true
+		case arg == "--overwrite-unmanaged":
+			overwriteUnmanaged = true
 		case arg == "--set-claude-default-agent":
 			setClaudeDefaultAgent = true
 		case arg == "--respect-state" || arg == "--respect-state=true":
@@ -1083,6 +1092,10 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			fmt.Fprintln(stdout, "  --json              Output the execution report as JSON (includes backup ID and step results).")
 			fmt.Fprintln(stdout, "  --force             Apply with default config even when no project.json is found.")
 			fmt.Fprintln(stdout, "  --verbose           Stream per-step progress to stderr as each action executes.")
+			fmt.Fprintln(stdout, "  --no-review         Skip the pre-apply review screen (non-interactive / CI).")
+			fmt.Fprintln(stdout, "  --overwrite-unmanaged  Grant blanket consent to overwrite any user-owned key")
+			fmt.Fprintln(stdout, "                         SquadAI would write. Complements --no-review / CI flows;")
+			fmt.Fprintln(stdout, "                         without this flag non-TTY applies halt on merge conflicts.")
 			fmt.Fprintln(stdout, "  --agent=<csv>       Explicitly select agents to apply (e.g. opencode,cursor). Bypasses state filter.")
 			fmt.Fprintln(stdout, "  --model=role=tier,... Override model tier per role for this run (in-memory only).")
 			fmt.Fprintln(stdout, "                      Tiers: premium, standard, cheap. Example: --model=orchestrator=premium,implementer=cheap")
@@ -1153,7 +1166,10 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 
 	if dryRun {
 		if jsonOut {
-			data, _ := json.MarshalIndent(actions, "", "  ")
+			data, err := json.MarshalIndent(actions, "", "  ")
+			if err != nil {
+				return fmt.Errorf("marshal apply actions: %w", err)
+			}
 			fmt.Fprintln(stdout, string(data))
 			return nil
 		}
@@ -1162,6 +1178,30 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			fmt.Fprintf(stdout, "  %-8s %s\n", a.Action, a.Description)
 		}
 		return nil
+	}
+
+	// Pre-apply review: show the user every file change before touching disk.
+	// Skipped when --no-review, --json, or stdout is not a TTY (CI, pipes).
+	var applyPolicy domain.ApplyPolicy
+	if shouldRunReview(noReview, jsonOut) {
+		entries, err := collectPreviewEntries(p.ComponentInstallers(), adapters, homeDir, projectDir)
+		if err != nil {
+			return fmt.Errorf("build review preview: %w", err)
+		}
+		if len(entries) > 0 {
+			decision, err := ReviewPromptHook(entries)
+			if err != nil {
+				return fmt.Errorf("review prompt: %w", err)
+			}
+			if !decision.Confirmed {
+				fmt.Fprintln(stdout, "Apply canceled.")
+				return nil
+			}
+			applyPolicy = decision.Policy
+		}
+	}
+	if overwriteUnmanaged {
+		applyPolicy.OverwriteAll = true
 	}
 
 	// Create backup store for apply safety.
@@ -1175,6 +1215,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 		merged.Copilot,
 		store,
 	)
+	exec.WithPolicy(applyPolicy)
 
 	// Determine the effective event sink.
 	// --verbose takes precedence and creates its own channel sink.
@@ -1220,6 +1261,12 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			}
 			return execErr
 		}
+		if errors.Is(execErr, domain.ErrMergeConflict) {
+			fmt.Fprintln(stdout, "Apply halted: user-owned keys would be overwritten.")
+			fmt.Fprintln(stdout, "Re-run without --no-review to resolve interactively, or")
+			fmt.Fprintln(stdout, "pass --overwrite-unmanaged to grant blanket consent.")
+			return execErr
+		}
 		return fmt.Errorf("apply: %w", execErr)
 	}
 
@@ -1243,7 +1290,10 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	}
 
 	if jsonOut {
-		data, _ := json.MarshalIndent(report, "", "  ")
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal apply report: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		if !report.Success {
 			return fmt.Errorf("apply completed with failures (rolled back, backup: %s)", report.BackupID)
@@ -1333,7 +1383,10 @@ func RunVerify(args []string, stdout io.Writer) error {
 	}
 
 	if jsonOut {
-		data, _ := json.MarshalIndent(report, "", "  ")
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal verify report: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		if !report.AllPass {
 			return fmt.Errorf("verification failed")
@@ -1514,7 +1567,10 @@ func RunBackupCreate(args []string, stdout io.Writer) error {
 	}
 
 	if jsonOut {
-		data, _ := json.MarshalIndent(manifest, "", "  ")
+		data, err := json.MarshalIndent(manifest, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal backup manifest: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		return nil
 	}
@@ -1575,7 +1631,10 @@ func RunBackupList(args []string, stdout io.Writer) error {
 	}
 
 	if jsonOut {
-		data, _ := json.MarshalIndent(manifests, "", "  ")
+		data, err := json.MarshalIndent(manifests, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal backup list: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		return nil
 	}
@@ -1652,7 +1711,10 @@ func RunRestore(args []string, stdout io.Writer) error {
 
 	if dryRun {
 		if jsonOut {
-			data, _ := json.MarshalIndent(manifest, "", "  ")
+			data, err := json.MarshalIndent(manifest, "", "  ")
+			if err != nil {
+				return fmt.Errorf("marshal restore manifest: %w", err)
+			}
 			fmt.Fprintln(stdout, string(data))
 			return nil
 		}
@@ -1677,7 +1739,10 @@ func RunRestore(args []string, stdout io.Writer) error {
 			"restored":  len(manifest.AffectedFiles),
 			"status":    "restored",
 		}
-		data, _ := json.MarshalIndent(result, "", "  ")
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal restore result: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		return nil
 	}
@@ -1990,7 +2055,10 @@ func RunBackupDelete(args []string, stdout io.Writer) error {
 			"status":    "deleted",
 			"files":     fileCount,
 		}
-		data, _ := json.MarshalIndent(result, "", "  ")
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal delete result: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		return nil
 	}
@@ -2075,7 +2143,10 @@ func RunBackupPrune(args []string, stdout io.Writer) error {
 			"deleted": deleted,
 			"kept":    keep,
 		}
-		data, _ := json.MarshalIndent(result, "", "  ")
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal prune result: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		return nil
 	}
@@ -2662,13 +2733,56 @@ func loadAndMerge(homeDir, projectDir string) (*domain.MergedConfig, error) {
 	return config.Merge(user, project, policy), nil
 }
 
+// shouldRunReview decides whether to render the pre-apply review TUI.
+// It falls through (returns false) when: the user opted out, machine output
+// was requested, the hook was never wired, or stdout is not a terminal.
+func shouldRunReview(noReview, jsonOut bool) bool {
+	if noReview || jsonOut {
+		return false
+	}
+	if ReviewPromptHook == nil {
+		return false
+	}
+	if IsTTYHook == nil || !IsTTYHook() {
+		return false
+	}
+	return true
+}
+
+// collectPreviewEntries asks every installer that implements domain.Previewer
+// for its proposed changes across all adapters and returns the flattened
+// list. Installers that don't implement Previewer are skipped silently —
+// the TUI only surfaces installers that opted in.
+func collectPreviewEntries(
+	installers map[domain.ComponentID]domain.ComponentInstaller,
+	adapters []domain.Adapter,
+	homeDir, projectDir string,
+) ([]domain.PreviewEntry, error) {
+	var out []domain.PreviewEntry
+	for _, inst := range installers {
+		pv, ok := inst.(domain.Previewer)
+		if !ok {
+			continue
+		}
+		for _, adapter := range adapters {
+			entries, err := pv.Preview(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("%s preview for %s: %w", inst.ID(), adapter.ID(), err)
+			}
+			out = append(out, entries...)
+		}
+	}
+	return out, nil
+}
+
 // diffEntry is the JSON representation of a single diff action.
 type diffEntry struct {
-	Path      string `json:"path"`
-	Action    string `json:"action"`
-	Agent     string `json:"agent,omitempty"`
-	Component string `json:"component"`
-	Diff      string `json:"diff"`
+	Path      string            `json:"path"`
+	Action    string            `json:"action"`
+	Agent     string            `json:"agent,omitempty"`
+	Component string            `json:"component"`
+	Diff      string            `json:"diff"`
+	Conflicts []domain.Conflict `json:"conflicts,omitempty"`
 }
 
 // RunDiff shows what apply would change as unified diffs. It is read-only.
@@ -2743,6 +2857,17 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 	}
 
 	if jsonOut {
+		// Build a per-target conflict map from the previewers so --json
+		// output mirrors what the review screen would show. Non-previewed
+		// actions fall back to the raw diff with no conflicts.
+		previewEntries, _ := collectPreviewEntries(p.ComponentInstallers(), adapters, homeDir, projectDir)
+		conflictsByTarget := make(map[string][]domain.Conflict, len(previewEntries))
+		for _, pe := range previewEntries {
+			if len(pe.Conflicts) > 0 {
+				conflictsByTarget[pe.TargetPath] = pe.Conflicts
+			}
+		}
+
 		entries := make([]diffEntry, 0, len(nonSkip))
 		for _, a := range nonSkip {
 			entry := diffEntry{
@@ -2750,6 +2875,7 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 				Action:    string(a.Action),
 				Agent:     string(a.Agent),
 				Component: string(a.Component),
+				Conflicts: conflictsByTarget[a.TargetPath],
 			}
 			if a.Action == domain.ActionDelete {
 				entry.Diff = "Would remove: " + a.TargetPath
@@ -2761,7 +2887,10 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 			}
 			entries = append(entries, entry)
 		}
-		data, _ := json.MarshalIndent(entries, "", "  ")
+		data, err := json.MarshalIndent(entries, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal diff entries: %w", err)
+		}
 		fmt.Fprintln(stdout, string(data))
 		return nil
 	}

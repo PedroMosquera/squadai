@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
@@ -65,6 +66,17 @@ type Installer struct {
 
 	// agentConfigs caches adapter-declared MCP keys per agent, populated during Plan.
 	agentConfigs map[domain.AgentID]agentMCPConfig
+
+	// policy carries user decisions from the review screen (per-key overwrite
+	// consent, OverwriteAll). Zero value = no overrides, match legacy behavior.
+	policy domain.ApplyPolicy
+}
+
+// SetApplyPolicy implements domain.PolicyAware. The pipeline executor calls
+// this before Apply so the installer can honor per-key overwrite decisions
+// when merging into existing JSON files.
+func (i *Installer) SetApplyPolicy(p domain.ApplyPolicy) {
+	i.policy = p
 }
 
 // New returns an MCP installer configured from the merged MCP config.
@@ -189,54 +201,16 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	return i.applyMergedConfig(action)
 }
 
-// applyMergedConfig writes all servers into the "mcp" key of a single config file.
+// applyMergedConfig writes all servers into the "mcp" key of a single config file,
+// respecting user-wins semantics for any unrelated top-level key on disk.
 func (i *Installer) applyMergedConfig(action domain.PlannedAction) error {
-	// Read existing file or start empty.
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return fmt.Errorf("read target: %w", err)
-	}
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-
-	// Convert servers to a generic map for JSON serialization.
-	// MergeIntoSettings is used by OpenCode — uses default "url" key.
-	mcpMap := make(map[string]interface{})
+	mcpMap := make(map[string]interface{}, len(i.servers))
 	for name, def := range i.servers {
 		mcpMap[name] = serverToMap(def, action.Agent)
 	}
-	existing[mcpKey] = mcpMap
+	incoming := map[string]any{mcpKey: mcpMap}
 
-	// Marshal with indentation.
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	data = append(data, '\n')
-
-	// Ensure parent directory exists.
-	dir := filepath.Dir(action.TargetPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
-	}
-
-	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-
-	// Write managed-key tracking to the centralized sidecar (if we know projectDir).
-	if i.projectDir != "" {
-		relPath, err := filepath.Rel(i.projectDir, action.TargetPath)
-		if err != nil {
-			relPath = action.TargetPath
-		}
-		if err := managed.WriteManagedKeys(i.projectDir, relPath, []string{mcpKey}); err != nil {
-			return fmt.Errorf("write managed keys sidecar: %w", err)
-		}
-	}
-
-	return nil
+	return i.mergeAndWrite(action, incoming, []string{mcpKey})
 }
 
 // isMCPConfigFileAdapter checks if the adapter uses the MCPConfigFile strategy.
@@ -302,57 +276,105 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, targetPath string)
 	}, nil
 }
 
-// applyMCPConfigFile writes all servers into the "mcpServers" key of a dedicated MCP config file.
-// Existing keys that are not managed (e.g. "inputs" for VS Code) are preserved.
+// applyMCPConfigFile writes all servers into the servers-root key of a dedicated
+// MCP config file, respecting user-wins semantics so unrelated user-authored
+// keys (e.g. "inputs" for VS Code) are preserved.
 func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
-	// Read existing file or start empty.
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return fmt.Errorf("read MCP config: %w", err)
-	}
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-
-	// Convert servers to a generic map for JSON serialization.
 	rootKey := i.rootKeyForAgent(action.Agent)
-	serversMap := make(map[string]interface{})
+	serversMap := make(map[string]interface{}, len(i.servers))
 	for name, def := range i.servers {
 		serversMap[name] = serverToMap(def, action.Agent)
 	}
-	existing[rootKey] = serversMap
-	// Note: all other existing keys (e.g. "inputs" in VS Code mcp.json) are preserved
-	// because we only overwrite the servers root key.
+	incoming := map[string]any{rootKey: serversMap}
 
-	// Marshal with indentation.
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal MCP config: %w", err)
-	}
-	data = append(data, '\n')
+	return i.mergeAndWrite(action, incoming, []string{rootKey})
+}
 
-	// Ensure parent directory exists.
+// mergeAndWrite is the shared helper both MCP apply branches route through.
+// It reads the existing sidecar, pulls any per-key overrides from the active
+// ApplyPolicy, invokes MergeAndWriteJSON, surfaces conflicts as
+// *domain.ConflictError, and finally updates the sidecar to reflect the new
+// managed-keys set (existing ∪ newlyManaged).
+func (i *Installer) mergeAndWrite(action domain.PlannedAction, incoming map[string]any, incomingKeys []string) error {
+	// Ensure the parent directory exists even for fresh installs —
+	// WriteAtomic does this too, but failing early gives a clearer error.
 	dir := filepath.Dir(action.TargetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create MCP config dir: %w", err)
+		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
-		return fmt.Errorf("write MCP config: %w", err)
-	}
-
-	// Write managed-key tracking to the centralized sidecar (if we know projectDir).
+	relPath := action.TargetPath
 	if i.projectDir != "" {
-		relPath, err := filepath.Rel(i.projectDir, action.TargetPath)
-		if err != nil {
-			relPath = action.TargetPath
+		if rel, relErr := filepath.Rel(i.projectDir, action.TargetPath); relErr == nil {
+			relPath = rel
 		}
-		if err := managed.WriteManagedKeys(i.projectDir, relPath, []string{rootKey}); err != nil {
+	}
+
+	var existingManaged []string
+	if i.projectDir != "" {
+		keys, err := managed.ReadManagedKeys(i.projectDir, relPath)
+		if err != nil {
+			return fmt.Errorf("read managed keys sidecar: %w", err)
+		}
+		existingManaged = keys
+	}
+
+	overrides := i.policy.EffectiveOverrides(action.TargetPath, incomingKeys)
+
+	res, err := fileutil.MergeAndWriteJSON(action.TargetPath, incoming, existingManaged, overrides, 0644)
+	if err != nil {
+		return fmt.Errorf("merge and write %s: %w", action.TargetPath, err)
+	}
+	if len(res.Conflicts) > 0 {
+		return &domain.ConflictError{
+			TargetPath: action.TargetPath,
+			Conflicts:  conflictsToDomain(res.Conflicts),
+		}
+	}
+
+	if i.projectDir != "" {
+		finalManaged := unionKeys(existingManaged, res.NewlyManaged)
+		if err := managed.WriteManagedKeys(i.projectDir, relPath, finalManaged); err != nil {
 			return fmt.Errorf("write managed keys sidecar: %w", err)
 		}
 	}
 
 	return nil
+}
+
+// unionKeys returns the sorted, deduped union of two string slices. It is
+// used to maintain the sidecar's managed-keys set across merges — keys
+// SquadAI previously claimed must be retained even if this merge didn't
+// touch them.
+func unionKeys(a, b []string) []string {
+	set := make(map[string]bool, len(a)+len(b))
+	for _, k := range a {
+		set[k] = true
+	}
+	for _, k := range b {
+		set[k] = true
+	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	// MergeJSON already returns sorted; union may re-order, so sort here.
+	sort.Strings(out)
+	return out
+}
+
+// conflictsToDomain adapts fileutil-level merge conflicts into the
+// domain-level Conflict shape the review pipeline expects.
+func conflictsToDomain(in []fileutil.MergeConflict) []domain.Conflict {
+	out := make([]domain.Conflict, 0, len(in))
+	for _, c := range in {
+		out = append(out, domain.Conflict{
+			Key:           c.Key,
+			UserValue:     stringifyForConflict(c.UserValue),
+			IncomingValue: stringifyForConflict(c.IncomingValue),
+		})
+	}
+	return out
 }
 
 // verifyMCPConfigFile checks the MCPConfigFile strategy result.
