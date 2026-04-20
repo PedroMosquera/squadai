@@ -277,9 +277,11 @@ Policy (locked fields)  >  Project config  >  User defaults
 | `--with-policy` | `init` | Generate team policy template |
 | `--force` | `init`, `remove` | Overwrite existing template and skill files; required for remove |
 | `--merge` | `init` | Re-run init, merge new config on top of existing (preserves customizations) |
-| `--dry-run` | `plan`, `apply`, `sync`, `restore` | Preview changes without writing files |
-| `--json` | `plan`, `apply`, `verify`, `backup` | Machine-readable JSON output |
+| `--dry-run` | `plan`, `apply`, `restore` | Preview changes without writing files |
+| `--json` | `plan`, `apply`, `diff`, `verify`, `backup` | Machine-readable JSON output |
 | `--keep=N` | `backup prune` | Number of backups to retain (default 10) |
+| `--no-review` | `apply` | Skip the pre-apply review screen (non-interactive / CI) |
+| `--overwrite-unmanaged` | `apply` | Grant blanket consent to overwrite user-owned keys (pairs with `--no-review` in CI) |
 
 ### Interactive TUI
 
@@ -290,7 +292,44 @@ Run `squadai` with no arguments for a guided wizard:
 3. MCP server configuration
 4. Plugin selection (filtered by methodology and detected agents)
 5. Summary and confirmation
-6. Menu: Plan, Apply, Sync, Verify, Restore, Quit
+6. Menu: Plan, Apply, Verify, Restore, Quit
+
+---
+
+### Review Screen (pre-apply safety)
+
+Interactive `squadai apply` (and the TUI Apply menu entry) open a **review
+screen** before any file is written. For each planned change you see the
+unified diff, the target path, and — when a JSON config already contains a
+top-level key SquadAI would write and that key is *not* recorded in the
+sidecar as SquadAI-managed — a **conflict** row.
+
+Per-conflict keybindings:
+
+| Key | Effect |
+|-----|--------|
+| `↑` / `↓`, `j` / `k` | Move between entries |
+| `Enter` | Open detail pane (per-entry diff + conflicts) |
+| `Tab` / `Shift+Tab` | Cycle between conflicts in the detail pane |
+| `o` | Toggle `[KEEP]` ↔ `[OVERWRITE]` on the hovered conflict |
+| `a` / `y` | Apply with current decisions |
+| `n` / `esc` / `q` | Cancel — nothing is written |
+
+Defaults to **keep** — the user-edited value wins. Only keys you explicitly
+flipped to `[OVERWRITE]` are replaced, and once applied they are recorded in
+`.squadai/managed.json` so future runs treat them as SquadAI-owned (no
+conflict on the next `apply`).
+
+#### Non-interactive flows
+
+- `--no-review` skips the TUI. With no override and a conflict present,
+  `apply` returns an error wrapping `ErrMergeConflict` and leaves the file +
+  sidecar untouched.
+- `--overwrite-unmanaged` grants blanket consent — SquadAI will overwrite any
+  user-owned top-level key it needs to write. Combine with `--no-review` in
+  CI when you've already decided to claim the config.
+- `squadai diff --json` emits a `conflicts` array per entry so CI pipelines
+  can detect drift without the TUI.
 
 ---
 
