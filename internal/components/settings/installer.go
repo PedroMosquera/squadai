@@ -21,6 +21,15 @@ type Installer struct {
 
 	// projectDir is captured during Plan so Apply can write to the sidecar.
 	projectDir string
+
+	// policy carries user decisions from the review screen. Zero value = no
+	// overrides, which is the legacy behavior.
+	policy domain.ApplyPolicy
+}
+
+// SetApplyPolicy implements domain.PolicyAware.
+func (i *Installer) SetApplyPolicy(p domain.ApplyPolicy) {
+	i.policy = p
 }
 
 // New returns a settings installer configured from the merged adapter configs.
@@ -121,7 +130,10 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	}, nil
 }
 
-// Apply executes a single planned action.
+// Apply executes a single planned action. It merges the adapter's managed
+// settings into the target file using user-wins semantics — any top-level
+// key SquadAI has never claimed is preserved on disk unless the active
+// ApplyPolicy grants overwrite consent for that key.
 func (i *Installer) Apply(action domain.PlannedAction) error {
 	if action.Action == domain.ActionSkip {
 		return nil
@@ -133,59 +145,105 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return nil
 	}
 
-	// Read existing file or start with empty map.
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return fmt.Errorf("read target: %w", err)
-	}
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-
-	// Write managed keys into the document.
-	managedKeys := make([]string, 0, len(settings)+1)
+	incoming := make(map[string]any, len(settings)+1)
+	incomingKeys := make([]string, 0, len(settings)+1)
 	for key, val := range settings {
-		existing[key] = val
-		managedKeys = append(managedKeys, key)
+		incoming[key] = val
+		incomingKeys = append(incomingKeys, key)
 	}
-
-	// Inject $schema for OpenCode configs.
 	if agentID == string(domain.AgentOpenCode) {
-		existing["$schema"] = "https://opencode.ai/config.json"
-		managedKeys = append(managedKeys, "$schema")
+		incoming["$schema"] = "https://opencode.ai/config.json"
+		incomingKeys = append(incomingKeys, "$schema")
 	}
 
-	sort.Strings(managedKeys)
-
-	// Marshal with indentation for readability.
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal settings: %w", err)
-	}
-	data = append(data, '\n')
-
-	// Ensure parent directory exists.
 	dir := filepath.Dir(action.TargetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create settings dir: %w", err)
 	}
 
-	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
-		return fmt.Errorf("write settings: %w", err)
+	relPath := action.TargetPath
+	if i.projectDir != "" {
+		if rel, relErr := filepath.Rel(i.projectDir, action.TargetPath); relErr == nil {
+			relPath = rel
+		}
 	}
 
-	// Write managed-key tracking to the centralized sidecar (if we know projectDir).
+	var existingManaged []string
 	if i.projectDir != "" {
-		relPath, err := filepath.Rel(i.projectDir, action.TargetPath)
+		keys, err := managed.ReadManagedKeys(i.projectDir, relPath)
 		if err != nil {
-			relPath = action.TargetPath
+			return fmt.Errorf("read managed keys sidecar: %w", err)
 		}
-		if err := managed.WriteManagedKeys(i.projectDir, relPath, managedKeys); err != nil {
+		existingManaged = keys
+	}
+
+	overrides := i.policy.EffectiveOverrides(action.TargetPath, incomingKeys)
+
+	res, err := fileutil.MergeAndWriteJSON(action.TargetPath, incoming, existingManaged, overrides, 0644)
+	if err != nil {
+		return fmt.Errorf("merge and write settings: %w", err)
+	}
+	if len(res.Conflicts) > 0 {
+		return &domain.ConflictError{
+			TargetPath: action.TargetPath,
+			Conflicts:  conflictsToDomain(res.Conflicts),
+		}
+	}
+
+	if i.projectDir != "" {
+		finalManaged := unionKeys(existingManaged, res.NewlyManaged)
+		if err := managed.WriteManagedKeys(i.projectDir, relPath, finalManaged); err != nil {
 			return fmt.Errorf("write managed keys sidecar: %w", err)
 		}
 	}
 
 	return nil
+}
+
+// unionKeys returns the sorted, deduped union of two string slices. Used to
+// maintain the sidecar's managed-keys set across merges — keys SquadAI
+// previously claimed must be retained even if this merge didn't touch them.
+func unionKeys(a, b []string) []string {
+	set := make(map[string]bool, len(a)+len(b))
+	for _, k := range a {
+		set[k] = true
+	}
+	for _, k := range b {
+		set[k] = true
+	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// conflictsToDomain adapts fileutil merge conflicts into domain.Conflict.
+func conflictsToDomain(in []fileutil.MergeConflict) []domain.Conflict {
+	out := make([]domain.Conflict, 0, len(in))
+	for _, c := range in {
+		out = append(out, domain.Conflict{
+			Key:           c.Key,
+			UserValue:     stringifyValue(c.UserValue),
+			IncomingValue: stringifyValue(c.IncomingValue),
+		})
+	}
+	return out
+}
+
+// stringifyValue renders an arbitrary JSON value for TUI-safe display.
+func stringifyValue(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	const maxLen = 80
+	s := string(data)
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-1] + "…"
 }
 
 // Verify checks post-apply state for the settings component.

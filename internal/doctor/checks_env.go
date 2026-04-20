@@ -8,13 +8,14 @@ import (
 
 const catEnv = "Environment"
 
-// runEnvironment runs all environment checks: Go, npx, git, node.
+// runEnvironment runs all environment checks: Go, npx, git, node, review screen.
 func (d *Doctor) runEnvironment(_ context.Context) []CheckResult {
 	return []CheckResult{
 		d.checkGo(),
 		d.checkNpx(),
 		d.checkGit(),
 		d.checkNode(),
+		d.checkReviewScreen(),
 	}
 }
 
