@@ -19,6 +19,7 @@ type Executor struct {
 	copilotCfg     domain.CopilotConfig
 	backupStore    *backup.Store // nil = no backup/rollback
 	sink           EventSink     // progress event sink; defaults to NopSink
+	policy         domain.ApplyPolicy
 }
 
 // New returns an Executor configured with component installers and copilot manager.
@@ -50,6 +51,15 @@ func (e *Executor) WithSink(s EventSink) *Executor {
 	return e
 }
 
+// WithPolicy attaches an ApplyPolicy to the executor. Before each Execute it
+// is handed to every installer that satisfies domain.PolicyAware, letting
+// per-file/per-key overwrite decisions from the review screen flow down to
+// the merge layer. Returns e to allow method chaining.
+func (e *Executor) WithPolicy(p domain.ApplyPolicy) *Executor {
+	e.policy = p
+	return e
+}
+
 // Execute runs all planned actions in order, collecting step results.
 //
 // When a backup store is configured:
@@ -70,9 +80,18 @@ func (e *Executor) Execute(plan []domain.PlannedAction) (*domain.ApplyReport, er
 	total := len(plan)
 	e.sink.Send(Event{Type: EventPipelineStart, Total: total})
 
+	// Hand the active ApplyPolicy to any installer that declares it needs
+	// one. Installers that don't implement PolicyAware default to the
+	// legacy all-or-nothing behavior.
+	for _, inst := range e.installers {
+		if aware, ok := inst.(domain.PolicyAware); ok {
+			aware.SetApplyPolicy(e.policy)
+		}
+	}
+
 	// Create backup if store is configured.
 	if e.backupStore != nil {
-		paths := collectTargetPaths(plan)
+		paths := e.collectTargetPaths(plan)
 		if len(paths) > 0 {
 			manifest, err := e.backupStore.SnapshotFiles(paths, "apply")
 			if err != nil {
@@ -239,8 +258,12 @@ func deleteFile(path string) error {
 	return nil
 }
 
-// collectTargetPaths extracts unique target paths from non-skip actions.
-func collectTargetPaths(plan []domain.PlannedAction) []string {
+// collectTargetPaths extracts unique target paths from non-skip actions and
+// appends the managed-keys sidecar path when a projectDir is configured.
+// Including the sidecar ensures rollback restores the (file, sidecar) pair
+// as a single unit — otherwise a partial-failure rollback would leave the
+// sidecar claiming keys the restored file no longer contains.
+func (e *Executor) collectTargetPaths(plan []domain.PlannedAction) []string {
 	seen := make(map[string]bool)
 	var paths []string
 	for _, action := range plan {
@@ -250,6 +273,12 @@ func collectTargetPaths(plan []domain.PlannedAction) []string {
 		if action.TargetPath != "" && !seen[action.TargetPath] {
 			seen[action.TargetPath] = true
 			paths = append(paths, action.TargetPath)
+		}
+	}
+	if e.projectDir != "" {
+		sidecar := managed.SidecarPath(e.projectDir)
+		if !seen[sidecar] {
+			paths = append(paths, sidecar)
 		}
 	}
 	return paths

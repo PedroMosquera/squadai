@@ -42,7 +42,10 @@ func (s *Store) SnapshotFiles(paths []string, command string) (*Manifest, error)
 		}
 	}
 
-	id := GenerateID()
+	id, err := GenerateID()
+	if err != nil {
+		return nil, fmt.Errorf("generate backup id: %w", err)
+	}
 	backupDir := filepath.Join(s.baseDir, id)
 	filesDir := filepath.Join(backupDir, "files")
 
