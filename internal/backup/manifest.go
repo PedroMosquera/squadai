@@ -29,13 +29,15 @@ type FileSnapshot struct {
 }
 
 // GenerateID creates a unique backup ID based on timestamp + random suffix.
-func GenerateID() string {
+// Returns an error when crypto/rand fails; callers propagate rather than
+// panic so the pipeline can surface a clean failure.
+func GenerateID() (string, error) {
 	now := time.Now().UTC()
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand: " + err.Error())
+		return "", fmt.Errorf("crypto/rand: %w", err)
 	}
-	return fmt.Sprintf("%s-%s", now.Format("20060102T150405Z"), hex.EncodeToString(b))
+	return fmt.Sprintf("%s-%s", now.Format("20060102T150405Z"), hex.EncodeToString(b)), nil
 }
 
 // Checksum computes SHA-256 hex digest of the given data.

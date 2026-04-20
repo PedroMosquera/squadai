@@ -348,11 +348,17 @@ func TestApply_UpdatesOutdatedValues(t *testing.T) {
 	adapter := opencode.New()
 
 	// Write old values (no _agent_manager — that's now in the sidecar).
+	// Re-apply scenario: SquadAI previously wrote "model", so the sidecar
+	// must reflect ownership for the new merge semantics to allow overwrite.
+	// "user_key" stays unmanaged and is preserved via user-wins.
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"model":    "old-model",
 		"user_key": "keep",
 	})
+	if err := managed.WriteManagedKeys(project, "opencode.json", []string{"model"}); err != nil {
+		t.Fatalf("seed managed keys: %v", err)
+	}
 
 	// Install new value.
 	inst := newTestInstaller("opencode", map[string]interface{}{

@@ -442,7 +442,8 @@ func TestApply_UpdatesOutdatedMCP(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Write old MCP config.
+	// Write old MCP config — this is a re-apply scenario, so mark the "mcp"
+	// key as previously-managed so the new merge semantics allow overwrite.
 	targetPath := filepath.Join(project, "opencode.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"mcp": map[string]interface{}{
@@ -452,6 +453,9 @@ func TestApply_UpdatesOutdatedMCP(t *testing.T) {
 			},
 		},
 	})
+	if err := managed.WriteManagedKeys(project, "opencode.json", []string{"mcp"}); err != nil {
+		t.Fatalf("seed managed keys: %v", err)
+	}
 
 	// Install new MCP config.
 	inst := newTestInstaller()
@@ -1527,6 +1531,17 @@ func TestApplyMCPConfigFile_PreservesVSCodeInputs(t *testing.T) {
 	writeTestJSON(t, mcpPath, existing)
 
 	_ = vscode.New() // ensure adapter package is imported; action.Agent drives the logic
+	// Re-apply scenario: SquadAI previously wrote the "servers" key, so the
+	// sidecar must reflect ownership for the new merge semantics to allow
+	// overwrite. The user-authored "inputs" key stays unmanaged and is
+	// preserved by user-wins.
+	relMCP, err := filepath.Rel(dir, mcpPath)
+	if err != nil {
+		t.Fatalf("rel: %v", err)
+	}
+	if err := managed.WriteManagedKeys(dir, relMCP, []string{"servers"}); err != nil {
+		t.Fatalf("seed managed keys: %v", err)
+	}
 	servers := map[string]domain.MCPServerDef{
 		"context7": {Type: "remote", URL: "https://mcp.context7.com/mcp", Enabled: true},
 	}

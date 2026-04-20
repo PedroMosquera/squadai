@@ -9,8 +9,14 @@ import (
 )
 
 func TestGenerateID_UniqueAndFormatted(t *testing.T) {
-	id1 := GenerateID()
-	id2 := GenerateID()
+	id1, err := GenerateID()
+	if err != nil {
+		t.Fatalf("GenerateID: %v", err)
+	}
+	id2, err := GenerateID()
+	if err != nil {
+		t.Fatalf("GenerateID: %v", err)
+	}
 
 	if id1 == id2 {
 		t.Error("generated IDs should be unique")
