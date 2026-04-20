@@ -154,7 +154,7 @@ func TestPaths(t *testing.T) {
 		want string
 	}{
 		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
-		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, "memories", "global_rules.md")},
+		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, "global_rules.md")},
 		{"SkillsDir", a.SkillsDir(home), filepath.Join(wantConfigDir, "skills")},
 		{"SettingsPath", a.SettingsPath(home), filepath.Join(wantConfigDir, "mcp_config.json")},
 	}

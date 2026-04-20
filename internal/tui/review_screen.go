@@ -40,7 +40,6 @@ type reviewModel struct {
 	decision    reviewDecision
 	width       int
 	height      int
-	statusLine  string
 
 	// overrides records per-conflict user consent to overwrite. Key format:
 	// "<targetPath>::<conflictKey>". Absence == keep (the default).

@@ -5,89 +5,38 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/PedroMosquera/squadai/internal/components/agents"
-	"github.com/PedroMosquera/squadai/internal/components/commands"
-	"github.com/PedroMosquera/squadai/internal/components/copilot"
-	"github.com/PedroMosquera/squadai/internal/components/mcp"
-	"github.com/PedroMosquera/squadai/internal/components/memory"
-	"github.com/PedroMosquera/squadai/internal/components/plugins"
-	"github.com/PedroMosquera/squadai/internal/components/rules"
-	"github.com/PedroMosquera/squadai/internal/components/settings"
-	"github.com/PedroMosquera/squadai/internal/components/skills"
-	"github.com/PedroMosquera/squadai/internal/components/workflows"
+	"github.com/PedroMosquera/squadai/internal/components/bundle"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // Verifier runs post-apply compliance checks across all components and adapters.
-type Verifier struct {
-	memoryInstaller *memory.Installer
-	copilotManager  *copilot.Manager
-}
+// Construction is intentionally empty: component installers are built via the
+// shared bundle on each Verify call (or supplied by the caller via VerifyWithSet)
+// so the planner and verifier cannot drift in how they instantiate components.
+type Verifier struct{}
 
-// New returns a Verifier with default component checkers.
+// New returns a Verifier.
 func New() *Verifier {
-	return &Verifier{
-		memoryInstaller: memory.New(),
-		copilotManager:  copilot.New(),
-	}
+	return &Verifier{}
 }
 
-// Verify runs all checks and produces a report.
+// Verify runs all checks and produces a report. Installers are built via the
+// shared bundle package — the same construction path the planner uses.
 func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, homeDir, projectDir string) (*domain.VerifyReport, error) {
+	set, err := bundle.Build(cfg, projectDir, bundle.Options{})
+	if err != nil {
+		return nil, err
+	}
+	return v.VerifyWithSet(set, cfg, adapters, homeDir, projectDir)
+}
+
+// VerifyWithSet runs verification against a caller-supplied installer Set.
+// Use this when you already have a Set built for another purpose (e.g., the
+// planner's) and want to guarantee the verifier sees the exact same installer
+// instances — including any state attached after construction.
+func (v *Verifier) VerifyWithSet(set *bundle.Set, cfg *domain.MergedConfig, adapters []domain.Adapter, homeDir, projectDir string) (*domain.VerifyReport, error) {
 	report := &domain.VerifyReport{
 		AllPass: true,
-	}
-
-	// Create rules installer from merged config (lazy init per verify call).
-	var rulesInstaller *rules.Installer
-	if rulesCfg, ok := cfg.Components[string(domain.ComponentRules)]; ok && rulesCfg.Enabled {
-		ri, err := rules.New(cfg.Rules, projectDir)
-		if err != nil {
-			return nil, fmt.Errorf("create rules installer: %w", err)
-		}
-		rulesInstaller = ri
-	}
-
-	// Create settings installer from merged adapter configs (lazy init per verify call).
-	var settingsInstaller *settings.Installer
-	if settingsCfg, ok := cfg.Components[string(domain.ComponentSettings)]; ok && settingsCfg.Enabled {
-		settingsInstaller = settings.New(cfg.Adapters)
-	}
-
-	// Create MCP installer from merged MCP config (lazy init per verify call).
-	var mcpInstaller *mcp.Installer
-	if mcpCfg, ok := cfg.Components[string(domain.ComponentMCP)]; ok && mcpCfg.Enabled {
-		mcpInstaller = mcp.New(cfg.MCP)
-	}
-
-	// Create agents installer from merged config (lazy init per verify call).
-	var agentsInstaller *agents.Installer
-	if agentsCfg, ok := cfg.Components[string(domain.ComponentAgents)]; ok && agentsCfg.Enabled {
-		agentsInstaller = agents.New(cfg.Agents, cfg, projectDir)
-	}
-
-	// Create skills installer from merged config (lazy init per verify call).
-	var skillsInstaller *skills.Installer
-	if skillsCfg, ok := cfg.Components[string(domain.ComponentSkills)]; ok && skillsCfg.Enabled {
-		skillsInstaller = skills.New(cfg.Skills, cfg, projectDir)
-	}
-
-	// Create commands installer from merged config (lazy init per verify call).
-	var commandsInstaller *commands.Installer
-	if cmdsCfg, ok := cfg.Components[string(domain.ComponentCommands)]; ok && cmdsCfg.Enabled {
-		commandsInstaller = commands.New(cfg.Commands)
-	}
-
-	// Create plugins installer from merged config (lazy init per verify call).
-	var pluginsInstaller *plugins.Installer
-	if pluginsCfg, ok := cfg.Components[string(domain.ComponentPlugins)]; ok && pluginsCfg.Enabled {
-		pluginsInstaller = plugins.New(cfg.Plugins, cfg)
-	}
-
-	// Create workflows installer from merged config (lazy init per verify call).
-	var workflowsInstaller *workflows.Installer
-	if workflowsCfg, ok := cfg.Components[string(domain.ComponentWorkflows)]; ok && workflowsCfg.Enabled {
-		workflowsInstaller = workflows.New(cfg)
 	}
 
 	// Verify components for each enabled adapter.
@@ -98,8 +47,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Memory component.
-		if memCfg, ok := cfg.Components[string(domain.ComponentMemory)]; ok && memCfg.Enabled {
-			results, err := v.memoryInstaller.Verify(adapter, homeDir, projectDir)
+		if memCfg, ok := cfg.Components[string(domain.ComponentMemory)]; ok && memCfg.Enabled && set.Memory != nil {
+			results, err := set.Memory.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -108,8 +57,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Rules component.
-		if rulesInstaller != nil {
-			results, err := rulesInstaller.Verify(adapter, homeDir, projectDir)
+		if set.Rules != nil {
+			results, err := set.Rules.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -118,8 +67,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Settings component.
-		if settingsInstaller != nil {
-			results, err := settingsInstaller.Verify(adapter, homeDir, projectDir)
+		if set.Settings != nil {
+			results, err := set.Settings.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -128,8 +77,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// MCP component.
-		if mcpInstaller != nil {
-			results, err := mcpInstaller.Verify(adapter, homeDir, projectDir)
+		if set.MCP != nil {
+			results, err := set.MCP.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -138,8 +87,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Agents component.
-		if agentsInstaller != nil {
-			results, err := agentsInstaller.Verify(adapter, homeDir, projectDir)
+		if set.Agents != nil {
+			results, err := set.Agents.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -148,8 +97,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Skills component.
-		if skillsInstaller != nil {
-			results, err := skillsInstaller.Verify(adapter, homeDir, projectDir)
+		if set.Skills != nil {
+			results, err := set.Skills.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -158,8 +107,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Commands component.
-		if commandsInstaller != nil {
-			results, err := commandsInstaller.Verify(adapter, homeDir, projectDir)
+		if set.Commands != nil {
+			results, err := set.Commands.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -168,8 +117,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Plugins component.
-		if pluginsInstaller != nil {
-			results, err := pluginsInstaller.Verify(adapter, homeDir, projectDir)
+		if set.Plugins != nil {
+			results, err := set.Plugins.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -178,8 +127,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 		}
 
 		// Workflows component.
-		if workflowsInstaller != nil {
-			results, err := workflowsInstaller.Verify(adapter, homeDir, projectDir)
+		if set.Workflows != nil {
+			results, err := set.Workflows.Verify(adapter, homeDir, projectDir)
 			if err != nil {
 				return nil, err
 			}
@@ -189,8 +138,8 @@ func (v *Verifier) Verify(cfg *domain.MergedConfig, adapters []domain.Adapter, h
 	}
 
 	// Verify copilot instructions.
-	if cfg.Copilot.InstructionsTemplate != "" {
-		results := v.copilotManager.Verify(projectDir, cfg.Copilot)
+	if cfg.Copilot.InstructionsTemplate != "" && set.Copilot != nil {
+		results := set.Copilot.Verify(projectDir, cfg.Copilot)
 		tagResults(results, "copilot")
 		collectResults(report, results)
 	}

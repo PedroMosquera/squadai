@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/PedroMosquera/squadai/internal/components/agents"
+	"github.com/PedroMosquera/squadai/internal/components/bundle"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
@@ -49,11 +50,25 @@ func New(opts ...Options) *Planner {
 		o = opts[0]
 	}
 	return &Planner{
-		memoryInstaller:      memory.New(),
-		copilotManager:       copilot.New(),
-		permissionsInstaller: permissions.New(),
-		opts:                 o,
+		opts: o,
 	}
+}
+
+// loadFromSet wires the built Set into the planner's installer fields. Kept
+// private: callers should construct the planner via New() and let Plan build
+// the set, or use FromSet for test doubles.
+func (p *Planner) loadFromSet(s *bundle.Set) {
+	p.memoryInstaller = s.Memory
+	p.rulesInstaller = s.Rules
+	p.settingsInstaller = s.Settings
+	p.permissionsInstaller = s.Permissions
+	p.mcpInstaller = s.MCP
+	p.agentsInstaller = s.Agents
+	p.skillsInstaller = s.Skills
+	p.commandsInstaller = s.Commands
+	p.pluginsInstaller = s.Plugins
+	p.workflowsInstaller = s.Workflows
+	p.copilotManager = s.Copilot
 }
 
 // Plan returns the ordered list of actions needed to reach the desired state.
@@ -62,28 +77,15 @@ func New(opts ...Options) *Planner {
 func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, homeDir, projectDir string) ([]domain.PlannedAction, error) {
 	var actions []domain.PlannedAction
 
-	// Create rules installer from merged config (lazy init per plan call).
-	rulesInst, err := rules.New(cfg.Rules, projectDir)
+	// Build the full installer set via the shared bundle builder so the
+	// planner and verifier cannot drift in how they instantiate components.
+	set, err := bundle.Build(cfg, projectDir, bundle.Options{
+		SetClaudeDefaultAgent: p.opts.SetClaudeDefaultAgent,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create rules installer: %w", err)
+		return nil, err
 	}
-	p.rulesInstaller = rulesInst
-
-	// Create settings installer from merged adapter configs (lazy init per plan call).
-	p.settingsInstaller = settings.New(cfg.Adapters)
-
-	// Create MCP installer from merged MCP config (lazy init per plan call).
-	p.mcpInstaller = mcp.New(cfg.MCP)
-
-	// Create agents/skills/commands installers (lazy init per plan call).
-	p.agentsInstaller = agents.New(cfg.Agents, cfg, projectDir,
-		agents.Options{SetClaudeDefaultAgent: p.opts.SetClaudeDefaultAgent})
-	p.skillsInstaller = skills.New(cfg.Skills, cfg, projectDir)
-	p.commandsInstaller = commands.New(cfg.Commands)
-
-	// Create plugins/workflows installers (lazy init per plan call).
-	p.pluginsInstaller = plugins.New(cfg.Plugins, cfg)
-	p.workflowsInstaller = workflows.New(cfg)
+	p.loadFromSet(set)
 
 	// Collect component actions for each enabled adapter.
 	for _, adapter := range adapters {
