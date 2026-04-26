@@ -15,6 +15,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/agents"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/hooks"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
 	"github.com/PedroMosquera/squadai/internal/components/permissions"
@@ -46,6 +47,7 @@ type Set struct {
 	Plugins     *plugins.Installer
 	Workflows   *workflows.Installer
 	AgentTeams  *agent_teams.Installer
+	Hooks       *hooks.Installer
 	Copilot     *copilot.Manager
 }
 
@@ -100,6 +102,13 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 	// teardown action rather than leaving stale env vars in settings.json.
 	if claudeCfg, ok := cfg.Adapters[string(domain.AgentClaudeCode)]; ok && claudeCfg.Enabled {
 		s.AgentTeams = agent_teams.New(cfg.Claude.AgentTeams.Enabled)
+	}
+
+	// Hooks installer runs whenever Claude is enabled and hooks are configured.
+	if claudeCfg, ok := cfg.Adapters[string(domain.AgentClaudeCode)]; ok && claudeCfg.Enabled {
+		if len(cfg.Hooks) > 0 {
+			s.Hooks = hooks.New(cfg.Hooks)
+		}
 	}
 
 	return s, nil

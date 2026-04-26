@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // ─── SetAgentTeamsEnv ───────────────────────────────────────────────────────
@@ -207,6 +209,256 @@ func TestAgentTeamsEnabled_EnvKeyMissing(t *testing.T) {
 	}
 	if got {
 		t.Error("expected false when env key missing")
+	}
+}
+
+// ─── SetHooks ────────────────────────────────────────────────────────────────
+
+func TestSetHooks_EmptyConfigIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	changed, err := SetHooks(dir, domain.HooksConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Error("empty HooksConfig should not write anything")
+	}
+}
+
+func TestSetHooks_WritesNewHookToMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	want := domain.HooksConfig{
+		"PreToolUse": {{
+			Hooks: []domain.HookEntry{{Type: "command", Command: "echo pre"}},
+		}},
+	}
+
+	changed, err := SetHooks(dir, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Error("expected changed=true for new file")
+	}
+
+	installed, err := HooksInstalled(dir, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !installed {
+		t.Error("hooks should be installed after SetHooks")
+	}
+}
+
+func TestSetHooks_PreservesExistingKeys(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"agent": "orchestrator",
+		"hooks": map[string]any{
+			"Stop": []any{
+				map[string]any{"hooks": []any{
+					map[string]any{"type": "command", "command": "echo stop"},
+				}},
+			},
+		},
+	})
+
+	newHook := domain.HooksConfig{
+		"PreToolUse": {{
+			Hooks: []domain.HookEntry{{Type: "command", Command: "echo pre"}},
+		}},
+	}
+	_, err := SetHooks(dir, newHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	var doc map[string]any
+	_ = json.Unmarshal(data, &doc)
+
+	if doc["agent"] != "orchestrator" {
+		t.Errorf("'agent' key should be preserved, got %v", doc["agent"])
+	}
+	hooksRaw, ok := doc["hooks"].(map[string]any)
+	if !ok {
+		t.Fatal("hooks key missing after merge")
+	}
+	if _, hasStop := hooksRaw["Stop"]; !hasStop {
+		t.Error("existing Stop hook should be preserved")
+	}
+	if _, hasPre := hooksRaw["PreToolUse"]; !hasPre {
+		t.Error("new PreToolUse hook should be present")
+	}
+}
+
+func TestSetHooks_DeduplicatesByCommand(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{"hooks": []any{
+					map[string]any{"type": "command", "command": "echo pre"},
+				}},
+			},
+		},
+	})
+
+	want := domain.HooksConfig{
+		"PreToolUse": {{
+			Hooks: []domain.HookEntry{{Type: "command", Command: "echo pre"}},
+		}},
+	}
+	changed, err := SetHooks(dir, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Error("idempotent call with same command should not write (changed=false)")
+	}
+}
+
+func TestSetHooks_AddsNewCommandToExistingMatcher(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "Bash",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": "echo one"},
+					},
+				},
+			},
+		},
+	})
+
+	want := domain.HooksConfig{
+		"PreToolUse": {{
+			Matcher: "Bash",
+			Hooks:   []domain.HookEntry{{Type: "command", Command: "echo two"}},
+		}},
+	}
+	changed, err := SetHooks(dir, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Error("adding new command to existing matcher should change the file")
+	}
+
+	allWant := domain.HooksConfig{
+		"PreToolUse": {{
+			Matcher: "Bash",
+			Hooks: []domain.HookEntry{
+				{Type: "command", Command: "echo one"},
+				{Type: "command", Command: "echo two"},
+			},
+		}},
+	}
+	installed, _ := HooksInstalled(dir, allWant)
+	if !installed {
+		t.Error("both commands should be present after merge")
+	}
+}
+
+func TestSetHooks_MultipleEventsAndMatchers(t *testing.T) {
+	dir := t.TempDir()
+	want := domain.HooksConfig{
+		"PreToolUse": {
+			{Matcher: "Bash", Hooks: []domain.HookEntry{{Type: "command", Command: "lint"}}},
+			{Matcher: "Write", Hooks: []domain.HookEntry{{Type: "command", Command: "format"}}},
+		},
+		"PostToolUse": {
+			{Hooks: []domain.HookEntry{{Type: "command", Command: "echo done"}}},
+		},
+	}
+
+	_, err := SetHooks(dir, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	installed, err := HooksInstalled(dir, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !installed {
+		t.Error("all events and matchers should be installed")
+	}
+}
+
+// ─── HooksInstalled ──────────────────────────────────────────────────────────
+
+func TestHooksInstalled_EmptyWantAlwaysTrue(t *testing.T) {
+	dir := t.TempDir()
+	ok, err := HooksInstalled(dir, domain.HooksConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Error("empty want should return true")
+	}
+}
+
+func TestHooksInstalled_MissingFileReturnsFalse(t *testing.T) {
+	dir := t.TempDir()
+	want := domain.HooksConfig{
+		"PreToolUse": {{Hooks: []domain.HookEntry{{Type: "command", Command: "echo"}}}},
+	}
+	ok, err := HooksInstalled(dir, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Error("missing settings.json should return false")
+	}
+}
+
+func TestHooksInstalled_MissingEventReturnsFalse(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"hooks": map[string]any{
+			"Stop": []any{
+				map[string]any{"hooks": []any{
+					map[string]any{"type": "command", "command": "echo stop"},
+				}},
+			},
+		},
+	})
+
+	want := domain.HooksConfig{
+		"PreToolUse": {{Hooks: []domain.HookEntry{{Type: "command", Command: "echo pre"}}}},
+	}
+	ok, _ := HooksInstalled(dir, want)
+	if ok {
+		t.Error("missing event should return false")
+	}
+}
+
+func TestHooksInstalled_MissingCommandReturnsFalse(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{"hooks": []any{
+					map[string]any{"type": "command", "command": "echo one"},
+				}},
+			},
+		},
+	})
+
+	want := domain.HooksConfig{
+		"PreToolUse": {{
+			Hooks: []domain.HookEntry{
+				{Type: "command", Command: "echo one"},
+				{Type: "command", Command: "echo two"},
+			},
+		}},
+	}
+	ok, _ := HooksInstalled(dir, want)
+	if ok {
+		t.Error("missing second command should return false")
 	}
 }
 

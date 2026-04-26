@@ -70,6 +70,9 @@ const (
 	ComponentPlugins     ComponentID = "plugins"
 	ComponentWorkflows   ComponentID = "workflows"
 	ComponentPermissions ComponentID = "permissions"
+	// ComponentHooks manages the Claude Code hooks config in .claude/settings.json.
+	// Active only when ProjectConfig.Hooks is non-empty.
+	ComponentHooks ComponentID = "hooks"
 	// ComponentAgentTeams installs Claude Code's experimental Agent Teams
 	// runtime opt-in (env var injection in .claude/settings.json). Active
 	// only when ProjectConfig.Claude.AgentTeams.Enabled is true.

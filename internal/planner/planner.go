@@ -9,6 +9,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/bundle"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/hooks"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
 	"github.com/PedroMosquera/squadai/internal/components/permissions"
@@ -35,6 +36,7 @@ type Planner struct {
 	workflowsInstaller   *workflows.Installer
 	permissionsInstaller *permissions.Installer
 	agentTeamsInstaller  *agent_teams.Installer
+	hooksInstaller       *hooks.Installer
 	copilotManager       *copilot.Manager
 	opts                 Options
 }
@@ -71,6 +73,7 @@ func (p *Planner) loadFromSet(s *bundle.Set) {
 	p.pluginsInstaller = s.Plugins
 	p.workflowsInstaller = s.Workflows
 	p.agentTeamsInstaller = s.AgentTeams
+	p.hooksInstaller = s.Hooks
 	p.copilotManager = s.Copilot
 }
 
@@ -195,6 +198,15 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 				return nil, fmt.Errorf("agent_teams plan: %w", err)
 			}
 			actions = append(actions, atActions...)
+		}
+
+		// Hooks (Claude Code only). The installer's Plan no-ops for other adapters.
+		if p.hooksInstaller != nil {
+			hooksActions, err := p.hooksInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("hooks plan: %w", err)
+			}
+			actions = append(actions, hooksActions...)
 		}
 	}
 
@@ -323,6 +335,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	if p.agentTeamsInstaller != nil {
 		installers[domain.ComponentAgentTeams] = p.agentTeamsInstaller
 	}
+	if p.hooksInstaller != nil {
+		installers[domain.ComponentHooks] = p.hooksInstaller
+	}
 	return installers
 }
 
@@ -387,6 +402,9 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 	case domain.ComponentAgentTeams:
 		return p.renderAgentTeams(action, oldContent)
 
+	case domain.ComponentHooks:
+		return p.renderHooks(action, oldContent)
+
 	default:
 		return oldContent, []byte("[content preview not available for " + string(action.Component) + "]"), nil
 	}
@@ -398,6 +416,18 @@ func (p *Planner) renderAgentTeams(action domain.PlannedAction, existing []byte)
 		return existing, []byte("[agent_teams installer not initialized]"), nil
 	}
 	rendered, err := p.agentTeamsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, nil, err
+	}
+	return existing, rendered, nil
+}
+
+// renderHooks computes what the hooks installer would write.
+func (p *Planner) renderHooks(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.hooksInstaller == nil {
+		return existing, []byte("[hooks installer not initialized]"), nil
+	}
+	rendered, err := p.hooksInstaller.RenderContent(action)
 	if err != nil {
 		return existing, nil, err
 	}
