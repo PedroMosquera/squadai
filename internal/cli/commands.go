@@ -30,6 +30,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/governance"
 	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/marketplace"
 	"github.com/PedroMosquera/squadai/internal/model"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
@@ -3449,5 +3450,134 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 	}
 
 	fmt.Fprintf(stdout, "installed pre-commit hook → %s\n", hookPath)
+	return nil
+}
+
+// ─── Plugins marketplace ──────────────────────────────────────────────────────
+
+// RunPluginsSync fetches the remote plugin registry and caches it locally at
+// .squadai/plugins-registry.json.
+func RunPluginsSync(args []string, stdout, stderr io.Writer) error {
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, "syncing plugin registry from github.com/wshobson/agents …")
+	reg, err := marketplace.Sync(projectDir)
+	if err != nil {
+		return fmt.Errorf("sync registry: %w", err)
+	}
+
+	fmt.Fprintf(stdout, "synced %d plugins → %s/.squadai/plugins-registry.json\n",
+		len(reg.Plugins), projectDir)
+	return nil
+}
+
+// RunPluginsList reads the local registry and prints a table of available plugins.
+func RunPluginsList(args []string, stdout io.Writer) error {
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	jsonOut := false
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+		}
+	}
+
+	reg, err := marketplace.Load(projectDir)
+	if err != nil {
+		return err
+	}
+
+	if jsonOut {
+		data, _ := json.MarshalIndent(reg.Plugins, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	// Load project config to mark installed plugins.
+	installed := make(map[string]string)
+	if proj, loadErr := config.LoadProject(projectDir); loadErr == nil {
+		for name, ver := range proj.Marketplace.Plugins {
+			installed[name] = ver
+		}
+	}
+
+	names := reg.SortedNames()
+	fmt.Fprintf(stdout, "%-40s %-10s %s\n", "PLUGIN", "VERSION", "DESCRIPTION")
+	fmt.Fprintf(stdout, "%-40s %-10s %s\n",
+		strings.Repeat("-", 40), strings.Repeat("-", 10), strings.Repeat("-", 40))
+	for _, name := range names {
+		p := reg.Plugins[name]
+		marker := "  "
+		if _, ok := installed[name]; ok {
+			marker = "✓ "
+		}
+		desc := p.Description
+		if len(desc) > 60 {
+			desc = desc[:57] + "..."
+		}
+		fmt.Fprintf(stdout, "%s%-38s %-10s %s\n", marker, name, p.Version, desc)
+	}
+	fmt.Fprintf(stdout, "\n(%d plugins, ✓ = installed in this project)\n", len(names))
+	return nil
+}
+
+// RunPluginsAdd downloads and installs a plugin into .claude/agents/ and
+// .claude/skills/, then records the installed version in project.json.
+func RunPluginsAdd(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: squadai plugins add <plugin-name>")
+	}
+	pluginName := args[0]
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	reg, err := marketplace.Load(projectDir)
+	if err != nil {
+		if err == marketplace.ErrRegistryNotFound {
+			fmt.Fprintln(stdout, "registry not found — syncing first…")
+			reg, err = marketplace.Sync(projectDir)
+			if err != nil {
+				return fmt.Errorf("auto-sync registry: %w", err)
+			}
+		} else {
+			return err
+		}
+	}
+
+	fmt.Fprintf(stdout, "installing plugin %q …\n", pluginName)
+	plugin, err := marketplace.Install(projectDir, pluginName, reg)
+	if err != nil {
+		return fmt.Errorf("install plugin: %w", err)
+	}
+
+	// Update project.json marketplace.plugins.
+	proj, loadErr := config.LoadProject(projectDir)
+	if loadErr != nil {
+		return fmt.Errorf("load project config: %w", loadErr)
+	}
+	if proj.Marketplace.Plugins == nil {
+		proj.Marketplace.Plugins = make(map[string]string)
+	}
+	proj.Marketplace.Plugins[pluginName] = plugin.Version
+	if err := config.SaveProject(projectDir, proj); err != nil {
+		return fmt.Errorf("update project.json: %w", err)
+	}
+
+	fmt.Fprintf(stdout, "installed %q v%s\n", pluginName, plugin.Version)
+	if len(plugin.Agents) > 0 {
+		fmt.Fprintf(stdout, "  agents  : %s\n", strings.Join(plugin.Agents, ", "))
+	}
+	if len(plugin.Skills) > 0 {
+		fmt.Fprintf(stdout, "  skills  : %s\n", strings.Join(plugin.Skills, ", "))
+	}
 	return nil
 }

@@ -27,6 +27,16 @@ type ProjectConfig struct {
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
 	Hooks       HooksConfig                `json:"hooks,omitempty"`
+	Marketplace MarketplaceConfig          `json:"marketplace,omitempty"`
+}
+
+// MarketplaceConfig tracks which plugin marketplace plugins are installed in
+// this project. Recorded here so it is version-controlled and policy-lockable.
+type MarketplaceConfig struct {
+	// Source is the upstream registry (default: "github.com/wshobson/agents").
+	Source string `json:"source,omitempty"`
+	// Plugins maps plugin name to its installed version string.
+	Plugins map[string]string `json:"plugins,omitempty"`
 }
 
 // ClaudeConfig holds Claude Code-specific feature toggles. Generic adapter
@@ -239,6 +249,7 @@ type MergedConfig struct {
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
 	Hooks       HooksConfig                `json:"hooks,omitempty"`
+	Marketplace MarketplaceConfig          `json:"marketplace,omitempty"`
 
 	// Violations is populated during merge when user/project values conflicted
 	// with locked policy fields. These are informational — the policy value wins.
