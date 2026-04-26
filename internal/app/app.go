@@ -129,6 +129,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			return cli.RunPluginsList(args[2:], stdout)
 		case "add":
 			return cli.RunPluginsAdd(args[2:], stdout, stderr)
+		case "remove":
+			return cli.RunPluginsRemove(args[2:], stdout)
 		default:
 			return fmt.Errorf("unknown plugins subcommand %q", args[1])
 		}
@@ -189,9 +191,10 @@ func printPluginsUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage: squadai plugins <subcommand> [flags]
 
 Subcommands:
-  sync          Fetch the plugin registry from github.com/wshobson/agents
-  list          List available plugins (--json for machine output)
-  add <name>    Download and install a plugin; updates project.json marketplace
+  sync             Fetch the plugin registry from github.com/wshobson/agents
+  list             List available plugins (--json for machine output)
+  add <name>       Download and install a plugin; updates project.json marketplace
+  remove <name>    Remove an installed plugin's files; updates project.json marketplace
 
 `)
 }
@@ -228,9 +231,10 @@ Commands:
   watch              Monitor managed files for drift, stream events to stdout
   audit              Render the governance audit log (.squadai/audit.log)
   install-hooks      Install a Git pre-commit hook running 'squadai verify --strict'
-  plugins sync       Fetch plugin registry from github.com/wshobson/agents
-  plugins list       List available plugins (✓ = installed in this project)
-  plugins add <name> Download and install a plugin into .claude/agents/ and .claude/skills/
+  plugins sync          Fetch plugin registry from github.com/wshobson/agents
+  plugins list          List available plugins (✓ = installed in this project)
+  plugins add <name>    Download and install a plugin into .claude/agents/, skills/, and commands/
+  plugins remove <name> Remove an installed plugin's files
   backup create      Snapshot managed files
   backup list        List available backups
   backup delete <id> Delete a backup snapshot

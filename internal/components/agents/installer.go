@@ -104,7 +104,10 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		for _, name := range names {
 			def := i.agents[name]
 			targetPath := filepath.Join(agentsDir, name+".md")
-			content := renderAgent(name, def)
+			content, err := renderAgentForAdapter(adapter.ID(), name, def)
+			if err != nil {
+				return nil, fmt.Errorf("render agent %s: %w", name, err)
+			}
 			actionID := fmt.Sprintf("%s-agent-%s", adapter.ID(), name)
 
 			existing, err := fileutil.ReadFileOrEmpty(targetPath)
@@ -521,14 +524,16 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 
 // applyCustomAgent writes a custom agent definition file.
 func (i *Installer) applyCustomAgent(action domain.PlannedAction) error {
-	// Extract agent name from target path.
 	name := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
 	def, ok := i.agents[name]
 	if !ok {
 		return fmt.Errorf("agent %q not found in config", name)
 	}
 
-	content := renderAgent(name, def)
+	content, err := renderAgentForAdapter(action.Agent, name, def)
+	if err != nil {
+		return fmt.Errorf("render agent %s: %w", name, err)
+	}
 
 	dir := filepath.Dir(action.TargetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -582,7 +587,10 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 			continue
 		}
 
-		expected := renderAgent(name, def)
+		expected, renderErr := renderAgentForAdapter(adapter.ID(), name, def)
+		if renderErr != nil {
+			return nil, fmt.Errorf("render agent %s: %w", name, renderErr)
+		}
 		if string(data) == expected {
 			results = append(results, domain.VerifyResult{
 				Check:  fmt.Sprintf("agent-%s-current", name),
@@ -825,7 +833,7 @@ func (i *Installer) renderCustomAgentContent(action domain.PlannedAction) (strin
 	if !ok {
 		return "", fmt.Errorf("agent %q not found in config", name)
 	}
-	return renderAgent(name, def), nil
+	return renderAgentForAdapter(action.Agent, name, def)
 }
 
 // renderAgent generates the markdown content for an agent definition with YAML frontmatter.
@@ -897,6 +905,58 @@ func renderAgent(name string, def domain.AgentDef) string {
 	return b.String()
 }
 
+// renderAgentForAdapter renders an agent definition for a specific adapter.
+// For Claude Code the content is translated to Claude-native frontmatter.
+// For all other adapters, Claude-only fields (skills, max_turns, memory, effort,
+// and the tools bool map) are stripped so they don't pollute adapter configs that
+// don't understand them.
+func renderAgentForAdapter(agentID domain.AgentID, name string, def domain.AgentDef) (string, error) {
+	content := renderAgent(name, def)
+	if agentID == domain.AgentClaudeCode {
+		return claude.TranslateFrontmatter(content, name, "project")
+	}
+	return stripClaudeOnlyFields(content), nil
+}
+
+// stripClaudeOnlyFields removes frontmatter keys that are only meaningful for
+// Claude Code agents so they don't appear in Cursor / Windsurf / OpenCode files.
+func stripClaudeOnlyFields(content string) string {
+	const sep = "---\n"
+	// Split on the closing frontmatter delimiter.
+	first := strings.Index(content, sep)
+	if first < 0 {
+		return content
+	}
+	second := strings.Index(content[first+len(sep):], sep)
+	if second < 0 {
+		return content
+	}
+	fmStart := first + len(sep)
+	fmEnd := fmStart + second
+
+	frontmatter := content[fmStart:fmEnd]
+	body := content[fmEnd+len(sep):]
+
+	// Strip known Claude-only keys and their multi-line values.
+	claudeOnlyKeys := []string{"skills", "max_turns", "memory", "effort", "tools"}
+	var kept []string
+	lines := strings.Split(frontmatter, "\n")
+	skip := false
+	for _, line := range lines {
+		// Detect a new top-level key (no leading space).
+		if len(line) > 0 && line[0] != ' ' && strings.Contains(line, ":") {
+			key := strings.SplitN(line, ":", 2)[0]
+			skip = containsStr(claudeOnlyKeys, strings.TrimSpace(key))
+		}
+		if !skip {
+			kept = append(kept, line)
+		}
+	}
+
+	rebuilt := sep + strings.Join(kept, "\n") + sep + body
+	return rebuilt
+}
+
 func sortedKeys(m map[string]domain.AgentDef) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -924,4 +984,13 @@ func (i *Installer) maybeTranslateContent(agentID domain.AgentID, roleName, cont
 		return content, nil
 	}
 	return claude.TranslateFrontmatter(content, roleName, "project")
+}
+
+func containsStr(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
