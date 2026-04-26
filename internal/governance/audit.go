@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	auditLogFile = "audit.log"
-	maxLogSize   = 10 * 1024 * 1024 // 10 MB
-	squadaiDir   = ".squadai"
+	auditLogFile  = "audit.log"
+	maxLogSize    = 10 * 1024 * 1024 // 10 MB
+	maxLogArchive = 5                 // keep audit.log.1 … audit.log.5
+	squadaiDir    = ".squadai"
 )
 
 // AuditLog is a thread-safe, append-only JSON-lines log at .squadai/audit.log.
@@ -64,47 +65,63 @@ func (l *AuditLog) Append(e Event) error {
 	return err
 }
 
-// Read returns events from the log. sinceAge (if > 0) excludes events older
-// than that duration. filterPrefix (if non-empty) includes only events whose
-// Kind starts with the given prefix (e.g. "drift").
+// Read returns events from the log and all archives. sinceAge (if > 0) excludes
+// events older than that duration. filterPrefix (if non-empty) includes only
+// events whose Kind starts with the given prefix (e.g. "drift").
+// Archives are read from newest (audit.log.1) to oldest (audit.log.N) so the
+// returned slice is in chronological order (archives first, active log last).
 func (l *AuditLog) Read(sinceAge time.Duration, filterPrefix string) ([]Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	f, err := os.Open(l.path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("audit log: open: %w", err)
-	}
-	defer f.Close()
 
 	var cutoff time.Time
 	if sinceAge > 0 {
 		cutoff = time.Now().UTC().Add(-sinceAge)
 	}
 
-	var events []Event
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		raw := scanner.Bytes()
-		if len(raw) == 0 {
-			continue
+	// Collect paths: archives oldest-to-newest, then active log.
+	var paths []string
+	for i := maxLogArchive; i >= 1; i-- {
+		p := fmt.Sprintf("%s.%d", l.path, i)
+		if _, err := os.Stat(p); err == nil {
+			paths = append(paths, p)
 		}
-		var e Event
-		if err := json.Unmarshal(raw, &e); err != nil {
-			continue // skip malformed lines
-		}
-		if !cutoff.IsZero() && e.Timestamp.Before(cutoff) {
-			continue
-		}
-		if filterPrefix != "" && !strings.HasPrefix(string(e.Kind), filterPrefix) {
-			continue
-		}
-		events = append(events, e)
 	}
-	return events, scanner.Err()
+	paths = append(paths, l.path)
+
+	var events []Event
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("audit log: open %s: %w", p, err)
+		}
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			raw := scanner.Bytes()
+			if len(raw) == 0 {
+				continue
+			}
+			var e Event
+			if err := json.Unmarshal(raw, &e); err != nil {
+				continue
+			}
+			if !cutoff.IsZero() && e.Timestamp.Before(cutoff) {
+				continue
+			}
+			if filterPrefix != "" && !strings.HasPrefix(string(e.Kind), filterPrefix) {
+				continue
+			}
+			events = append(events, e)
+		}
+		f.Close()
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("audit log: scan %s: %w", p, err)
+		}
+	}
+	return events, nil
 }
 
 // HasDriftSince returns true if the log contains any drift:* events newer than age.
@@ -127,6 +144,15 @@ func (l *AuditLog) maybeRotate() error {
 	}
 	if info.Size() < maxLogSize {
 		return nil
+	}
+
+	// Shift existing archives: .5 is dropped, .4→.5, .3→.4, …, .1→.2.
+	for i := maxLogArchive - 1; i >= 1; i-- {
+		src := fmt.Sprintf("%s.%d", l.path, i)
+		dst := fmt.Sprintf("%s.%d", l.path, i+1)
+		if _, statErr := os.Stat(src); statErr == nil {
+			_ = os.Rename(src, dst)
+		}
 	}
 	return os.Rename(l.path, l.path+".1")
 }

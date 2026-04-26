@@ -102,9 +102,7 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		merged.Copilot.Meta = project.Meta
 
 		// Hooks are additive: project hooks seed the merged config.
-		if len(project.Hooks) > 0 {
-			merged.Hooks = mergeHooksConfig(merged.Hooks, project.Hooks)
-		}
+		merged.Hooks = mergeHooksConfig(merged.Hooks, project.Hooks)
 
 		// Marketplace config passes through from project layer.
 		if project.Marketplace.Source != "" || len(project.Marketplace.Plugins) > 0 {
