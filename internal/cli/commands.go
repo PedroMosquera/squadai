@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
@@ -25,6 +27,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/governance"
 	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/model"
@@ -1335,12 +1338,15 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 // RunVerify runs compliance checks and prints the report.
 func RunVerify(args []string, stdout io.Writer) error {
 	jsonOut := false
+	strict := false
 	for _, arg := range args {
 		switch arg {
 		case "--json":
 			jsonOut = true
+		case "--strict":
+			strict = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai verify [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai verify [--json] [--strict]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Run compliance and health checks against the current project configuration.")
 			fmt.Fprintln(stdout, "Verifies that all enabled components are correctly installed for each detected")
@@ -1351,11 +1357,13 @@ func RunVerify(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "exit. Results are grouped by component when there are more than 5 checks.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --json  Output the full verification report as JSON.")
+			fmt.Fprintln(stdout, "  --json    Output the full verification report as JSON.")
+			fmt.Fprintln(stdout, "  --strict  Also run a drift check; fail if any managed file has drifted.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai verify")
 			fmt.Fprintln(stdout, "  squadai verify --json")
+			fmt.Fprintln(stdout, "  squadai verify --strict")
 			return nil
 		}
 	}
@@ -1415,7 +1423,56 @@ func RunVerify(args []string, stdout io.Writer) error {
 		return fmt.Errorf("verification failed")
 	}
 
+	if strict {
+		if err := runStrictDriftCheck(projectDir, stdout, jsonOut); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+// runStrictDriftCheck runs governance.CheckDrift and fails if any files have drifted.
+func runStrictDriftCheck(projectDir string, stdout io.Writer, jsonOut bool) error {
+	results, err := governance.CheckDrift(projectDir)
+	if err != nil {
+		return fmt.Errorf("strict drift check: %w", err)
+	}
+
+	var drifted []governance.DriftResult
+	for _, r := range results {
+		if r.Drifted() {
+			drifted = append(drifted, r)
+		}
+	}
+
+	if len(drifted) == 0 {
+		if !jsonOut {
+			fmt.Fprintln(stdout, "  [PASS] drift check — no managed files have drifted")
+		}
+		return nil
+	}
+
+	if jsonOut {
+		type driftEntry struct {
+			Path   string `json:"path"`
+			Kind   string `json:"kind"`
+			Detail string `json:"detail"`
+		}
+		out := make([]driftEntry, len(drifted))
+		for i, r := range drifted {
+			out[i] = driftEntry{Path: r.Path, Kind: string(r.Kind), Detail: r.Detail}
+		}
+		data, _ := json.MarshalIndent(map[string]any{"drift": out}, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+	} else {
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, "Drift detected (--strict):")
+		for _, r := range drifted {
+			fmt.Fprintf(stdout, "  [FAIL] %s — %s (%s)\n", r.Path, r.Detail, r.Kind)
+		}
+	}
+	return fmt.Errorf("drift check failed: %d file(s) have drifted", len(drifted))
 }
 
 // printVerifyResult prints a single verification result line.
@@ -3219,4 +3276,178 @@ func readLine(s *bufio.Scanner) string {
 		return s.Text()
 	}
 	return ""
+}
+
+// RunWatch monitors all managed files for drift and streams events to stdout.
+// It runs until the user sends SIGINT/SIGTERM or cancels.
+func RunWatch(args []string, stdout, stderr io.Writer) error {
+	jsonOut := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: squadai watch [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Monitor all managed files for drift and stream events to stdout.")
+			fmt.Fprintln(stdout, "Press Ctrl+C to stop. Events are also appended to .squadai/audit.log.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output events as JSON lines instead of human-readable table.")
+			return nil
+		}
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	log := governance.OpenAuditLog(projectDir)
+
+	onEvent := func(e governance.Event) {
+		if jsonOut {
+			data, _ := json.Marshal(e)
+			fmt.Fprintln(stdout, string(data))
+		} else {
+			ts := e.Timestamp.Format("15:04:05")
+			fmt.Fprintf(stdout, "%s  %-28s  %s  %s\n",
+				ts, string(e.Kind), e.Path, e.Detail)
+		}
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	if !jsonOut {
+		fmt.Fprintf(stdout, "watching %s — press Ctrl+C to stop\n\n", projectDir)
+	}
+
+	return governance.Watch(ctx, projectDir, governance.WatchOpts{
+		AuditLog: log,
+		OnEvent:  onEvent,
+	})
+}
+
+// RunAudit renders the audit log for the current project.
+func RunAudit(args []string, stdout io.Writer) error {
+	jsonOut := false
+	var sinceAge time.Duration
+	filterKind := ""
+
+	for _, arg := range args {
+		switch {
+		case arg == "--json":
+			jsonOut = true
+		case strings.HasPrefix(arg, "--since="):
+			val := strings.TrimPrefix(arg, "--since=")
+			d, err := time.ParseDuration(val)
+			if err != nil {
+				return fmt.Errorf("invalid --since value %q: %w", val, err)
+			}
+			sinceAge = d
+		case strings.HasPrefix(arg, "--filter="):
+			filterKind = strings.TrimPrefix(arg, "--filter=")
+		case arg == "-h" || arg == "--help":
+			fmt.Fprintln(stdout, "Usage: squadai audit [--json] [--since=<duration>] [--filter=<kind-prefix>]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Render the governance audit log (.squadai/audit.log).")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json             Output raw JSON lines.")
+			fmt.Fprintln(stdout, "  --since=<duration> Show events from the last duration (e.g. 24h, 30m).")
+			fmt.Fprintln(stdout, "  --filter=<prefix>  Show only events whose kind starts with prefix (e.g. drift).")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Examples:")
+			fmt.Fprintln(stdout, "  squadai audit")
+			fmt.Fprintln(stdout, "  squadai audit --since=24h --filter=drift")
+			fmt.Fprintln(stdout, "  squadai audit --json")
+			return nil
+		}
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	log := governance.OpenAuditLog(projectDir)
+	events, err := log.Read(sinceAge, filterKind)
+	if err != nil {
+		return fmt.Errorf("read audit log: %w", err)
+	}
+
+	if len(events) == 0 {
+		fmt.Fprintln(stdout, "No events found.")
+		return nil
+	}
+
+	if jsonOut {
+		for _, e := range events {
+			data, _ := json.Marshal(e)
+			fmt.Fprintln(stdout, string(data))
+		}
+		return nil
+	}
+
+	// Table header.
+	fmt.Fprintf(stdout, "%-20s  %-30s  %-30s  %s\n", "TIMESTAMP", "KIND", "PATH", "DETAIL")
+	fmt.Fprintln(stdout, strings.Repeat("-", 100))
+	for _, e := range events {
+		ts := e.Timestamp.Format("2006-01-02 15:04:05")
+		fmt.Fprintf(stdout, "%-20s  %-30s  %-30s  %s\n",
+			ts, string(e.Kind), e.Path, e.Detail)
+	}
+	fmt.Fprintf(stdout, "\n%d event(s)\n", len(events))
+	return nil
+}
+
+// RunInstallHooks installs a pre-commit Git hook that runs `squadai verify --strict`.
+// Idempotent: if the hook already contains the check, it is not duplicated.
+func RunInstallHooks(args []string, stdout io.Writer) error {
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			fmt.Fprintln(stdout, "Usage: squadai install-hooks")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Install a Git pre-commit hook that runs `squadai verify --strict`.")
+			fmt.Fprintln(stdout, "Idempotent: calling twice does not duplicate the hook.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "The hook is written to .git/hooks/pre-commit and made executable.")
+			return nil
+		}
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	hooksDir := filepath.Join(projectDir, ".git", "hooks")
+	if _, err := os.Stat(hooksDir); os.IsNotExist(err) {
+		return fmt.Errorf("no .git/hooks directory found — is this a Git repository?")
+	}
+
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+	const squadaiLine = "squadai verify --strict"
+
+	existing, readErr := os.ReadFile(hookPath)
+	if readErr == nil && strings.Contains(string(existing), squadaiLine) {
+		fmt.Fprintln(stdout, "pre-commit hook already contains squadai verify — no changes made.")
+		return nil
+	}
+
+	var content string
+	if readErr == nil && len(existing) > 0 {
+		// Append to existing hook.
+		content = strings.TrimRight(string(existing), "\n") + "\n\n" + squadaiLine + "\n"
+	} else {
+		content = "#!/bin/sh\nset -e\n\n" + squadaiLine + "\n"
+	}
+
+	if err := os.WriteFile(hookPath, []byte(content), 0755); err != nil {
+		return fmt.Errorf("write pre-commit hook: %w", err)
+	}
+
+	fmt.Fprintf(stdout, "installed pre-commit hook → %s\n", hookPath)
+	return nil
 }

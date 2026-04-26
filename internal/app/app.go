@@ -108,6 +108,15 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "doctor":
 		return cli.RunDoctor(args[1:], stdout)
 
+	case "watch":
+		return cli.RunWatch(args[1:], stdout, stderr)
+
+	case "audit":
+		return cli.RunAudit(args[1:], stdout)
+
+	case "install-hooks":
+		return cli.RunInstallHooks(args[1:], stdout)
+
 	default:
 		return fmt.Errorf("unknown command %q — run 'squadai help' for available commands", args[0])
 	}
@@ -186,9 +195,12 @@ Commands:
   plan               Compute action plan (use --dry-run to preview)
   diff               Show what apply would change as unified diffs
   apply              Execute plan with backup and rollback safety
-  verify             Print compliance and health report
+  verify             Print compliance and health report (--strict adds drift check)
   status             Show project configuration summary
   doctor             Run pre-flight diagnostics (environment, agents, config, MCP, filesystem, drift)
+  watch              Monitor managed files for drift, stream events to stdout
+  audit              Render the governance audit log (.squadai/audit.log)
+  install-hooks      Install a Git pre-commit hook running 'squadai verify --strict'
   backup create      Snapshot managed files
   backup list        List available backups
   backup delete <id> Delete a backup snapshot
