@@ -285,3 +285,81 @@ func TestAdapter_WorkflowsDir(t *testing.T) {
 		t.Errorf("WorkflowsDir = %q, want empty", got)
 	}
 }
+
+// ─── MCP / Rules metadata ───────────────────────────────────────────────────
+
+func TestAdapter_MCPRootKey(t *testing.T) {
+	a := New()
+	want := "servers"
+	if got := a.MCPRootKey(); got != want {
+		t.Errorf("MCPRootKey() = %q, want %q", got, want)
+	}
+}
+
+func TestAdapter_MCPURLKey(t *testing.T) {
+	a := New()
+	want := "url"
+	if got := a.MCPURLKey(); got != want {
+		t.Errorf("MCPURLKey() = %q, want %q", got, want)
+	}
+}
+
+func TestAdapter_MCPConfigPath(t *testing.T) {
+	a := New()
+	tests := []struct {
+		name       string
+		projectDir string
+		want       string
+	}{
+		{"with project dir", "/tmp/proj", filepath.Join("/tmp/proj", ".vscode", "mcp.json")},
+		{"empty project dir", "", filepath.Join(".vscode", "mcp.json")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := a.MCPConfigPath(tt.projectDir); got != tt.want {
+				t.Errorf("MCPConfigPath(%q) = %q, want %q", tt.projectDir, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAdapter_RulesFrontmatter(t *testing.T) {
+	a := New()
+	if got := a.RulesFrontmatter(); got != "" {
+		t.Errorf("RulesFrontmatter() = %q, want empty string", got)
+	}
+}
+
+func TestAdapter_MCPCommandStyle(t *testing.T) {
+	a := New()
+	if got := a.MCPCommandStyle(); got != "split" {
+		t.Errorf("MCPCommandStyle() = %q, want %q", got, "split")
+	}
+}
+
+func TestAdapter_MCPEnvKey(t *testing.T) {
+	a := New()
+	if got := a.MCPEnvKey(); got != "env" {
+		t.Errorf("MCPEnvKey() = %q, want %q", got, "env")
+	}
+}
+
+func TestAdapter_MCPTypeField(t *testing.T) {
+	a := New()
+	tests := []struct {
+		name string
+		def  domain.MCPServerDef
+		want string
+	}{
+		{"stdio omits type", domain.MCPServerDef{Command: []string{"npx"}}, ""},
+		{"remote uses http", domain.MCPServerDef{URL: "https://x"}, "http"},
+		{"empty omits type", domain.MCPServerDef{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := a.MCPTypeField(tt.def); got != tt.want {
+				t.Errorf("MCPTypeField(%+v) = %q, want %q", tt.def, got, tt.want)
+			}
+		})
+	}
+}

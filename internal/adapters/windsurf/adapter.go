@@ -169,6 +169,15 @@ func (a *Adapter) MCPConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".windsurf", "mcp_config.json")
 }
 
+// MCPCommandStyle returns "split" — Windsurf uses command + args.
+func (a *Adapter) MCPCommandStyle() string { return "split" }
+
+// MCPEnvKey returns "env" — Windsurf uses the standard env key.
+func (a *Adapter) MCPEnvKey() string { return "env" }
+
+// MCPTypeField always returns empty string — Windsurf infers stdio vs remote from URL presence.
+func (a *Adapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
+
 // RulesFrontmatter returns YAML frontmatter for Windsurf's structured rules.
 func (a *Adapter) RulesFrontmatter() string {
 	return "---\ntrigger: always_on\n---\n\n"

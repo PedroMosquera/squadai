@@ -686,7 +686,7 @@ func TestServerToMap_RemoteServer(t *testing.T) {
 		Type: "remote",
 		URL:  "https://mcp.example.com",
 	}
-	m := serverToMap(def, domain.AgentOpenCode)
+	m := installerWithSchema(opencode.New()).serverToMap(def, domain.AgentOpenCode)
 	if m["type"] != "remote" {
 		t.Error("type should be remote")
 	}
@@ -706,7 +706,7 @@ func TestServerToMap_LocalServer(t *testing.T) {
 			"KEY": "value",
 		},
 	}
-	m := serverToMap(def, domain.AgentOpenCode)
+	m := installerWithSchema(opencode.New()).serverToMap(def, domain.AgentOpenCode)
 	if m["type"] != "local" {
 		t.Error("type should be local")
 	}
@@ -730,7 +730,7 @@ func TestServerToMap_ClaudeCode_SplitCommandArgs(t *testing.T) {
 		Type:    "local",
 		Command: []string{"npx", "-y", "@upstash/context7-mcp@latest"},
 	}
-	m := serverToMap(def, domain.AgentClaudeCode)
+	m := installerWithSchema(claude.New()).serverToMap(def, domain.AgentClaudeCode)
 
 	// Claude Code: command is a string (first element), args is the rest.
 	if m["command"] != "npx" {
@@ -754,7 +754,7 @@ func TestServerToMap_ClaudeCode_RemoteServer(t *testing.T) {
 		Type: "remote",
 		URL:  "https://mcp.context7.com/mcp",
 	}
-	m := serverToMap(def, domain.AgentClaudeCode)
+	m := installerWithSchema(claude.New()).serverToMap(def, domain.AgentClaudeCode)
 
 	// Claude Code remote requires "type": "http".
 	if m["type"] != "http" {
@@ -770,7 +770,7 @@ func TestServerToMap_SingleElementCommand(t *testing.T) {
 		Type:    "local",
 		Command: []string{"my-server"},
 	}
-	m := serverToMap(def, domain.AgentCursor)
+	m := installerWithSchema(cursor.New()).serverToMap(def, domain.AgentCursor)
 
 	if m["command"] != "my-server" {
 		t.Errorf("command = %v, want \"my-server\"", m["command"])
@@ -1507,6 +1507,33 @@ func newTestInstaller() *Installer {
 			Enabled: true,
 		},
 	})
+}
+
+// installerWithSchema returns an Installer with the schema cache primed for
+// the given adapter, used by tests that exercise serverToMap directly without
+// going through Plan.
+func installerWithSchema(adapter domain.Adapter) *Installer {
+	inst := New(nil)
+	inst.ensureAgentConfig(adapter, "")
+	return inst
+}
+
+// adapterFor returns the production adapter implementation for an AgentID.
+// Used by serverToMap tests that need the schema cache populated.
+func adapterFor(id domain.AgentID) domain.Adapter {
+	switch id {
+	case domain.AgentOpenCode:
+		return opencode.New()
+	case domain.AgentClaudeCode:
+		return claude.New()
+	case domain.AgentVSCodeCopilot:
+		return vscode.New()
+	case domain.AgentCursor:
+		return cursor.New()
+	case domain.AgentWindsurf:
+		return windsurf.New()
+	}
+	return nil
 }
 
 // ─── VS Code inputs preservation ────────────────────────────────────────────

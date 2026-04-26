@@ -174,5 +174,14 @@ func (a *Adapter) MCPURLKey() string { return "url" }
 // MCPConfigPath returns empty string — OpenCode uses MergeIntoSettings (no separate MCP file).
 func (a *Adapter) MCPConfigPath(_ string) string { return "" }
 
+// MCPCommandStyle returns "array" — OpenCode encodes the full command in a single array.
+func (a *Adapter) MCPCommandStyle() string { return "array" }
+
+// MCPEnvKey returns "environment" — OpenCode's non-standard env key.
+func (a *Adapter) MCPEnvKey() string { return "environment" }
+
+// MCPTypeField echoes def.Type — OpenCode always emits the type field for both stdio and remote.
+func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string { return def.Type }
+
 // RulesFrontmatter returns empty string — OpenCode uses marker-based injection.
 func (a *Adapter) RulesFrontmatter() string { return "" }

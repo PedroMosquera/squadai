@@ -35,10 +35,13 @@ func (a mcpTestAdapter) SupportsSubAgents() bool       { return false }
 func (a mcpTestAdapter) SubAgentsDir(_ string) string  { return "" }
 func (a mcpTestAdapter) SupportsWorkflows() bool       { return false }
 func (a mcpTestAdapter) WorkflowsDir(_ string) string  { return "" }
-func (a mcpTestAdapter) MCPRootKey() string            { return "mcpServers" }
-func (a mcpTestAdapter) MCPURLKey() string             { return "url" }
-func (a mcpTestAdapter) MCPConfigPath(_ string) string { return "" }
-func (a mcpTestAdapter) RulesFrontmatter() string      { return "" }
+func (a mcpTestAdapter) MCPRootKey() string                        { return "mcpServers" }
+func (a mcpTestAdapter) MCPURLKey() string                         { return "url" }
+func (a mcpTestAdapter) MCPConfigPath(_ string) string             { return "" }
+func (a mcpTestAdapter) MCPCommandStyle() string                   { return "split" }
+func (a mcpTestAdapter) MCPEnvKey() string                         { return "env" }
+func (a mcpTestAdapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
+func (a mcpTestAdapter) RulesFrontmatter() string                  { return "" }
 
 // ─── DefaultMCPServers ───────────────────────────────────────────────────────
 

@@ -81,6 +81,20 @@ type Adapter interface {
 	// Returns empty string if the adapter uses MergeIntoSettings (no separate MCP file).
 	MCPConfigPath(projectDir string) string
 
+	// MCPCommandStyle returns how the local-server command is encoded in JSON.
+	// "array" = single command array (OpenCode); "split" = command + args (others).
+	MCPCommandStyle() string
+
+	// MCPEnvKey returns the JSON key for environment variable maps in MCP server defs.
+	// OpenCode uses "environment"; all others use "env".
+	MCPEnvKey() string
+
+	// MCPTypeField returns the value to write under the "type" field for the given
+	// MCP server, or empty string to omit the field entirely. Each adapter encodes
+	// this differently: OpenCode echoes def.Type; Claude/VS Code emit "http" for
+	// remote URLs; Cursor/Windsurf always omit it.
+	MCPTypeField(def MCPServerDef) string
+
 	// RulesFrontmatter returns the YAML frontmatter prefix for structured rules files.
 	// Returns empty string for agents that use marker-based injection.
 	RulesFrontmatter() string

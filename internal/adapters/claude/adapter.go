@@ -166,5 +166,19 @@ func (a *Adapter) MCPConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".mcp.json")
 }
 
+// MCPCommandStyle returns "split" — Claude Code uses command + args.
+func (a *Adapter) MCPCommandStyle() string { return "split" }
+
+// MCPEnvKey returns "env" — Claude Code uses the standard env key.
+func (a *Adapter) MCPEnvKey() string { return "env" }
+
+// MCPTypeField returns "http" for remote servers and empty string for stdio.
+func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string {
+	if def.URL != "" {
+		return "http"
+	}
+	return ""
+}
+
 // RulesFrontmatter returns empty string — Claude Code uses marker-based injection.
 func (a *Adapter) RulesFrontmatter() string { return "" }
