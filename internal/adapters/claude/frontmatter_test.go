@@ -232,6 +232,179 @@ func TestTranslateFrontmatter_OutputStartsWithFrontmatterMarker(t *testing.T) {
 	}
 }
 
+// ─── Skills, MaxTurns, Memory paths, Effort ─────────────────────────────────
+
+func TestTranslateFrontmatter_SkillsPassedThrough(t *testing.T) {
+	content := `---
+description: Test agent
+mode: subagent
+skills:
+  - skills/testing.md
+  - skills/coverage.md
+---
+`
+	result, err := TranslateFrontmatter(content, "tester", "project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "skills:") {
+		t.Error("skills block should be present in output")
+	}
+	if !strings.Contains(result, "- skills/testing.md") {
+		t.Error("skills/testing.md should be in output")
+	}
+	if !strings.Contains(result, "- skills/coverage.md") {
+		t.Error("skills/coverage.md should be in output")
+	}
+}
+
+func TestTranslateFrontmatter_MaxTurnsEmitted(t *testing.T) {
+	content := `---
+description: Test agent
+mode: subagent
+max_turns: 15
+---
+`
+	result, err := TranslateFrontmatter(content, "implementer", "project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "maxTurns: 15") {
+		t.Errorf("expected maxTurns: 15 in output, got:\n%s", result)
+	}
+}
+
+func TestTranslateFrontmatter_MaxTurnsZeroOmitted(t *testing.T) {
+	content := `---
+description: Test agent
+mode: subagent
+max_turns: 0
+---
+`
+	result, err := TranslateFrontmatter(content, "implementer", "project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(result, "maxTurns") {
+		t.Error("maxTurns should be omitted when value is 0")
+	}
+}
+
+func TestTranslateFrontmatter_MemoryPathListOverridesScope(t *testing.T) {
+	content := `---
+description: Test agent
+mode: subagent
+memory:
+  - memory/project.md
+  - memory/user.md
+---
+`
+	result, err := TranslateFrontmatter(content, "orchestrator", "project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "memory:") {
+		t.Error("memory block should be present in output")
+	}
+	if !strings.Contains(result, "- memory/project.md") {
+		t.Error("memory/project.md should be in output")
+	}
+	// Scope string should NOT also appear when path list is given.
+	if strings.Contains(result, "memory: project") {
+		t.Error("scope string should be replaced by path list")
+	}
+}
+
+func TestTranslateFrontmatter_MemoryScopeStringFallback(t *testing.T) {
+	// When the frontmatter has a scalar memory: value (existing behavior),
+	// TranslateFrontmatter should still inject the memoryScope parameter.
+	content := `---
+description: Test agent
+mode: subagent
+---
+`
+	result, err := TranslateFrontmatter(content, "orchestrator", "user")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "memory: user") {
+		t.Errorf("expected memory: user (scope fallback), got:\n%s", result)
+	}
+}
+
+func TestTranslateFrontmatter_EffortPassedThrough(t *testing.T) {
+	content := `---
+description: Deep thinker
+mode: subagent
+effort: high
+---
+`
+	result, err := TranslateFrontmatter(content, "proposer", "project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "effort: high") {
+		t.Errorf("expected effort: high in output, got:\n%s", result)
+	}
+}
+
+func TestTranslateFrontmatter_EffortOmittedWhenEmpty(t *testing.T) {
+	content := `---
+description: Normal agent
+mode: subagent
+---
+`
+	result, err := TranslateFrontmatter(content, "implementer", "project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(result, "effort:") {
+		t.Error("effort field should be omitted when not set")
+	}
+}
+
+func TestTranslateFrontmatter_AllNewFieldsTogether(t *testing.T) {
+	content := `---
+description: Full-featured agent
+mode: subagent
+tools:
+  read: true
+  bash: true
+  edit: false
+  write: false
+  grep: false
+  glob: false
+skills:
+  - skills/testing.md
+max_turns: 10
+memory:
+  - memory/project.md
+effort: normal
+---
+
+Body here.
+`
+	result, err := TranslateFrontmatter(content, "tester", "project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	checks := []string{
+		"tools: Read, Bash",
+		"skills:",
+		"- skills/testing.md",
+		"maxTurns: 10",
+		"memory:",
+		"- memory/project.md",
+		"effort: normal",
+		"Body here.",
+	}
+	for _, want := range checks {
+		if !strings.Contains(result, want) {
+			t.Errorf("expected %q in output, got:\n%s", want, result)
+		}
+	}
+}
+
 // ─── roleColor ───────────────────────────────────────────────────────────────
 
 func TestRoleColor_KnownRoles(t *testing.T) {

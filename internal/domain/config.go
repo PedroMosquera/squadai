@@ -144,6 +144,8 @@ type TeamRole struct {
 }
 
 // AgentDef defines a custom agent for OpenCode's .opencode/agents/ directory.
+// Claude Code-specific fields (Skills, MaxTurns, Memory, Effort) are ignored
+// by non-Claude adapters and are passed through to .claude/agents/*.md frontmatter.
 type AgentDef struct {
 	Description string            `json:"description"`
 	Mode        string            `json:"mode"`
@@ -151,6 +153,28 @@ type AgentDef struct {
 	Prompt      string            `json:"prompt,omitempty"`
 	PromptFile  string            `json:"prompt_file,omitempty"`
 	Permission  map[string]string `json:"permission,omitempty"`
+
+	// Tools is the allowlist of tool names this agent may use (e.g. ["Read","Bash"]).
+	// Empty means all tools are permitted. For Claude Code the list is rendered as a
+	// comma-separated string; for OpenCode it is rendered as a YAML bool map.
+	Tools []string `json:"tools,omitempty"`
+
+	// Skills lists skill file paths relative to the project's skills directory.
+	// Claude Code only; ignored for other adapters.
+	Skills []string `json:"skills,omitempty"`
+
+	// MaxTurns caps the number of agentic turns. 0 means no explicit cap (agent default).
+	// Claude Code only; ignored for other adapters.
+	MaxTurns int `json:"max_turns,omitempty"`
+
+	// Memory lists explicit memory file paths to load into context.
+	// When non-empty these override the default memory-scope injection.
+	// Claude Code only; ignored for other adapters.
+	Memory []string `json:"memory,omitempty"`
+
+	// Effort sets the reasoning budget: "low", "normal", or "high".
+	// Claude Code only; ignored for other adapters.
+	Effort string `json:"effort,omitempty"`
 }
 
 // SkillDef defines a custom skill for OpenCode's .opencode/skills/ directory.
