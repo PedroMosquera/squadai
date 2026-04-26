@@ -218,6 +218,10 @@ func hasRequiredValue(cfg *domain.PolicyConfig, field string) bool {
 		}
 		return false
 
+	case "hooks":
+		// "hooks" as a whole — valid when the required block has any hook entries.
+		return len(cfg.Required.Hooks) > 0
+
 	default:
 		return false
 	}
@@ -373,6 +377,7 @@ var knownComponents = map[string]struct{}{
 	string(domain.ComponentPlugins):     {},
 	string(domain.ComponentWorkflows):   {},
 	string(domain.ComponentPermissions): {},
+	string(domain.ComponentHooks):       {},
 }
 
 func isKnownAdapter(name string) bool {

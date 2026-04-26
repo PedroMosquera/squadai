@@ -26,6 +26,7 @@ type ProjectConfig struct {
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
+	Hooks       HooksConfig                `json:"hooks,omitempty"`
 }
 
 // ClaudeConfig holds Claude Code-specific feature toggles. Generic adapter
@@ -43,6 +44,29 @@ type ClaudeConfig struct {
 type AgentTeamsConfig struct {
 	Enabled bool `json:"enabled"`
 }
+
+// HookEntry is a single hook action — currently only "command" type is supported.
+type HookEntry struct {
+	Type    string `json:"type"`              // always "command"
+	Command string `json:"command"`
+	Async   bool   `json:"async,omitempty"`
+	Timeout int    `json:"timeout,omitempty"` // seconds; 0 = agent default (60 s)
+}
+
+// HookMatcher is a group of hooks optionally scoped to a specific tool.
+// Matcher values match Claude Code's matcher field: "Bash", "Write", "Edit", etc.
+// Empty Matcher means the hook fires for every tool in the event.
+type HookMatcher struct {
+	Matcher string      `json:"matcher,omitempty"`
+	Hooks   []HookEntry `json:"hooks"`
+}
+
+// HooksConfig maps Claude Code hook event names to their matcher/hook lists.
+// Supported events: PreToolUse, PostToolUse, Stop, UserPromptSubmit,
+// SubagentStart, SubagentStop.
+// Each event value is a list of HookMatcher groups, merged additively with
+// any hooks the user has configured independently.
+type HooksConfig map[string][]HookMatcher
 
 // PolicyConfig represents .squadai/policy.json.
 type PolicyConfig struct {
@@ -62,6 +86,7 @@ type RequiredBlock struct {
 	MCP        map[string]MCPServerDef    `json:"mcp,omitempty"`
 	Plugins    map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude     ClaudeConfig               `json:"claude,omitempty"`
+	Hooks      HooksConfig                `json:"hooks,omitempty"`
 }
 
 // AdapterConfig is the per-adapter configuration in config files.
@@ -189,6 +214,7 @@ type MergedConfig struct {
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
+	Hooks       HooksConfig                `json:"hooks,omitempty"`
 
 	// Violations is populated during merge when user/project values conflicted
 	// with locked policy fields. These are informational — the policy value wins.
