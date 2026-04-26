@@ -105,6 +105,11 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		if len(project.Hooks) > 0 {
 			merged.Hooks = mergeHooksConfig(merged.Hooks, project.Hooks)
 		}
+
+		// Marketplace config passes through from project layer.
+		if project.Marketplace.Source != "" || len(project.Marketplace.Plugins) > 0 {
+			merged.Marketplace = project.Marketplace
+		}
 	}
 
 	// Layer 3: policy locked fields override everything.
