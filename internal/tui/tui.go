@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,6 +19,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/cli"
 	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/governance"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 )
 
@@ -47,6 +49,8 @@ const (
 	screenRemoveConfirm       // "Remove SquadAI config" confirmation screen
 	screenClaudeDefaultAgent  // "Set orchestrator as default Claude agent?" yes/no
 	screenDoctor              // pre-flight diagnostics screen
+	screenWatch               // live drift monitor
+	screenAudit               // governance audit log
 )
 
 // menuItem is a selectable action.
@@ -66,6 +70,8 @@ var menuItems = []menuItem{
 	{label: "Verify", command: "verify", description: "Check that all generated files match the expected configuration"},
 	{label: "Restore Backup", command: "restore", description: "Restore files from a backup created before apply or remove"},
 	{label: "Remove SquadAI Config", command: "remove", description: "Delete all SquadAI-managed files and the .squadai directory"},
+	{label: "Watch (drift monitor)", command: "watch", description: "Monitor managed files for drift in real time"},
+	{label: "Audit Log", command: "audit", description: "View the governance audit log (.squadai/audit.log)"},
 	{label: "CLI Commands", command: "cli-help", description: "Show available CLI commands for scripting and CI/CD pipelines"},
 	{label: "Quit", command: "quit", description: "Exit SquadAI"},
 }
@@ -169,6 +175,20 @@ type Model struct {
 	applyProgressCh <-chan pipeline.Event // receives events while apply runs
 	applyEvents     []pipeline.Event      // accumulated recent events
 	applyTotal      int                   // total steps, set on EventPipelineStart
+
+	// Drift badge shown on the menu screen.
+	driftBadgeReady bool
+	driftBadgeCount int // number of drifted files; 0 + ready = clean
+
+	// Watch screen state.
+	watchResults  []governance.DriftResult
+	watchChecking bool
+	watchLastAt   time.Time
+
+	// Audit screen state.
+	auditEvents []governance.Event
+	auditErr    error
+	auditScroll int
 }
 
 // NewModel creates a TUI model with the given state.
@@ -204,6 +224,35 @@ type doctorFixDone struct {
 // pipelineEventMsg wraps a single pipeline.Event received during apply.
 type pipelineEventMsg struct {
 	event pipeline.Event
+}
+
+// driftBadgeMsg carries the result of the background drift check for the menu badge.
+type driftBadgeMsg struct {
+	count int
+	err   error
+}
+
+// watchDriftMsg carries a fresh drift check result for the watch screen.
+type watchDriftMsg struct {
+	results []governance.DriftResult
+	at      time.Time
+}
+
+// watchTickMsg triggers the next drift poll on the watch screen.
+type watchTickMsg struct{}
+
+// auditLoadedMsg carries the audit log events loaded for the audit screen.
+type auditLoadedMsg struct {
+	events []governance.Event
+	err    error
+}
+
+// toMenu transitions the model to the main menu and fires a background drift
+// check so the badge is always fresh when the user lands on the menu.
+func (m Model) toMenu() (Model, tea.Cmd) {
+	m.screen = screenMenu
+	m.driftBadgeReady = false
+	return m, m.runDriftBadgeCmd()
 }
 
 // listenForPipelineEvent returns a tea.Cmd that reads one event from ch and
@@ -252,6 +301,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case doctorFixDone:
 		m.doctorFixMsg = msg.msg
 		return m, nil
+	case driftBadgeMsg:
+		m.driftBadgeReady = true
+		m.driftBadgeCount = msg.count
+		return m, nil
+	case watchDriftMsg:
+		if m.screen == screenWatch {
+			m.watchResults = msg.results
+			m.watchChecking = false
+			m.watchLastAt = msg.at
+			return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return watchTickMsg{} })
+		}
+		return m, nil
+	case watchTickMsg:
+		if m.screen == screenWatch {
+			m.watchChecking = true
+			return m, m.runWatchDriftCmd()
+		}
+		return m, nil
+	case auditLoadedMsg:
+		m.auditEvents = msg.events
+		m.auditErr = msg.err
+		m.auditScroll = 0
+		return m, nil
 	case pipelineEventMsg:
 		ev := msg.event
 		if ev.Type == pipeline.EventPipelineStart {
@@ -280,8 +352,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case screenIntro:
 		// Any key advances to menu.
-		m.screen = screenMenu
-		return m, nil
+		return m.toMenu()
 
 	case screenMenu:
 		switch key {
@@ -330,6 +401,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.removePreview = buildRemovePreview(m.homeDir)
 				m.screen = screenRemoveConfirm
 				return m, nil
+			case "watch":
+				m.watchResults = nil
+				m.watchChecking = true
+				m.watchLastAt = time.Time{}
+				m.screen = screenWatch
+				return m, m.runWatchDriftCmd()
+			case "audit":
+				m.auditEvents = nil
+				m.auditErr = nil
+				m.auditScroll = 0
+				m.screen = screenAudit
+				return m, m.loadAuditCmd()
 			case "cli-help":
 				m.output = cliHelpText()
 				m.err = nil
@@ -351,10 +434,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case screenResult:
 		// Any key returns to menu.
-		m.screen = screenMenu
 		m.output = ""
 		m.err = nil
-		return m, nil
+		return m.toMenu()
 
 	case screenRunning:
 		// Ignore input while running.
@@ -374,8 +456,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenInitPreset
 			return m, nil
 		case "esc":
-			m.screen = screenMenu
-			return m, nil
+			return m.toMenu()
 		}
 
 	case screenInitMethodology:
@@ -407,8 +488,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case screenTeamStatus:
 		switch key {
 		case "esc", "enter", "q":
-			m.screen = screenMenu
-			return m, nil
+			return m.toMenu()
 		}
 
 	case screenDoctor:
@@ -418,10 +498,33 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, m.runDoctorFixCmd()
 			}
 		case "esc", "q":
-			m.screen = screenMenu
 			m.doctorResults = nil
 			m.doctorFixMsg = ""
-			return m, nil
+			return m.toMenu()
+		}
+
+	case screenWatch:
+		switch key {
+		case "esc", "q":
+			return m.toMenu()
+		}
+
+	case screenAudit:
+		switch key {
+		case "up", "k":
+			if m.auditScroll > 0 {
+				m.auditScroll--
+			}
+		case "down", "j":
+			maxScroll := len(m.auditEvents) - 10
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+			if m.auditScroll < maxScroll {
+				m.auditScroll++
+			}
+		case "esc", "q":
+			return m.toMenu()
 		}
 
 	case screenInitMCP:
@@ -767,8 +870,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenSkillInstallConfirm
 			return m, nil
 		case "esc", "q":
-			m.screen = screenMenu
-			return m, nil
+			return m.toMenu()
 		}
 
 	case screenSkillInstallConfirm:
@@ -800,8 +902,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return commandResult{output: buf.String(), err: err}
 			}
 		case "n", "esc":
-			m.screen = screenMenu
-			return m, nil
+			return m.toMenu()
 		}
 
 	case screenClaudeDefaultAgent:
@@ -984,6 +1085,10 @@ func (m Model) viewBody() string {
 		return m.viewClaudeDefaultAgent()
 	case screenDoctor:
 		return m.viewDoctor()
+	case screenWatch:
+		return m.viewWatch()
+	case screenAudit:
+		return m.viewAudit()
 	}
 	return ""
 }
@@ -1032,8 +1137,22 @@ func (m Model) viewMenu() string {
 		b.WriteString("\n")
 	}
 
+	// Drift badge.
+	b.WriteString(m.renderDriftBadge())
+	b.WriteString("\n")
+
 	b.WriteString(mutedStyle.Render("↑/↓: navigate  enter: select  q: quit"))
 	return b.String()
+}
+
+func (m Model) renderDriftBadge() string {
+	if !m.driftBadgeReady {
+		return mutedStyle.Render("  drift: checking…")
+	}
+	if m.driftBadgeCount == 0 {
+		return successStyle.Render("  ✓ no drift")
+	}
+	return authBadgeStyle.Render(fmt.Sprintf("  ⚠ %d file(s) drifted — run verify --strict or doctor", m.driftBadgeCount))
 }
 
 func (m Model) viewRunning() string {
@@ -2081,4 +2200,165 @@ func runShellCommand(cmdLine string) commandResult {
 	cmd := exec.Command(parts[0], parts[1:]...) //nolint:gosec // command is built from a curated catalog + skill name
 	out, err := cmd.CombinedOutput()
 	return commandResult{output: string(out), err: err}
+}
+
+// ─── governance helpers ──────────────────────────────────────────────────────
+
+// runDriftBadgeCmd runs CheckDrift in the background and returns a driftBadgeMsg.
+func (m Model) runDriftBadgeCmd() tea.Cmd {
+	return func() tea.Msg {
+		projectDir, err := os.Getwd()
+		if err != nil {
+			return driftBadgeMsg{err: err}
+		}
+		results, err := governance.CheckDrift(projectDir)
+		if err != nil {
+			return driftBadgeMsg{err: err}
+		}
+		var count int
+		for _, r := range results {
+			if r.Drifted() {
+				count++
+			}
+		}
+		return driftBadgeMsg{count: count}
+	}
+}
+
+// runWatchDriftCmd runs CheckDrift for the watch screen.
+func (m Model) runWatchDriftCmd() tea.Cmd {
+	return func() tea.Msg {
+		projectDir, err := os.Getwd()
+		if err != nil {
+			return watchDriftMsg{at: time.Now()}
+		}
+		results, _ := governance.CheckDrift(projectDir)
+		return watchDriftMsg{results: results, at: time.Now()}
+	}
+}
+
+// loadAuditCmd reads the audit log for the audit screen.
+func (m Model) loadAuditCmd() tea.Cmd {
+	return func() tea.Msg {
+		projectDir, err := os.Getwd()
+		if err != nil {
+			return auditLoadedMsg{err: err}
+		}
+		log := governance.OpenAuditLog(projectDir)
+		events, err := log.Read(0, "")
+		return auditLoadedMsg{events: events, err: err}
+	}
+}
+
+// ─── watch screen ────────────────────────────────────────────────────────────
+
+func (m Model) viewWatch() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Drift Monitor") + "\n\n")
+
+	if len(m.watchResults) == 0 {
+		if m.watchChecking {
+			content.WriteString(mutedStyle.Render("Checking managed files…") + "\n")
+		} else {
+			content.WriteString(successStyle.Render("✓ All managed files are intact.") + "\n")
+		}
+	} else {
+		var drifted, intact int
+		for _, r := range m.watchResults {
+			if r.Drifted() {
+				drifted++
+			} else {
+				intact++
+			}
+		}
+
+		if drifted > 0 {
+			content.WriteString(authBadgeStyle.Render(fmt.Sprintf("⚠ %d file(s) drifted, %d intact", drifted, intact)) + "\n\n")
+			for _, r := range m.watchResults {
+				if !r.Drifted() {
+					continue
+				}
+				content.WriteString(fmt.Sprintf("  %s  %s\n",
+					errorStyle.Render("✗"),
+					r.Path))
+				content.WriteString(fmt.Sprintf("     %s  %s\n",
+					mutedStyle.Render(string(r.Kind)),
+					mutedStyle.Render(r.Detail)))
+			}
+		} else {
+			content.WriteString(successStyle.Render(fmt.Sprintf("✓ All %d managed file(s) intact.", intact)) + "\n")
+		}
+	}
+
+	if !m.watchLastAt.IsZero() {
+		ts := m.watchLastAt.Format("15:04:05")
+		indicator := mutedStyle.Render("·")
+		if m.watchChecking {
+			indicator = authBadgeStyle.Render("○")
+		}
+		content.WriteString("\n" + mutedStyle.Render(fmt.Sprintf("Last check: %s  %s", ts, indicator)) + "\n")
+	}
+	content.WriteString(mutedStyle.Render("Refreshes every 3 s. Events are written to .squadai/audit.log.") + "\n")
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("esc: back to menu"))
+	return b.String()
+}
+
+// ─── audit screen ────────────────────────────────────────────────────────────
+
+func (m Model) viewAudit() string {
+	var content strings.Builder
+	content.WriteString(headingStyle.Render("Audit Log") + "\n\n")
+
+	if m.auditErr != nil {
+		content.WriteString(errorStyle.Render(fmt.Sprintf("Error: %v", m.auditErr)) + "\n")
+	} else if m.auditEvents == nil {
+		content.WriteString(mutedStyle.Render("Loading…") + "\n")
+	} else if len(m.auditEvents) == 0 {
+		content.WriteString(mutedStyle.Render("No events recorded yet.") + "\n")
+		content.WriteString(mutedStyle.Render("Run 'squadai watch' or 'squadai apply' to generate events.") + "\n")
+	} else {
+		visible := m.auditEvents
+		if m.auditScroll < len(visible) {
+			visible = visible[m.auditScroll:]
+		}
+		maxRows := 15
+		if len(visible) > maxRows {
+			visible = visible[:maxRows]
+		}
+
+		for _, e := range visible {
+			ts := e.Timestamp.Format("01-02 15:04:05")
+			kindStr := string(e.Kind)
+			var kindStyled string
+			switch {
+			case strings.HasPrefix(kindStr, "drift:"):
+				kindStyled = authBadgeStyle.Render(kindStr)
+			case strings.HasPrefix(kindStr, "verify:fail"), strings.HasPrefix(kindStr, "apply:"):
+				kindStyled = errorStyle.Render(kindStr)
+			default:
+				kindStyled = successStyle.Render(kindStr)
+			}
+			detail := e.Path
+			if e.Detail != "" {
+				detail += "  " + e.Detail
+			}
+			content.WriteString(fmt.Sprintf("  %s  %-28s  %s\n",
+				mutedStyle.Render(ts), kindStyled, mutedStyle.Render(detail)))
+		}
+
+		total := len(m.auditEvents)
+		shown := m.auditScroll + len(visible)
+		content.WriteString(fmt.Sprintf("\n%s\n",
+			mutedStyle.Render(fmt.Sprintf("%d/%d events  (scroll ↑/↓)", shown, total))))
+	}
+
+	var b strings.Builder
+	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("↑/↓: scroll   esc: back"))
+	return b.String()
 }
