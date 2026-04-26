@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // AgentTeamsEnvVar is the environment variable Claude Code reads to opt into
@@ -127,6 +129,161 @@ func writeAtomicFile(path string, data []byte) error {
 	}
 	tmpName = ""
 	return nil
+}
+
+// SetHooks merges SquadAI-managed hooks into .claude/settings.json.
+// Each hook entry is uniquely identified by its Command string. Existing user
+// hooks are preserved. Matcher groups are matched by their Matcher field
+// (empty matches empty). Returns true when the file was written.
+func SetHooks(projectDir string, want domain.HooksConfig) (bool, error) {
+	if len(want) == 0 {
+		return false, nil
+	}
+
+	settingsPath := filepath.Join(projectDir, ".claude", "settings.json")
+
+	existing := make(map[string]any)
+	data, err := os.ReadFile(settingsPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read claude settings: %w", err)
+	}
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &existing); err != nil {
+			return false, fmt.Errorf("parse claude settings: %w", err)
+		}
+	}
+
+	// Decode existing hooks map into a normalised Go structure.
+	existingHooks := DecodeHooksMap(existing["hooks"])
+	changed := false
+
+	for event, wantMatchers := range want {
+		for _, wm := range wantMatchers {
+			existingMatchers := existingHooks[event]
+			idx := FindMatcherIdx(existingMatchers, wm.Matcher)
+			if idx < 0 {
+				existingHooks[event] = append(existingHooks[event], wm)
+				changed = true
+				continue
+			}
+			for _, wantEntry := range wm.Hooks {
+				if !HasCommand(existingMatchers[idx].Hooks, wantEntry.Command) {
+					existingHooks[event][idx].Hooks = append(existingHooks[event][idx].Hooks, wantEntry)
+					changed = true
+				}
+			}
+		}
+	}
+
+	if !changed {
+		return false, nil
+	}
+
+	existing["hooks"] = EncodeHooksMap(existingHooks)
+	out, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return false, fmt.Errorf("marshal claude settings: %w", err)
+	}
+	out = append(out, '\n')
+
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0755); err != nil {
+		return false, fmt.Errorf("create .claude dir: %w", err)
+	}
+	return true, writeAtomicFile(settingsPath, out)
+}
+
+// HooksInstalled returns true when every hook entry in want is present in
+// .claude/settings.json. An absent or unparseable settings file returns false.
+func HooksInstalled(projectDir string, want domain.HooksConfig) (bool, error) {
+	if len(want) == 0 {
+		return true, nil
+	}
+
+	settingsPath := filepath.Join(projectDir, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read claude settings: %w", err)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return false, nil
+	}
+
+	installed := DecodeHooksMap(doc["hooks"])
+	for event, wantMatchers := range want {
+		for _, wm := range wantMatchers {
+			existingMatchers := installed[event]
+			idx := FindMatcherIdx(existingMatchers, wm.Matcher)
+			if idx < 0 {
+				return false, nil
+			}
+			for _, we := range wm.Hooks {
+				if !HasCommand(existingMatchers[idx].Hooks, we.Command) {
+					return false, nil
+				}
+			}
+		}
+	}
+	return true, nil
+}
+
+// DecodeHooksMap normalises the raw JSON hooks value into a typed map.
+// Exported so the hooks component installer can reuse it for RenderContent.
+func DecodeHooksMap(raw any) map[string][]domain.HookMatcher {
+	result := make(map[string][]domain.HookMatcher)
+	if raw == nil {
+		return result
+	}
+	// Re-marshal then unmarshal to convert map[string]any → typed structs.
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return result
+	}
+	var typed map[string][]domain.HookMatcher
+	if err := json.Unmarshal(b, &typed); err != nil {
+		return result
+	}
+	return typed
+}
+
+// EncodeHooksMap converts a typed hooks map back to the any-typed form needed
+// for the JSON settings document.
+// Exported so the hooks component installer can reuse it for RenderContent.
+func EncodeHooksMap(m map[string][]domain.HookMatcher) any {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return m
+	}
+	var out any
+	_ = json.Unmarshal(b, &out)
+	return out
+}
+
+// FindMatcherIdx returns the index of the HookMatcher in ms whose Matcher
+// field equals target, or -1 if none is found.
+// Exported so the hooks component installer can reuse it for RenderContent.
+func FindMatcherIdx(ms []domain.HookMatcher, target string) int {
+	for i, m := range ms {
+		if m.Matcher == target {
+			return i
+		}
+	}
+	return -1
+}
+
+// HasCommand reports whether any HookEntry in entries has the given command.
+// Exported so the hooks component installer can reuse it for RenderContent.
+func HasCommand(entries []domain.HookEntry, cmd string) bool {
+	for _, e := range entries {
+		if e.Command == cmd {
+			return true
+		}
+	}
+	return false
 }
 
 // WriteDefaultAgentSettings writes (or merges) .claude/settings.json in projectDir

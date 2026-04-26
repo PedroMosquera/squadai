@@ -100,6 +100,11 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		merged.Claude = project.Claude
 		merged.Meta = project.Meta
 		merged.Copilot.Meta = project.Meta
+
+		// Hooks are additive: project hooks seed the merged config.
+		if len(project.Hooks) > 0 {
+			merged.Hooks = mergeHooksConfig(merged.Hooks, project.Hooks)
+		}
 	}
 
 	// Layer 3: policy locked fields override everything.
@@ -252,9 +257,64 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 				merged.Claude.AgentTeams.Enabled = true
 			}
 		}
+
+		// Policy hooks are always additive — they append required hooks on top
+		// of project-level hooks. There is no "locked" semantics for individual
+		// hook entries because additive merge is inherently policy-safe.
+		if len(policy.Required.Hooks) > 0 {
+			merged.Hooks = mergeHooksConfig(merged.Hooks, policy.Required.Hooks)
+		}
 	}
 
 	return merged
+}
+
+// mergeHooksConfig merges two HooksConfig values additively. For each event in
+// incoming, matcher groups are matched by Matcher field; new entries are appended
+// and existing ones are deduplicated by Command.
+func mergeHooksConfig(base, incoming domain.HooksConfig) domain.HooksConfig {
+	if len(incoming) == 0 {
+		return base
+	}
+	result := make(domain.HooksConfig)
+	for event, matchers := range base {
+		cloned := make([]domain.HookMatcher, len(matchers))
+		for i, m := range matchers {
+			hooksCopy := make([]domain.HookEntry, len(m.Hooks))
+			copy(hooksCopy, m.Hooks)
+			cloned[i] = domain.HookMatcher{Matcher: m.Matcher, Hooks: hooksCopy}
+		}
+		result[event] = cloned
+	}
+	for event, wantMatchers := range incoming {
+		for _, wm := range wantMatchers {
+			existing := result[event]
+			idx := -1
+			for i, m := range existing {
+				if m.Matcher == wm.Matcher {
+					idx = i
+					break
+				}
+			}
+			if idx < 0 {
+				result[event] = append(result[event], wm)
+				continue
+			}
+			for _, wantEntry := range wm.Hooks {
+				found := false
+				for _, e := range existing[idx].Hooks {
+					if e.Command == wantEntry.Command {
+						found = true
+						break
+					}
+				}
+				if !found {
+					result[event][idx].Hooks = append(result[event][idx].Hooks, wantEntry)
+				}
+			}
+		}
+	}
+	return result
 }
 
 // buildLockedSet converts the locked field list into a set for O(1) lookups.
