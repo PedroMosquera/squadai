@@ -25,6 +25,23 @@ type ProjectConfig struct {
 	ModelTier   ModelTier                  `json:"model_tier,omitempty"`
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
+	Claude      ClaudeConfig               `json:"claude,omitempty"`
+}
+
+// ClaudeConfig holds Claude Code-specific feature toggles. Generic adapter
+// behavior lives under Adapters[claude]; this struct only carries options
+// that don't fit the generic AdapterConfig shape (e.g., feature opt-ins
+// requiring policy-locked fields and special apply pipelines).
+type ClaudeConfig struct {
+	// AgentTeams opts the project into Claude Code's experimental Agent Teams
+	// runtime by injecting CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 into the
+	// project's .claude/settings.json env map.
+	AgentTeams AgentTeamsConfig `json:"agent_teams,omitempty"`
+}
+
+// AgentTeamsConfig is the opt-in toggle for the experimental Agent Teams runtime.
+type AgentTeamsConfig struct {
+	Enabled bool `json:"enabled"`
 }
 
 // PolicyConfig represents .squadai/policy.json.
@@ -44,6 +61,7 @@ type RequiredBlock struct {
 	Agents     map[string]AgentDef        `json:"agents,omitempty"`
 	MCP        map[string]MCPServerDef    `json:"mcp,omitempty"`
 	Plugins    map[string]PluginDef       `json:"plugins,omitempty"`
+	Claude     ClaudeConfig               `json:"claude,omitempty"`
 }
 
 // AdapterConfig is the per-adapter configuration in config files.
@@ -170,6 +188,7 @@ type MergedConfig struct {
 	ModelTier   ModelTier                  `json:"model_tier,omitempty"`
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
+	Claude      ClaudeConfig               `json:"claude,omitempty"`
 
 	// Violations is populated during merge when user/project values conflicted
 	// with locked policy fields. These are informational — the policy value wins.

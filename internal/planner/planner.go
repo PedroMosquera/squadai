@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/PedroMosquera/squadai/internal/components/agent_teams"
 	"github.com/PedroMosquera/squadai/internal/components/agents"
 	"github.com/PedroMosquera/squadai/internal/components/bundle"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
@@ -33,6 +34,7 @@ type Planner struct {
 	pluginsInstaller     *plugins.Installer
 	workflowsInstaller   *workflows.Installer
 	permissionsInstaller *permissions.Installer
+	agentTeamsInstaller  *agent_teams.Installer
 	copilotManager       *copilot.Manager
 	opts                 Options
 }
@@ -68,6 +70,7 @@ func (p *Planner) loadFromSet(s *bundle.Set) {
 	p.commandsInstaller = s.Commands
 	p.pluginsInstaller = s.Plugins
 	p.workflowsInstaller = s.Workflows
+	p.agentTeamsInstaller = s.AgentTeams
 	p.copilotManager = s.Copilot
 }
 
@@ -182,6 +185,16 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 				return nil, fmt.Errorf("workflows plan: %w", err)
 			}
 			actions = append(actions, workflowsActions...)
+		}
+
+		// Agent Teams (Claude Code only). The installer's Plan no-ops for
+		// other adapters, so the loop visits it once per pass without harm.
+		if p.agentTeamsInstaller != nil {
+			atActions, err := p.agentTeamsInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("agent_teams plan: %w", err)
+			}
+			actions = append(actions, atActions...)
 		}
 	}
 
@@ -307,6 +320,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	if p.permissionsInstaller != nil {
 		installers[domain.ComponentPermissions] = p.permissionsInstaller
 	}
+	if p.agentTeamsInstaller != nil {
+		installers[domain.ComponentAgentTeams] = p.agentTeamsInstaller
+	}
 	return installers
 }
 
@@ -368,9 +384,24 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 	case domain.ComponentPermissions:
 		return p.renderPermissions(action, oldContent)
 
+	case domain.ComponentAgentTeams:
+		return p.renderAgentTeams(action, oldContent)
+
 	default:
 		return oldContent, []byte("[content preview not available for " + string(action.Component) + "]"), nil
 	}
+}
+
+// renderAgentTeams computes what the agent_teams installer would write.
+func (p *Planner) renderAgentTeams(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.agentTeamsInstaller == nil {
+		return existing, []byte("[agent_teams installer not initialized]"), nil
+	}
+	rendered, err := p.agentTeamsInstaller.RenderContent(action)
+	if err != nil {
+		return existing, nil, err
+	}
+	return existing, rendered, nil
 }
 
 // renderMemory computes what the memory installer would write.

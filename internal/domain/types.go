@@ -70,6 +70,10 @@ const (
 	ComponentPlugins     ComponentID = "plugins"
 	ComponentWorkflows   ComponentID = "workflows"
 	ComponentPermissions ComponentID = "permissions"
+	// ComponentAgentTeams installs Claude Code's experimental Agent Teams
+	// runtime opt-in (env var injection in .claude/settings.json). Active
+	// only when ProjectConfig.Claude.AgentTeams.Enabled is true.
+	ComponentAgentTeams ComponentID = "agent_teams"
 	// ComponentCleanup is used for stale-file deletion actions that are not
 	// associated with a specific installable component.
 	ComponentCleanup ComponentID = "cleanup"

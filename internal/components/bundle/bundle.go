@@ -11,6 +11,7 @@ package bundle
 import (
 	"fmt"
 
+	"github.com/PedroMosquera/squadai/internal/components/agent_teams"
 	"github.com/PedroMosquera/squadai/internal/components/agents"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
@@ -44,6 +45,7 @@ type Set struct {
 	Commands    *commands.Installer
 	Plugins     *plugins.Installer
 	Workflows   *workflows.Installer
+	AgentTeams  *agent_teams.Installer
 	Copilot     *copilot.Manager
 }
 
@@ -91,6 +93,13 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 
 	if workflowsCfg, ok := cfg.Components[string(domain.ComponentWorkflows)]; ok && workflowsCfg.Enabled {
 		s.Workflows = workflows.New(cfg)
+	}
+
+	// Agent Teams runs whenever Claude is an enabled adapter — it has to fire
+	// even when the desired state is "disabled" so toggling off triggers a
+	// teardown action rather than leaving stale env vars in settings.json.
+	if claudeCfg, ok := cfg.Adapters[string(domain.AgentClaudeCode)]; ok && claudeCfg.Enabled {
+		s.AgentTeams = agent_teams.New(cfg.Claude.AgentTeams.Enabled)
 	}
 
 	return s, nil
