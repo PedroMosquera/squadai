@@ -433,13 +433,15 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 	// Target: <projectDir>/<agentsSubPath>/<roleName>.md
 	// We use the stored projectDir from construction.
 
-	data := i.buildTemplateDataFromAction(i.config, roleName, action.Agent)
+	data, err := i.buildTemplateDataFromAction(i.config, roleName, action.Agent)
+	if err != nil {
+		return err
+	}
 
 	var templateContent string
 	if roleName == "orchestrator" {
 		templateContent = assets.MustRead("teams/" + methodology + "/orchestrator-native.md")
 	} else {
-		var err error
 		templateContent, err = assets.Read("teams/" + methodology + "/" + roleName + ".md")
 		if err != nil {
 			return fmt.Errorf("read team agent template %s: %w", roleName, err)
@@ -492,7 +494,10 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 	}
 
 	methodology := string(i.config.Methodology)
-	data := i.buildTemplateDataFromAction(i.config, "orchestrator", action.Agent)
+	data, err := i.buildTemplateDataFromAction(i.config, "orchestrator", action.Agent)
+	if err != nil {
+		return err
+	}
 
 	templatePath := "teams/" + methodology + "/orchestrator-" + variant + ".md"
 	rendered, err := renderTemplate("orchestrator", assets.MustRead(templatePath), data)
@@ -709,33 +714,27 @@ func verifyFileContent(path, expected, checkName string) domain.VerifyResult {
 	}
 }
 
-// buildTemplateDataFromAction constructs TemplateData using the adapter's path methods.
-// The adapter is looked up from the installer's registered adapters map.
-func (i *Installer) buildTemplateDataFromAction(cfg *domain.MergedConfig, roleName string, agentID domain.AgentID) TemplateData {
-	_, hasContext7 := cfg.MCP["context7"]
-
-	var agentsDir, skillsDir string
-	var delegationStrategy string
-
-	if adapter, ok := i.adapters[agentID]; ok {
-		agentsDir = adapter.ProjectAgentsDir(i.projectDir)
-		skillsDir = adapter.ProjectSkillsDir(i.projectDir)
-		delegationStrategy = string(adapter.DelegationStrategy())
-	} else {
-		// Fallback: should not happen if Plan was called first.
-		delegationStrategy = delegationStrategyForAgent(agentID)
+// buildTemplateDataFromAction constructs TemplateData using the adapter's path
+// methods. The adapter must have been registered via Plan; if not, an error is
+// returned so callers can surface the invariant violation rather than silently
+// falling back.
+func (i *Installer) buildTemplateDataFromAction(cfg *domain.MergedConfig, roleName string, agentID domain.AgentID) (TemplateData, error) {
+	adapter, ok := i.adapters[agentID]
+	if !ok {
+		return TemplateData{}, fmt.Errorf("agents installer: adapter %q not registered (Plan must run before render/apply)", agentID)
 	}
 
+	_, hasContext7 := cfg.MCP["context7"]
 	return TemplateData{
 		Methodology:        string(cfg.Methodology),
-		DelegationStrategy: delegationStrategy,
+		DelegationStrategy: string(adapter.DelegationStrategy()),
 		Language:           cfg.Meta.Language,
 		Languages:          cfg.Meta.Languages,
 		TestCommand:        cfg.Meta.TestCommand,
 		BuildCommand:       cfg.Meta.BuildCommand,
 		LintCommand:        cfg.Meta.LintCommand,
-		SkillsDir:          skillsDir,
-		AgentsDir:          agentsDir,
+		SkillsDir:          adapter.ProjectSkillsDir(i.projectDir),
+		AgentsDir:          adapter.ProjectAgentsDir(i.projectDir),
 		TeamRoles:          cfg.Team,
 		MCPServers:         cfg.MCP,
 		HasContext7:        hasContext7,
@@ -743,21 +742,7 @@ func (i *Installer) buildTemplateDataFromAction(cfg *domain.MergedConfig, roleNa
 		PackageManager:     cfg.Meta.PackageManager,
 		ModelTier:          string(cfg.ModelTier),
 		ModelHint:          promptHintForTier(string(cfg.ModelTier)),
-	}
-}
-
-// delegationStrategyForAgent returns the delegation strategy string for a known agent ID.
-// This is a fallback used when the adapter object is not available; callers should
-// prefer adapter.DelegationStrategy() when the adapter is accessible.
-func delegationStrategyForAgent(id domain.AgentID) string {
-	switch id {
-	case domain.AgentVSCodeCopilot, domain.AgentWindsurf:
-		return "solo"
-	default:
-		// Unknown agent — log a prominent warning and return the safe default.
-		fmt.Fprintf(os.Stderr, "WARNING: delegationStrategyForAgent: unknown agent %q, defaulting to \"native\"\n", id)
-		return "native"
-	}
+	}, nil
 }
 
 // RenderContent returns the content that Apply would write for the given action,
@@ -782,13 +767,15 @@ func (i *Installer) renderNativeAgentContent(action domain.PlannedAction) (strin
 	}
 	roleName := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
 	methodology := string(i.config.Methodology)
-	data := i.buildTemplateDataFromAction(i.config, roleName, action.Agent)
+	data, err := i.buildTemplateDataFromAction(i.config, roleName, action.Agent)
+	if err != nil {
+		return "", err
+	}
 
 	var templateContent string
 	if roleName == "orchestrator" {
 		templateContent = assets.MustRead("teams/" + methodology + "/orchestrator-native.md")
 	} else {
-		var err error
 		templateContent, err = assets.Read("teams/" + methodology + "/" + roleName + ".md")
 		if err != nil {
 			return "", fmt.Errorf("read team agent template %s: %w", roleName, err)
@@ -812,7 +799,10 @@ func (i *Installer) renderMarkerInjectionContent(action domain.PlannedAction, va
 		return "", fmt.Errorf("renderMarkerInjectionContent: config is nil")
 	}
 	methodology := string(i.config.Methodology)
-	data := i.buildTemplateDataFromAction(i.config, "orchestrator", action.Agent)
+	data, err := i.buildTemplateDataFromAction(i.config, "orchestrator", action.Agent)
+	if err != nil {
+		return "", err
+	}
 	templatePath := "teams/" + methodology + "/orchestrator-" + variant + ".md"
 	rendered, err := renderTemplate("orchestrator", assets.MustRead(templatePath), data)
 	if err != nil {

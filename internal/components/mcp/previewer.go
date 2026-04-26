@@ -115,15 +115,12 @@ func (i *Installer) detectConflicts(action domain.PlannedAction, projectDir stri
 func (i *Installer) rootKeyAndValue(action domain.PlannedAction) (string, any, error) {
 	serversMap := make(map[string]any, len(i.servers))
 	for name, def := range i.servers {
-		serversMap[name] = serverToMap(def, action.Agent)
+		serversMap[name] = i.serverToMap(def, action.Agent)
 	}
 
-	var rootKey string
-	if isMCPConfigFileAction(action) {
-		rootKey = i.rootKeyForAgent(action.Agent)
-	} else {
-		rootKey = mcpKey
-	}
+	// Both strategies write under the adapter's MCPRootKey (cached). The
+	// strategy difference is which file is targeted, not which key is used.
+	rootKey := i.rootKeyForAgent(action.Agent)
 
 	// Round-trip through JSON so the value is the same concrete type that
 	// MergeJSON will see on the existing side (map[string]any, etc.).
@@ -132,13 +129,6 @@ func (i *Installer) rootKeyAndValue(action domain.PlannedAction) (string, any, e
 		return "", nil, err
 	}
 	return rootKey, normalized, nil
-}
-
-// isMCPConfigFileAction checks the action description marker used to route
-// between the two write strategies. Mirrors the check in Apply.
-func isMCPConfigFileAction(action domain.PlannedAction) bool {
-	const marker = "mcp:configfile:"
-	return len(action.Description) >= len(marker) && action.Description[:len(marker)] == marker
 }
 
 // normalizeJSON round-trips v through encoding/json so values end up as the
