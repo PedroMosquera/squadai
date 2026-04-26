@@ -3574,10 +3574,49 @@ func RunPluginsAdd(args []string, stdout, stderr io.Writer) error {
 
 	fmt.Fprintf(stdout, "installed %q v%s\n", pluginName, plugin.Version)
 	if len(plugin.Agents) > 0 {
-		fmt.Fprintf(stdout, "  agents  : %s\n", strings.Join(plugin.Agents, ", "))
+		fmt.Fprintf(stdout, "  agents   : %s\n", strings.Join(plugin.Agents, ", "))
 	}
 	if len(plugin.Skills) > 0 {
-		fmt.Fprintf(stdout, "  skills  : %s\n", strings.Join(plugin.Skills, ", "))
+		fmt.Fprintf(stdout, "  skills   : %s\n", strings.Join(plugin.Skills, ", "))
 	}
+	if len(plugin.Commands) > 0 {
+		fmt.Fprintf(stdout, "  commands : %s\n", strings.Join(plugin.Commands, ", "))
+	}
+	return nil
+}
+
+// RunPluginsRemove removes an installed plugin's files and updates project.json.
+func RunPluginsRemove(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: squadai plugins remove <plugin-name>")
+	}
+	pluginName := args[0]
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	reg, err := marketplace.Load(projectDir)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(stdout, "removing plugin %q …\n", pluginName)
+	if err := marketplace.Remove(projectDir, pluginName, reg); err != nil {
+		return fmt.Errorf("remove plugin: %w", err)
+	}
+
+	// Remove the entry from project.json marketplace.plugins.
+	proj, loadErr := config.LoadProject(projectDir)
+	if loadErr != nil {
+		return fmt.Errorf("load project config: %w", loadErr)
+	}
+	delete(proj.Marketplace.Plugins, pluginName)
+	if err := config.SaveProject(projectDir, proj); err != nil {
+		return fmt.Errorf("update project.json: %w", err)
+	}
+
+	fmt.Fprintf(stdout, "removed %q\n", pluginName)
 	return nil
 }

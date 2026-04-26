@@ -186,6 +186,7 @@ func InstallWithClient(projectDir, pluginName string, reg *Registry, client *htt
 
 	agentsDir := filepath.Join(projectDir, ".claude", "agents")
 	skillsBase := filepath.Join(projectDir, ".claude", "skills")
+	commandsDir := filepath.Join(projectDir, ".claude", "commands")
 
 	// Download agent files.
 	for _, agentName := range plugin.Agents {
@@ -220,7 +221,44 @@ func InstallWithClient(projectDir, pluginName string, reg *Registry, client *htt
 		}
 	}
 
+	// Download command files.
+	for _, cmdName := range plugin.Commands {
+		rawURL := fmt.Sprintf("%s/plugins/%s/commands/%s.md", defaultRawBase, pluginName, cmdName)
+		dest := filepath.Join(commandsDir, cmdName+".md")
+		if err := downloadFile(client, rawURL, dest); err != nil {
+			return nil, fmt.Errorf("download command %s: %w", cmdName, err)
+		}
+	}
+
 	return &plugin, nil
+}
+
+// Remove deletes all files installed by a plugin and removes it from the registry.
+// It does not update project.json — callers are responsible for that.
+func Remove(projectDir, pluginName string, reg *Registry) error {
+	plugin, ok := reg.Plugins[pluginName]
+	if !ok {
+		return fmt.Errorf("plugin %q not found in registry", pluginName)
+	}
+
+	agentsDir := filepath.Join(projectDir, ".claude", "agents")
+	skillsBase := filepath.Join(projectDir, ".claude", "skills")
+	commandsDir := filepath.Join(projectDir, ".claude", "commands")
+
+	for _, agentName := range plugin.Agents {
+		_ = os.Remove(filepath.Join(agentsDir, agentName+".md"))
+	}
+	for _, skillName := range plugin.Skills {
+		_ = os.RemoveAll(filepath.Join(skillsBase, pluginName, skillName))
+	}
+	// Clean up the plugin-scoped skills directory if empty.
+	_ = os.Remove(filepath.Join(skillsBase, pluginName))
+
+	for _, cmdName := range plugin.Commands {
+		_ = os.Remove(filepath.Join(commandsDir, cmdName+".md"))
+	}
+
+	return nil
 }
 
 // ─── internal helpers ─────────────────────────────────────────────────────────
