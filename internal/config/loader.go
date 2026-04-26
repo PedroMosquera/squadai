@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -97,6 +98,19 @@ func LoadProject(projectDir string) (*domain.ProjectConfig, error) {
 	}
 
 	return &cfg, nil
+}
+
+// SaveProject writes cfg back to <projectDir>/.squadai/project.json atomically.
+func SaveProject(projectDir string, cfg *domain.ProjectConfig) error {
+	path := ProjectConfigPath(projectDir)
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal project config: %w", err)
+	}
+	if _, err := fileutil.WriteAtomic(path, append(data, '\n'), 0644); err != nil {
+		return fmt.Errorf("write project config: %w", err)
+	}
+	return nil
 }
 
 // LoadPolicy reads and parses .squadai/policy.json.
