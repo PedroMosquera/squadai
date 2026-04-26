@@ -226,6 +226,9 @@ Policy (locked fields)  >  Project config  >  User defaults
     "reviewer": { "description": "Two-stage code review", "mode": "subagent", "skill_ref": "shared/code-review" },
     "debugger": { "description": "Systematic debugging", "mode": "subagent", "skill_ref": "tdd/systematic-debugging" }
   },
+  "claude": {
+    "agent_teams": { "enabled": false }
+  },
   "meta": {
     "name": "my-project",
     "language": "go",
@@ -234,6 +237,34 @@ Policy (locked fields)  >  Project config  >  User defaults
   }
 }
 ```
+
+### Claude Code Agent Teams (experimental opt-in)
+
+Set `claude.agent_teams.enabled` to `true` to opt the project into Claude
+Code's experimental Agent Teams runtime. SquadAI writes
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` into `.claude/settings.json` under the
+`env` key, preserving any sibling user-defined env vars. Apply also reverses
+the toggle: setting `enabled` back to `false` removes the var, leaving other
+env entries intact.
+
+Teams that need to forbid (or mandate) Agent Teams across the org can lock
+the field via policy:
+
+```json
+// .squadai/policy.json
+{
+  "version": 1,
+  "mode": "team",
+  "locked": ["claude.agent_teams.enabled"],
+  "required": {
+    "claude": { "agent_teams": { "enabled": false } }
+  }
+}
+```
+
+`squadai doctor` reports an Agent Teams check under the AI Agents category;
+warnings are emitted whenever the env var on disk diverges from the
+configured desired state.
 
 ### Operational Modes
 

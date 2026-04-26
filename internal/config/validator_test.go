@@ -1060,3 +1060,34 @@ func TestValidateProject_TeamRole_InvalidModelTier(t *testing.T) {
 	issues := ValidateProject(cfg)
 	assertContainsIssue(t, issues, "unknown_model_tier")
 }
+
+// ─── Policy lock for claude.agent_teams.enabled ─────────────────────────────
+
+func TestValidatePolicy_LockedClaudeAgentTeams_Valid(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Locked:  []string{"claude.agent_teams.enabled"},
+		Required: domain.RequiredBlock{
+			Claude: domain.ClaudeConfig{
+				AgentTeams: domain.AgentTeamsConfig{Enabled: true},
+			},
+		},
+	}
+	issues := ValidatePolicy(cfg)
+	for _, issue := range issues {
+		if contains(issue, "claude.agent_teams") {
+			t.Errorf("unexpected issue for valid locked field: %v", issue)
+		}
+	}
+}
+
+func TestValidatePolicy_LockedUnknownClaudeField_Issue(t *testing.T) {
+	cfg := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Locked:  []string{"claude.unknown_subkey"},
+	}
+	issues := ValidatePolicy(cfg)
+	assertContainsIssue(t, issues, "claude.unknown_subkey")
+}
