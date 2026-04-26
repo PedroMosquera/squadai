@@ -170,6 +170,20 @@ func (a *Adapter) MCPConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".vscode", "mcp.json")
 }
 
+// MCPCommandStyle returns "split" — VS Code Copilot uses command + args.
+func (a *Adapter) MCPCommandStyle() string { return "split" }
+
+// MCPEnvKey returns "env" — VS Code Copilot uses the standard env key.
+func (a *Adapter) MCPEnvKey() string { return "env" }
+
+// MCPTypeField returns "http" for remote servers and empty string for stdio.
+func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string {
+	if def.URL != "" {
+		return "http"
+	}
+	return ""
+}
+
 // RulesFrontmatter returns empty string — VS Code Copilot uses YAML frontmatter in .instructions.md but not for rules.
 func (a *Adapter) RulesFrontmatter() string { return "" }
 

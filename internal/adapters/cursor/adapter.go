@@ -163,6 +163,15 @@ func (a *Adapter) MCPConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "mcp.json")
 }
 
+// MCPCommandStyle returns "split" — Cursor uses command + args.
+func (a *Adapter) MCPCommandStyle() string { return "split" }
+
+// MCPEnvKey returns "env" — Cursor uses the standard env key.
+func (a *Adapter) MCPEnvKey() string { return "env" }
+
+// MCPTypeField always returns empty string — Cursor infers stdio vs remote from URL presence.
+func (a *Adapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
+
 // RulesFrontmatter returns YAML frontmatter for Cursor's structured MDC rules.
 func (a *Adapter) RulesFrontmatter() string {
 	return "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n\n"
