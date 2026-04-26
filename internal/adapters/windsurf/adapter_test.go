@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
@@ -278,5 +279,91 @@ func TestAdapter_WorkflowsDir(t *testing.T) {
 	want := filepath.Join("/project", ".windsurf", "workflows")
 	if got := a.WorkflowsDir("/project"); got != want {
 		t.Errorf("WorkflowsDir() = %q, want %q", got, want)
+	}
+}
+
+// ─── MCP / Rules metadata ───────────────────────────────────────────────────
+
+func TestAdapter_MCPRootKey(t *testing.T) {
+	a := New()
+	want := "mcpServers"
+	if got := a.MCPRootKey(); got != want {
+		t.Errorf("MCPRootKey() = %q, want %q", got, want)
+	}
+}
+
+func TestAdapter_MCPURLKey(t *testing.T) {
+	a := New()
+	want := "serverUrl"
+	if got := a.MCPURLKey(); got != want {
+		t.Errorf("MCPURLKey() = %q, want %q", got, want)
+	}
+}
+
+func TestAdapter_MCPConfigPath(t *testing.T) {
+	a := New()
+	tests := []struct {
+		name       string
+		projectDir string
+		want       string
+	}{
+		{"with project dir", "/tmp/proj", filepath.Join("/tmp/proj", ".windsurf", "mcp_config.json")},
+		{"empty project dir", "", filepath.Join(".windsurf", "mcp_config.json")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := a.MCPConfigPath(tt.projectDir); got != tt.want {
+				t.Errorf("MCPConfigPath(%q) = %q, want %q", tt.projectDir, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAdapter_RulesFrontmatter(t *testing.T) {
+	a := New()
+	want := "---\ntrigger: always_on\n---\n\n"
+	got := a.RulesFrontmatter()
+	if got != want {
+		t.Errorf("RulesFrontmatter() = %q, want %q", got, want)
+	}
+	// Sanity-check expected key markers.
+	if !strings.Contains(got, "---") {
+		t.Error("RulesFrontmatter() should contain YAML delimiters '---'")
+	}
+	if !strings.Contains(got, "trigger:") {
+		t.Error("RulesFrontmatter() should contain 'trigger:' key")
+	}
+}
+
+func TestAdapter_MCPCommandStyle(t *testing.T) {
+	a := New()
+	if got := a.MCPCommandStyle(); got != "split" {
+		t.Errorf("MCPCommandStyle() = %q, want %q", got, "split")
+	}
+}
+
+func TestAdapter_MCPEnvKey(t *testing.T) {
+	a := New()
+	if got := a.MCPEnvKey(); got != "env" {
+		t.Errorf("MCPEnvKey() = %q, want %q", got, "env")
+	}
+}
+
+func TestAdapter_MCPTypeField(t *testing.T) {
+	a := New()
+	tests := []struct {
+		name string
+		def  domain.MCPServerDef
+	}{
+		{"stdio omits type", domain.MCPServerDef{Command: []string{"npx"}}},
+		{"remote omits type", domain.MCPServerDef{URL: "https://x"}},
+		{"empty omits type", domain.MCPServerDef{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := a.MCPTypeField(tt.def); got != "" {
+				t.Errorf("MCPTypeField(%+v) = %q, want empty", tt.def, got)
+			}
+		})
 	}
 }

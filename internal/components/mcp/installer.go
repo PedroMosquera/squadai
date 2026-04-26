@@ -13,42 +13,40 @@ import (
 	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
-const (
-	// mcpKey is the top-level JSON key for MCP server configurations.
-	mcpKey = "mcp"
-)
-
-// rootKeyForAgentMethod returns the cached MCP root key for the given agent,
-// falling back to the package-level rootKeyForAgent if not cached.
-func (i *Installer) rootKeyForAgent(agent domain.AgentID) string {
-	if cfg, ok := i.agentConfigs[agent]; ok {
-		return cfg.rootKey
-	}
-	return rootKeyForAgent(agent)
-}
-
-// rootKeyForAgent returns the top-level JSON key for MCP server configs.
-// VS Code Copilot expects "servers"; all other adapters use "mcpServers".
-func rootKeyForAgent(agent domain.AgentID) string {
-	if agent == domain.AgentVSCodeCopilot {
-		return "servers"
-	}
-	return "mcpServers"
-}
-
-// urlKeyForAgent returns the JSON field name for remote server URLs.
-// Windsurf expects "serverUrl"; all other agents use "url".
-func urlKeyForAgent(agent domain.AgentID) string {
-	if agent == domain.AgentWindsurf {
-		return "serverUrl"
-	}
-	return "url"
-}
-
-// agentMCPConfig caches adapter-provided MCP configuration for use during Apply.
+// agentMCPConfig caches adapter-declared MCP schema for use during Apply,
+// Verify, and Preview — all of which receive only an AgentID, not the live
+// Adapter. The cache is populated during Plan.
 type agentMCPConfig struct {
-	rootKey string
-	urlKey  string
+	rootKey      string
+	urlKey       string
+	envKey       string
+	commandStyle string
+	typeFieldFn  func(domain.MCPServerDef) string
+	isConfigFile bool
+}
+
+// rootKeyForAgent returns the cached MCP root key for the given agent.
+// Returns empty string if Plan / ensureAgentConfig was not called first.
+func (i *Installer) rootKeyForAgent(agent domain.AgentID) string {
+	return i.agentConfigs[agent].rootKey
+}
+
+// ensureAgentConfig populates the schema cache for the adapter on first use.
+// Plan, Verify, and Preview all call this so the cache is independent of the
+// callsite ordering.
+func (i *Installer) ensureAgentConfig(adapter domain.Adapter, projectDir string) {
+	if _, ok := i.agentConfigs[adapter.ID()]; ok {
+		return
+	}
+	mcpPath := adapter.MCPConfigPath(projectDir)
+	i.agentConfigs[adapter.ID()] = agentMCPConfig{
+		rootKey:      adapter.MCPRootKey(),
+		urlKey:       adapter.MCPURLKey(),
+		envKey:       adapter.MCPEnvKey(),
+		commandStyle: adapter.MCPCommandStyle(),
+		typeFieldFn:  adapter.MCPTypeField,
+		isConfigFile: mcpPath != "",
+	}
 }
 
 // Installer implements domain.ComponentInstaller for MCP server configuration.
@@ -114,18 +112,16 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	// Capture project dir so Apply can write to the centralized sidecar.
 	i.projectDir = projectDir
 
-	// Cache adapter-declared MCP keys for use during Apply.
-	i.agentConfigs[adapter.ID()] = agentMCPConfig{
-		rootKey: adapter.MCPRootKey(),
-		urlKey:  adapter.MCPURLKey(),
-	}
+	// Populate adapter-declared MCP schema cache so Apply / Verify / Preview
+	// (which only receive an AgentID) can resolve schema without the live adapter.
+	i.ensureAgentConfig(adapter, projectDir)
 
 	// Strategy 1: MCPConfigFile — adapter declares a separate MCP config path.
-	if mcpPath := adapter.MCPConfigPath(projectDir); mcpPath != "" {
-		return i.planMCPConfigFile(adapter, mcpPath)
+	if i.agentConfigs[adapter.ID()].isConfigFile {
+		return i.planMCPConfigFile(adapter, adapter.MCPConfigPath(projectDir))
 	}
 
-	// Strategy 3: MergeIntoSettings — adapter merges into its project config file.
+	// Strategy 2: MergeIntoSettings — adapter merges into its project config file.
 	return i.planMergedConfig(adapter, projectDir)
 }
 
@@ -158,7 +154,7 @@ func (i *Installer) planMergedConfig(adapter domain.Adapter, projectDir string) 
 	}
 
 	// Check if MCP key matches desired state.
-	if mcpKeyMatches(existing, i.servers) {
+	if i.mcpKeyMatches(existing, i.servers, adapter.ID()) {
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
@@ -201,26 +197,18 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	return i.applyMergedConfig(action)
 }
 
-// applyMergedConfig writes all servers into the "mcp" key of a single config file,
-// respecting user-wins semantics for any unrelated top-level key on disk.
+// applyMergedConfig writes all servers under the adapter's root key in a
+// shared config file, respecting user-wins semantics for any unrelated
+// top-level key on disk.
 func (i *Installer) applyMergedConfig(action domain.PlannedAction) error {
+	rootKey := i.rootKeyForAgent(action.Agent)
 	mcpMap := make(map[string]interface{}, len(i.servers))
 	for name, def := range i.servers {
-		mcpMap[name] = serverToMap(def, action.Agent)
+		mcpMap[name] = i.serverToMap(def, action.Agent)
 	}
-	incoming := map[string]any{mcpKey: mcpMap}
+	incoming := map[string]any{rootKey: mcpMap}
 
-	return i.mergeAndWrite(action, incoming, []string{mcpKey})
-}
-
-// isMCPConfigFileAdapter checks if the adapter uses the MCPConfigFile strategy.
-// Claude Code, VS Code Copilot, Cursor, and Windsurf use a dedicated MCP config file.
-func isMCPConfigFileAdapter(adapter domain.Adapter) bool {
-	switch adapter.ID() {
-	case domain.AgentClaudeCode, domain.AgentVSCodeCopilot, domain.AgentCursor, domain.AgentWindsurf:
-		return true
-	}
-	return false
+	return i.mergeAndWrite(action, incoming, []string{rootKey})
 }
 
 // planMCPConfigFile plans actions for the MCPConfigFile strategy.
@@ -251,7 +239,7 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, targetPath string)
 	}
 
 	// Check if mcpServers key matches desired state.
-	if mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
+	if i.mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
@@ -283,7 +271,7 @@ func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 	rootKey := i.rootKeyForAgent(action.Agent)
 	serversMap := make(map[string]interface{}, len(i.servers))
 	for name, def := range i.servers {
-		serversMap[name] = serverToMap(def, action.Agent)
+		serversMap[name] = i.serverToMap(def, action.Agent)
 	}
 	incoming := map[string]any{rootKey: serversMap}
 
@@ -404,7 +392,7 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 		Component: "mcp",
 	})
 
-	if mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
+	if i.mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
 		results = append(results, domain.VerifyResult{
 			Check:     "mcp-configfile-servers-current",
 			Passed:    true,
@@ -424,10 +412,11 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 	return results, nil
 }
 
-// mcpServersKeyMatches checks whether the adapter-specific root key in the document
-// matches the expected server definitions.
-func mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef, agent domain.AgentID) bool {
-	rootKey := rootKeyForAgent(agent)
+// mcpServersKeyMatches checks whether the adapter-specific root key in the
+// document matches the expected server definitions. Reads the cached schema
+// for the agent — Plan must have been called first.
+func (i *Installer) mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef, agent domain.AgentID) bool {
+	rootKey := i.rootKeyForAgent(agent)
 	mcpVal, exists := doc[rootKey]
 	if !exists {
 		return false
@@ -436,7 +425,7 @@ func mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain
 	// Compare via JSON serialization for deep equality.
 	expectedMap := make(map[string]interface{})
 	for name, def := range expected {
-		expectedMap[name] = serverToMap(def, agent)
+		expectedMap[name] = i.serverToMap(def, agent)
 	}
 
 	expectedJSON, _ := json.Marshal(expectedMap)
@@ -444,7 +433,9 @@ func mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain
 	return string(expectedJSON) == string(actualJSON)
 }
 
-// Verify checks post-apply state for the MCP component.
+// Verify checks post-apply state for the MCP component. The strategy is
+// looked up from the cached schema, populated lazily so Verify works whether
+// or not Plan was called first.
 func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) ([]domain.VerifyResult, error) {
 	if !adapter.SupportsComponent(domain.ComponentMCP) {
 		return nil, nil
@@ -454,7 +445,9 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	if isMCPConfigFileAdapter(adapter) {
+	i.ensureAgentConfig(adapter, projectDir)
+
+	if i.agentConfigs[adapter.ID()].isConfigFile {
 		return i.verifyMCPConfigFile(adapter, projectDir)
 	}
 
@@ -484,7 +477,7 @@ func (i *Installer) verifyMergedConfig(adapter domain.Adapter, projectDir string
 		Passed: true,
 	})
 
-	if mcpKeyMatches(existing, i.servers) {
+	if i.mcpKeyMatches(existing, i.servers, adapter.ID()) {
 		results = append(results, domain.VerifyResult{
 			Check:  "mcp-servers-current",
 			Passed: true,
@@ -520,9 +513,9 @@ func (i *Installer) renderMergedConfigContent(action domain.PlannedAction) ([]by
 	}
 	mcpMap := make(map[string]interface{})
 	for name, def := range i.servers {
-		mcpMap[name] = serverToMap(def, action.Agent)
+		mcpMap[name] = i.serverToMap(def, action.Agent)
 	}
-	existing[mcpKey] = mcpMap
+	existing[i.rootKeyForAgent(action.Agent)] = mcpMap
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal config: %w", err)
@@ -543,9 +536,9 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 	}
 	serversMap := make(map[string]interface{})
 	for name, def := range i.servers {
-		serversMap[name] = serverToMap(def, action.Agent)
+		serversMap[name] = i.serverToMap(def, action.Agent)
 	}
-	existing[rootKeyForAgent(action.Agent)] = serversMap
+	existing[i.rootKeyForAgent(action.Agent)] = serversMap
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal MCP config: %w", err)
@@ -554,62 +547,45 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 	return data, nil
 }
 
-// serverToMap converts an MCPServerDef to a generic map for JSON output.
-// Each agent has a different MCP server schema:
+// serverToMap converts an MCPServerDef to a generic map for JSON output,
+// using the cached adapter schema for the given agent. Plan / Verify must
+// have populated the cache via ensureAgentConfig before this is called.
 //
-// OpenCode (MergeIntoSettings):
+// Per-agent schema variations encoded via the cached fields:
 //
-//	{"type": "local", "command": ["npx", "-y", "..."]}
-//	{"type": "remote", "url": "https://..."}
-//
-// Claude Code, VS Code Copilot (require "type" for remote):
-//
-//	Stdio: {"command": "npx", "args": ["-y", "..."]}
-//	Remote: {"type": "http", "url": "https://..."}
-//
-// Cursor (no "type" field for any):
-//
-//	Stdio: {"command": "npx", "args": ["-y", "..."]}
-//	Remote: {"url": "https://..."}
-//
-// Windsurf (no "type" field, uses "serverUrl"):
-//
-//	Stdio: {"command": "npx", "args": ["-y", "..."]}
-//	Remote: {"serverUrl": "https://..."}
-func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]interface{} {
+//	OpenCode:    command=array, env="environment", type=def.Type (always)
+//	Claude:      command=split, env="env",         type="http" iff URL set
+//	VS Code:     command=split, env="env",         type="http" iff URL set
+//	Cursor:      command=split, env="env",         type omitted
+//	Windsurf:    command=split, env="env",         type omitted (URL key="serverUrl")
+func (i *Installer) serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]interface{} {
+	cfg := i.agentConfigs[agent]
 	m := make(map[string]interface{})
 
-	if agent == domain.AgentOpenCode {
-		// OpenCode uses the array-style command with explicit type field.
-		m["type"] = def.Type
-		if len(def.Command) > 0 {
-			m["command"] = def.Command
+	// "type" field — adapter-specific logic encapsulated in MCPTypeField.
+	if cfg.typeFieldFn != nil {
+		if t := cfg.typeFieldFn(def); t != "" {
+			m["type"] = t
 		}
-	} else {
-		// All other agents use split command/args format for stdio servers.
-		if len(def.Command) > 0 {
+	}
+
+	// Command encoding — single array vs split command/args.
+	if len(def.Command) > 0 {
+		if cfg.commandStyle == "array" {
+			m["command"] = def.Command
+		} else {
 			m["command"] = def.Command[0]
 			if len(def.Command) > 1 {
 				m["args"] = def.Command[1:]
 			}
 		}
-		// Claude Code and VS Code require "type": "http" for remote servers.
-		// Cursor and Windsurf infer the type from the presence of url/serverUrl.
-		if def.URL != "" && (agent == domain.AgentClaudeCode || agent == domain.AgentVSCodeCopilot) {
-			m["type"] = "http"
-		}
 	}
 
-	if def.URL != "" {
-		m[urlKeyForAgent(agent)] = def.URL
+	if def.URL != "" && cfg.urlKey != "" {
+		m[cfg.urlKey] = def.URL
 	}
-	if len(def.Environment) > 0 {
-		if agent == domain.AgentOpenCode {
-			m["environment"] = def.Environment
-		} else {
-			// Claude Code, Cursor, Windsurf, VS Code use "env" for environment variables.
-			m["env"] = def.Environment
-		}
+	if len(def.Environment) > 0 && cfg.envKey != "" {
+		m[cfg.envKey] = def.Environment
 	}
 	if len(def.Headers) > 0 {
 		m["headers"] = def.Headers
@@ -617,19 +593,19 @@ func serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]inter
 	return m
 }
 
-// mcpKeyMatches checks whether the "mcp" key in the document matches
-// the expected server definitions. Used by the MergeIntoSettings strategy (OpenCode).
-func mcpKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef) bool {
-	mcpVal, exists := doc[mcpKey]
+// mcpKeyMatches checks whether the cached root key in the document matches
+// the expected server definitions. Used by the MergeIntoSettings strategy.
+func (i *Installer) mcpKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef, agent domain.AgentID) bool {
+	rootKey := i.rootKeyForAgent(agent)
+	mcpVal, exists := doc[rootKey]
 	if !exists {
 		return false
 	}
 
 	// Compare via JSON serialization for deep equality.
-	// MergeIntoSettings is only used by OpenCode which uses default "url" key.
 	expectedMap := make(map[string]interface{})
 	for name, def := range expected {
-		expectedMap[name] = serverToMap(def, domain.AgentOpenCode)
+		expectedMap[name] = i.serverToMap(def, agent)
 	}
 
 	expectedJSON, _ := json.Marshal(expectedMap)

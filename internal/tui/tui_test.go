@@ -40,10 +40,13 @@ func (m *mockAdapter) SupportsSubAgents() bool                { return false }
 func (m *mockAdapter) SubAgentsDir(homeDir string) string     { return "" }
 func (m *mockAdapter) SupportsWorkflows() bool                { return false }
 func (m *mockAdapter) WorkflowsDir(projectDir string) string  { return "" }
-func (m *mockAdapter) MCPRootKey() string                     { return "mcpServers" }
-func (m *mockAdapter) MCPURLKey() string                      { return "url" }
-func (m *mockAdapter) MCPConfigPath(projectDir string) string { return "" }
-func (m *mockAdapter) RulesFrontmatter() string               { return "" }
+func (m *mockAdapter) MCPRootKey() string                        { return "mcpServers" }
+func (m *mockAdapter) MCPURLKey() string                         { return "url" }
+func (m *mockAdapter) MCPConfigPath(projectDir string) string    { return "" }
+func (m *mockAdapter) MCPCommandStyle() string                   { return "split" }
+func (m *mockAdapter) MCPEnvKey() string                         { return "env" }
+func (m *mockAdapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
+func (m *mockAdapter) RulesFrontmatter() string                  { return "" }
 
 // ─── Intro Screen ───────────────────────────────────────────────────────────
 
