@@ -2,6 +2,7 @@ package claude
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -29,12 +30,15 @@ var roleColors = map[string]string{
 // frontmatter and returns content with Claude-native frontmatter.
 //
 // Claude-specific changes:
-//   - name:   injected from role parameter (lowercase + hyphens)
-//   - mode:   stripped (Claude has no equivalent)
-//   - tools:  map {key: bool} → comma-separated capitalized list; omitted when all enabled
-//   - color:  injected based on role
-//   - model:  inject "inherit"
-//   - memory: inject based on memoryScope parameter
+//   - name:     injected from role parameter (lowercase + hyphens)
+//   - mode:     stripped (Claude has no equivalent)
+//   - tools:    map {key: bool} → comma-separated capitalized list; omitted when all enabled
+//   - color:    injected based on role
+//   - model:    inject "inherit"
+//   - skills:   passed through as-is when present
+//   - maxTurns: derived from max_turns field when present
+//   - memory:   explicit file path list when present; falls back to memoryScope string
+//   - effort:   passed through when present
 func TranslateFrontmatter(content, role, memoryScope string) (string, error) {
 	fm, body, err := splitFrontmatter(content)
 	if err != nil {
@@ -42,7 +46,7 @@ func TranslateFrontmatter(content, role, memoryScope string) (string, error) {
 		return content, nil
 	}
 
-	fields, toolsEnabled, totalTools := parseFrontmatterFields(fm)
+	parsed := parseFrontmatterFields(fm)
 
 	if memoryScope == "" {
 		memoryScope = "project"
@@ -52,14 +56,22 @@ func TranslateFrontmatter(content, role, memoryScope string) (string, error) {
 	b.WriteString("---\n")
 	b.WriteString(fmt.Sprintf("name: %s\n", role))
 
-	// description — pass through; handle multi-line value
-	if desc, ok := fields["description"]; ok && desc != "" {
+	// description — pass through
+	if desc, ok := parsed.fields["description"]; ok && desc != "" {
 		b.WriteString(fmt.Sprintf("description: %s\n", desc))
 	}
 
 	// tools — omit if all 6 known tools are enabled (Claude inherits all by default)
-	if toolsList := buildToolsList(toolsEnabled, totalTools); toolsList != "" {
+	if toolsList := buildToolsList(parsed.toolsEnabled, parsed.totalTools); toolsList != "" {
 		b.WriteString(fmt.Sprintf("tools: %s\n", toolsList))
+	}
+
+	// skills — pass through list when present
+	if len(parsed.skills) > 0 {
+		b.WriteString("skills:\n")
+		for _, s := range parsed.skills {
+			b.WriteString(fmt.Sprintf("  - %s\n", s))
+		}
 	}
 
 	// color — injected based on role
@@ -68,8 +80,27 @@ func TranslateFrontmatter(content, role, memoryScope string) (string, error) {
 	// model — always inherit
 	b.WriteString("model: inherit\n")
 
-	// memory — injected based on scope
-	b.WriteString(fmt.Sprintf("memory: %s\n", memoryScope))
+	// maxTurns — emit when max_turns field present and > 0
+	if raw, ok := parsed.fields["max_turns"]; ok && raw != "" && raw != "0" {
+		if n, parseErr := strconv.Atoi(raw); parseErr == nil && n > 0 {
+			b.WriteString(fmt.Sprintf("maxTurns: %d\n", n))
+		}
+	}
+
+	// memory — explicit file paths take priority over the scope string
+	if len(parsed.memoryPaths) > 0 {
+		b.WriteString("memory:\n")
+		for _, m := range parsed.memoryPaths {
+			b.WriteString(fmt.Sprintf("  - %s\n", m))
+		}
+	} else {
+		b.WriteString(fmt.Sprintf("memory: %s\n", memoryScope))
+	}
+
+	// effort — pass through when present
+	if effort, ok := parsed.fields["effort"]; ok && effort != "" {
+		b.WriteString(fmt.Sprintf("effort: %s\n", effort))
+	}
 
 	b.WriteString("---")
 	if body != "" {
@@ -105,13 +136,35 @@ func splitFrontmatter(content string) (fm, body string, err error) {
 	return fm, body, nil
 }
 
-// parseFrontmatterFields parses the frontmatter YAML into a flat key→value map.
-// It also returns the list of enabled tool names and the total number of tool entries.
-func parseFrontmatterFields(fm string) (fields map[string]string, toolsEnabled []string, totalTools int) {
-	fields = make(map[string]string)
+// parsedFrontmatter holds the result of parsing a YAML frontmatter block.
+type parsedFrontmatter struct {
+	fields       map[string]string // scalar key→value pairs (mode/permission stripped)
+	toolsEnabled []string          // names of tools with value "true"
+	totalTools   int               // total number of tool entries in the map
+	skills       []string          // items from a skills: list block
+	memoryPaths  []string          // items from a memory: list block (absent when scalar)
+}
+
+// parseFrontmatterFields parses the frontmatter YAML block into a structured result.
+// Handles three kinds of block fields:
+//   - tools: (bool map)   → toolsEnabled / totalTools
+//   - skills: (list)      → skills
+//   - memory: (list)      → memoryPaths (only when the value is a list, not a scalar)
+//
+// All other scalar fields are collected in fields. mode and permission are stripped.
+func parseFrontmatterFields(fm string) parsedFrontmatter {
+	p := parsedFrontmatter{fields: make(map[string]string)}
 	lines := strings.Split(fm, "\n")
 
-	inTools := false
+	type blockKind int
+	const (
+		blockNone   blockKind = iota
+		blockTools            // key: bool map
+		blockSkills           // - item list
+		blockMemory           // - item list
+	)
+
+	inBlock := blockNone
 	toolsMap := make(map[string]bool)
 
 	for _, line := range lines {
@@ -119,21 +172,28 @@ func parseFrontmatterFields(fm string) (fields map[string]string, toolsEnabled [
 			continue
 		}
 
-		// Indented line → tool entry inside the tools: block.
-		if inTools && strings.HasPrefix(line, "  ") {
+		// Indented line → entry inside the current block.
+		if inBlock != blockNone && strings.HasPrefix(line, "  ") {
 			trimmed := strings.TrimSpace(line)
-			parts := strings.SplitN(trimmed, ":", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				val := strings.TrimSpace(parts[1])
-				toolsMap[key] = val == "true"
-				totalTools++
+			switch inBlock {
+			case blockTools:
+				parts := strings.SplitN(trimmed, ":", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					val := strings.TrimSpace(parts[1])
+					toolsMap[key] = val == "true"
+					p.totalTools++
+				}
+			case blockSkills:
+				p.skills = append(p.skills, strings.TrimPrefix(trimmed, "- "))
+			case blockMemory:
+				p.memoryPaths = append(p.memoryPaths, strings.TrimPrefix(trimmed, "- "))
 			}
 			continue
 		}
 
-		// Not indented → top-level key.
-		inTools = false
+		// Non-indented line → end of any current block, start of a new top-level field.
+		inBlock = blockNone
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) != 2 {
 			continue
@@ -141,24 +201,28 @@ func parseFrontmatterFields(fm string) (fields map[string]string, toolsEnabled [
 		key := strings.TrimSpace(parts[0])
 		val := strings.TrimSpace(parts[1])
 
-		if key == "tools" && val == "" {
-			inTools = true
-			continue
+		switch {
+		case key == "tools" && val == "":
+			inBlock = blockTools
+		case key == "skills" && val == "":
+			inBlock = blockSkills
+		case key == "memory" && val == "":
+			// List form — collect items; scalar form is handled as a normal field.
+			inBlock = blockMemory
+		case key == "mode" || key == "permission":
+			// Strip fields Claude does not support.
+		default:
+			p.fields[key] = val
 		}
-		// Strip fields that Claude does not support.
-		if key == "mode" || key == "permission" {
-			continue
-		}
-		fields[key] = val
 	}
 
 	// Collect enabled tools.
 	for tool, enabled := range toolsMap {
 		if enabled {
-			toolsEnabled = append(toolsEnabled, tool)
+			p.toolsEnabled = append(p.toolsEnabled, tool)
 		}
 	}
-	return fields, toolsEnabled, totalTools
+	return p
 }
 
 // buildToolsList returns the comma-separated, capitalized tool list for Claude.
