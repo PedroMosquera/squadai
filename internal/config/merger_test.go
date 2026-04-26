@@ -901,3 +901,101 @@ func TestMerge_ModelTier_EmptyWhenNotSet(t *testing.T) {
 		t.Errorf("ModelTier = %q, want empty string when not set", merged.ModelTier)
 	}
 }
+
+// ─── Claude Agent Teams merging ─────────────────────────────────────────────
+
+func TestMerge_ClaudeAgentTeams_ProjectValueCarriesThrough(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Claude: domain.ClaudeConfig{
+			AgentTeams: domain.AgentTeamsConfig{Enabled: true},
+		},
+	}
+
+	merged := Merge(nil, project, nil)
+
+	if !merged.Claude.AgentTeams.Enabled {
+		t.Error("expected Claude.AgentTeams.Enabled=true to flow through merger")
+	}
+	if len(merged.Violations) != 0 {
+		t.Errorf("unexpected violations: %v", merged.Violations)
+	}
+}
+
+func TestMerge_ClaudeAgentTeams_PolicyLockOverridesProject(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Claude: domain.ClaudeConfig{
+			AgentTeams: domain.AgentTeamsConfig{Enabled: true},
+		},
+	}
+	policy := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Locked:  []string{"claude.agent_teams.enabled"},
+		Required: domain.RequiredBlock{
+			Claude: domain.ClaudeConfig{
+				AgentTeams: domain.AgentTeamsConfig{Enabled: false},
+			},
+		},
+	}
+
+	merged := Merge(nil, project, policy)
+
+	if merged.Claude.AgentTeams.Enabled {
+		t.Error("policy lock should force AgentTeams.Enabled=false")
+	}
+	if len(merged.Violations) != 1 {
+		t.Errorf("expected 1 violation, got %v", merged.Violations)
+	}
+	if !strings.Contains(strings.Join(merged.Violations, "|"), "claude.agent_teams.enabled") {
+		t.Errorf("violation should reference field path, got %v", merged.Violations)
+	}
+}
+
+func TestMerge_ClaudeAgentTeams_PolicyLockMatching_NoViolation(t *testing.T) {
+	project := &domain.ProjectConfig{
+		Version: 1,
+		Claude: domain.ClaudeConfig{
+			AgentTeams: domain.AgentTeamsConfig{Enabled: true},
+		},
+	}
+	policy := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Locked:  []string{"claude.agent_teams.enabled"},
+		Required: domain.RequiredBlock{
+			Claude: domain.ClaudeConfig{
+				AgentTeams: domain.AgentTeamsConfig{Enabled: true},
+			},
+		},
+	}
+
+	merged := Merge(nil, project, policy)
+
+	if !merged.Claude.AgentTeams.Enabled {
+		t.Error("matching policy lock should preserve enabled=true")
+	}
+	if len(merged.Violations) != 0 {
+		t.Errorf("matching values should not produce violations, got %v", merged.Violations)
+	}
+}
+
+func TestMerge_ClaudeAgentTeams_RequiredTrueSeedsConfig(t *testing.T) {
+	// Policy doesn't lock the field but requires it true → should seed.
+	policy := &domain.PolicyConfig{
+		Version: 1,
+		Mode:    domain.ModeTeam,
+		Required: domain.RequiredBlock{
+			Claude: domain.ClaudeConfig{
+				AgentTeams: domain.AgentTeamsConfig{Enabled: true},
+			},
+		},
+	}
+
+	merged := Merge(nil, nil, policy)
+
+	if !merged.Claude.AgentTeams.Enabled {
+		t.Error("required-true should seed merged config when no project value present")
+	}
+}

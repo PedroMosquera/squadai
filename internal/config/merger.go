@@ -95,6 +95,9 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		if project.Plugins != nil {
 			merged.Plugins = clonePluginDefs(project.Plugins)
 		}
+		// Claude config — only AgentTeams.Enabled today; project layer wins
+		// over user defaults (no Claude config exists at the user layer yet).
+		merged.Claude = project.Claude
 		merged.Meta = project.Meta
 		merged.Copilot.Meta = project.Meta
 	}
@@ -226,6 +229,28 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 				merged.Plugins = make(map[string]domain.PluginDef)
 			}
 			merged.Plugins[name] = def
+		}
+
+		// Claude config locked-field handling. Currently only one knob is
+		// supported (claude.agent_teams.enabled) — when the field is locked,
+		// the required value wins and a violation is recorded if the project
+		// layer disagreed.
+		const agentTeamsField = "claude.agent_teams.enabled"
+		if _, isLocked := locked[agentTeamsField]; isLocked {
+			if merged.Claude.AgentTeams.Enabled != policy.Required.Claude.AgentTeams.Enabled {
+				merged.Violations = append(merged.Violations,
+					fmt.Sprintf("field %q locked to %v, overriding %v",
+						agentTeamsField,
+						policy.Required.Claude.AgentTeams.Enabled,
+						merged.Claude.AgentTeams.Enabled))
+			}
+			merged.Claude.AgentTeams.Enabled = policy.Required.Claude.AgentTeams.Enabled
+		} else if policy.Required.Claude.AgentTeams.Enabled {
+			// Even when not strictly locked, a required-true value seeds the
+			// merged config (project may still override).
+			if !merged.Claude.AgentTeams.Enabled {
+				merged.Claude.AgentTeams.Enabled = true
+			}
 		}
 	}
 

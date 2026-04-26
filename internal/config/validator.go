@@ -203,6 +203,21 @@ func hasRequiredValue(cfg *domain.PolicyConfig, field string) bool {
 		_, exists := cfg.Required.Plugins[parts[1]]
 		return exists
 
+	case "claude":
+		// Only "claude.agent_teams.enabled" is locked-field-supported today.
+		// The required block must explicitly set the desired value, even if
+		// it is the zero value, so we treat presence under "claude.*" as
+		// satisfied whenever the structure is non-zero. A bool zero-value is
+		// indistinguishable from "unset," but locking false is a legitimate
+		// policy ("nobody on this team is allowed to enable Agent Teams").
+		if len(parts) < 3 {
+			return false
+		}
+		if parts[1] == "agent_teams" && parts[2] == "enabled" {
+			return true
+		}
+		return false
+
 	default:
 		return false
 	}
