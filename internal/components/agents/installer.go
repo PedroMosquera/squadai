@@ -829,6 +829,9 @@ func (i *Installer) renderCustomAgentContent(action domain.PlannedAction) (strin
 }
 
 // renderAgent generates the markdown content for an agent definition with YAML frontmatter.
+// New Claude-specific fields (Tools, Skills, MaxTurns, Memory, Effort) are rendered here
+// in a neutral format; TranslateFrontmatter converts them to Claude-native syntax when
+// the agent is destined for .claude/agents/.
 func renderAgent(name string, def domain.AgentDef) string {
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -849,6 +852,39 @@ func renderAgent(name string, def domain.AgentDef) string {
 		for _, k := range permKeys {
 			b.WriteString(fmt.Sprintf("  %s: %s\n", k, def.Permission[k]))
 		}
+	}
+	// Tools: emit as OpenCode-style bool map; TranslateFrontmatter converts to
+	// comma-separated list for Claude Code.
+	if len(def.Tools) > 0 {
+		toolKeys := make([]string, len(def.Tools))
+		copy(toolKeys, def.Tools)
+		sort.Strings(toolKeys)
+		b.WriteString("tools:\n")
+		for _, t := range toolKeys {
+			b.WriteString(fmt.Sprintf("  %s: true\n", strings.ToLower(t)))
+		}
+	}
+	// Skills: list of skill file paths (Claude Code only).
+	if len(def.Skills) > 0 {
+		b.WriteString("skills:\n")
+		for _, s := range def.Skills {
+			b.WriteString(fmt.Sprintf("  - %s\n", s))
+		}
+	}
+	// MaxTurns: turn budget cap (Claude Code only).
+	if def.MaxTurns > 0 {
+		b.WriteString(fmt.Sprintf("max_turns: %d\n", def.MaxTurns))
+	}
+	// Memory: explicit file paths (Claude Code only); overrides scope injection.
+	if len(def.Memory) > 0 {
+		b.WriteString("memory:\n")
+		for _, m := range def.Memory {
+			b.WriteString(fmt.Sprintf("  - %s\n", m))
+		}
+	}
+	// Effort: reasoning budget ("low", "normal", "high") (Claude Code only).
+	if def.Effort != "" {
+		b.WriteString(fmt.Sprintf("effort: %s\n", def.Effort))
 	}
 	b.WriteString("---\n")
 	if def.Prompt != "" {
