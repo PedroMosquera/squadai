@@ -62,6 +62,7 @@ func (d *Doctor) runAgents(ctx context.Context) []CheckResult {
 		// Per-agent feature checks.
 		if adapter.ID() == domain.AgentClaudeCode {
 			results = append(results, d.checkAgentTeams())
+			results = append(results, d.checkHooks()...)
 		}
 	}
 	return results
@@ -111,6 +112,39 @@ func (d *Doctor) checkAgentTeams() CheckResult {
 			"drift",
 			"Run 'squadai apply' to remove the stale env var, or set claude.agent_teams.enabled=true in project.json")
 	}
+}
+
+// checkHooks reports whether all hooks declared in project.json are present in
+// .claude/settings.json. Returns nil when no hooks are configured.
+func (d *Doctor) checkHooks() []CheckResult {
+	proj, err := config.LoadProject(d.projectDir)
+	if err != nil {
+		if errors.Is(err, domain.ErrConfigNotFound) {
+			return nil
+		}
+		return []CheckResult{warn(catAgents, "claude.hooks",
+			fmt.Sprintf("hooks check failed: %v", err), "", "")}
+	}
+
+	if len(proj.Hooks) == 0 {
+		return nil
+	}
+
+	installed, err := claude.HooksInstalled(d.projectDir, proj.Hooks)
+	if err != nil {
+		return []CheckResult{warn(catAgents, "claude.hooks",
+			fmt.Sprintf("read .claude/settings.json: %v", err), "", "")}
+	}
+
+	if installed {
+		return []CheckResult{pass(catAgents, "claude.hooks",
+			fmt.Sprintf("%d hook event(s) installed in .claude/settings.json", len(proj.Hooks)),
+			"installed")}
+	}
+	return []CheckResult{warn(catAgents, "claude.hooks",
+		"one or more hooks from project.json are missing from .claude/settings.json",
+		"drift",
+		"Run 'squadai apply' to merge required hooks into .claude/settings.json")}
 }
 
 // agentBinaryName returns the primary binary name for a given agent ID string.
