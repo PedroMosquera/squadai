@@ -445,38 +445,58 @@ func RunInit(args []string, stdout io.Writer) error {
 		return nil
 	}
 
-	// Print summary.
+	// Print post-init report.
 	fmt.Fprintln(stdout)
-	if meta.Name != "" || meta.Language != "" {
-		fmt.Fprintln(stdout, "Detected:")
-		if meta.Language != "" {
-			fmt.Fprintf(stdout, "  Language: %s\n", meta.Language)
-		}
-		if meta.Name != "" {
-			fmt.Fprintf(stdout, "  Project:  %s\n", meta.Name)
-		}
-		adapterNames := adapterSummary(selectedAdapters)
-		if adapterNames != "" {
-			fmt.Fprintf(stdout, "  Agents:   %s\n", adapterNames)
-		}
-		if meth != "" {
-			fmt.Fprintf(stdout, "  Methodology: %s\n", meth)
-			fmt.Fprintf(stdout, "  Team roles:  %d\n", len(domain.DefaultTeam(meth)))
-		}
-		mcpServers := DefaultMCPServers()
-		if len(mcpServers) > 0 {
-			mcpNames := make([]string, 0, len(mcpServers))
-			for name := range mcpServers {
-				mcpNames = append(mcpNames, name)
-			}
-			sort.Strings(mcpNames)
-			fmt.Fprintf(stdout, "  MCP servers: %s\n", strings.Join(mcpNames, ", "))
-		}
-		fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Initialized:")
+	if meta.Language != "" {
+		fmt.Fprintf(stdout, "  Language:   %s\n", meta.Language)
 	}
-
-	fmt.Fprintln(stdout, "Run 'squadai apply' to configure your environment.")
+	if meta.Name != "" {
+		fmt.Fprintf(stdout, "  Project:    %s\n", meta.Name)
+	}
+	adapterNames := adapterSummary(selectedAdapters)
+	if adapterNames != "" {
+		fmt.Fprintf(stdout, "  Agents:     %s\n", adapterNames)
+	}
+	if meth != "" {
+		team := domain.DefaultTeam(meth)
+		roleNames := make([]string, 0, len(team))
+		for name := range team {
+			roleNames = append(roleNames, name)
+		}
+		sort.Strings(roleNames)
+		fmt.Fprintf(stdout, "  Methodology: %s — %s\n", meth, methodologyDescription(meth))
+		fmt.Fprintf(stdout, "  Team roles:  %s\n", strings.Join(roleNames, ", "))
+	}
+	mcpServers := DefaultMCPServers()
+	if len(mcpServers) > 0 {
+		mcpNames := make([]string, 0, len(mcpServers))
+		for name := range mcpServers {
+			mcpNames = append(mcpNames, name)
+		}
+		sort.Strings(mcpNames)
+		fmt.Fprintf(stdout, "  MCP servers: %s\n", strings.Join(mcpNames, ", "))
+	}
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Next steps:")
+	fmt.Fprintln(stdout, "  1. Review .squadai/project.json and adjust settings if needed.")
+	fmt.Fprintln(stdout, "  2. Run 'squadai apply' to configure your agent environment.")
+	fmt.Fprintln(stdout, "  3. Run 'squadai verify' to confirm everything is correctly applied.")
 	return nil
+}
+
+// methodologyDescription returns a one-line description for a methodology.
+func methodologyDescription(m domain.Methodology) string {
+	switch m {
+	case domain.MethodologyTDD:
+		return "Test-Driven Development — red/green/refactor cycle with 6 specialized roles"
+	case domain.MethodologySDD:
+		return "Spec-Driven Development — spec-first approach with 8 roles including reviewers"
+	case domain.MethodologyConventional:
+		return "Conventional workflow — 4 balanced roles for general software development"
+	default:
+		return string(m)
+	}
 }
 
 // buildSmartProjectConfig creates a rich project.json from detected metadata, adapters,
@@ -1825,26 +1845,30 @@ func RunRestore(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// RunStatus shows the current project configuration summary.
+// RunStatus shows the current project configuration summary with health checks.
 func RunStatus(args []string, stdout io.Writer) error {
 	jsonOut := false
+	fix := false
 	for _, arg := range args {
 		switch arg {
 		case "--json":
 			jsonOut = true
+		case "--fix":
+			fix = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai status [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai status [--json] [--fix]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Show the current project configuration summary: detected agents, active components,")
-			fmt.Fprintln(stdout, "configured MCP servers, and the most recent backup. Reads the merged config from")
-			fmt.Fprintln(stdout, ".squadai/project.json without writing any files.")
+			fmt.Fprintln(stdout, "configured MCP servers, health checks, and the most recent backup.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output the status as JSON.")
+			fmt.Fprintln(stdout, "  --fix   Run 'squadai apply' to fix any health issues found.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai status")
 			fmt.Fprintln(stdout, "  squadai status --json")
+			fmt.Fprintln(stdout, "  squadai status --fix")
 			return nil
 		default:
 			return fmt.Errorf("unknown flag %q for status", arg)
@@ -1871,7 +1895,14 @@ func RunStatus(args []string, stdout io.Writer) error {
 	p := planner.New()
 	actions, err := p.Plan(mergedCfg, adapters, homeDir, projectDir)
 	if err != nil {
-		return fmt.Errorf("plan: %w", err)
+		return exitcode.ErrPlanFailed(err)
+	}
+
+	// Run verify to get health results.
+	v := verify.New()
+	verifyReport, verifyErr := v.Verify(mergedCfg, adapters, homeDir, projectDir)
+	if verifyErr != nil {
+		verifyReport = nil
 	}
 
 	// Count managed files per component (non-skip actions grouped by component).
@@ -1947,6 +1978,11 @@ func RunStatus(args []string, stdout io.Writer) error {
 			Timestamp string `json:"timestamp"`
 			Files     int    `json:"files"`
 		}
+		type healthSummary struct {
+			AllPass       bool `json:"all_pass"`
+			TotalChecks   int  `json:"total_checks"`
+			FailingChecks int  `json:"failing_checks"`
+		}
 		type statusResult struct {
 			ProjectDir  string            `json:"project_dir"`
 			Language    string            `json:"language,omitempty"`
@@ -1956,6 +1992,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			Components  []componentStatus `json:"components"`
 			MCPServers  []string          `json:"mcp_servers"`
 			LastBackup  *backupInfo       `json:"last_backup,omitempty"`
+			Health      *healthSummary    `json:"health,omitempty"`
 		}
 
 		adapterList := make([]adapterStatus, 0, len(adapters))
@@ -1983,6 +2020,21 @@ func RunStatus(args []string, stdout io.Writer) error {
 			}
 		}
 
+		var health *healthSummary
+		if verifyReport != nil {
+			failing := 0
+			for _, r := range verifyReport.Results {
+				if !r.Passed && r.Severity == domain.SeverityError {
+					failing++
+				}
+			}
+			health = &healthSummary{
+				AllPass:       verifyReport.AllPass,
+				TotalChecks:   len(verifyReport.Results),
+				FailingChecks: failing,
+			}
+		}
+
 		result := statusResult{
 			ProjectDir:  projectDir,
 			Language:    mergedCfg.Meta.Language,
@@ -1992,6 +2044,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			Components:  componentList,
 			MCPServers:  mcpNames,
 			LastBackup:  lastBackupJSON,
+			Health:      health,
 		}
 		data, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
@@ -2045,6 +2098,35 @@ func RunStatus(args []string, stdout io.Writer) error {
 			len(lastManifest.AffectedFiles))
 	} else {
 		fmt.Fprintln(stdout, "Last backup: none")
+	}
+
+	// Health section.
+	if verifyReport != nil && len(verifyReport.Results) > 0 {
+		fmt.Fprintln(stdout)
+		failing := make([]domain.VerifyResult, 0)
+		for _, r := range verifyReport.Results {
+			if !r.Passed && r.Severity == domain.SeverityError {
+				failing = append(failing, r)
+			}
+		}
+		if len(failing) == 0 {
+			fmt.Fprintf(stdout, "Health: OK (%d checks passed)\n", len(verifyReport.Results))
+		} else {
+			fmt.Fprintf(stdout, "Health: %d failing check(s) of %d\n", len(failing), len(verifyReport.Results))
+			for _, r := range failing {
+				msg := r.Check
+				if r.Message != "" {
+					msg = r.Message
+				}
+				fmt.Fprintf(stdout, "  [FAIL] %s\n", msg)
+			}
+			if fix {
+				fmt.Fprintln(stdout)
+				fmt.Fprintln(stdout, "Running 'squadai apply' to fix issues…")
+				return RunApply([]string{}, stdout)
+			}
+			fmt.Fprintln(stdout, "\nRun 'squadai apply' to fix, or 'squadai status --fix' to fix automatically.")
+		}
 	}
 
 	return nil
