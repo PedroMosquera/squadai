@@ -98,6 +98,11 @@ type Adapter interface {
 	// RulesFrontmatter returns the YAML frontmatter prefix for structured rules files.
 	// Returns empty string for agents that use marker-based injection.
 	RulesFrontmatter() string
+
+	// RulesFileSizeCap returns the maximum number of characters allowed in the
+	// rules file for this adapter, or 0 if there is no known limit.
+	// Windsurf's global_rules.md has a hard 6,000-character cap.
+	RulesFileSizeCap() int
 }
 
 // ComponentInstaller handles installation and sync for a single component.

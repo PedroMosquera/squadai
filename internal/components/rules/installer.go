@@ -83,6 +83,12 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		if !strings.HasSuffix(expectedContent, "\n") {
 			expectedContent += "\n"
 		}
+
+		desc := "write structured rules file"
+		if cap := adapter.RulesFileSizeCap(); cap > 0 && len(expectedContent) > cap {
+			desc = fmt.Sprintf("write structured rules file (WARNING: content is %d chars, exceeds %d-char cap — Windsurf will truncate)", len(expectedContent), cap)
+		}
+
 		if string(existing) == expectedContent {
 			return []domain.PlannedAction{
 				{
@@ -106,7 +112,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 				Component:   domain.ComponentRules,
 				Action:      action,
 				TargetPath:  targetPath,
-				Description: "write structured rules file",
+				Description: desc,
 			},
 		}, nil
 	}
@@ -238,6 +244,23 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 				Message: "structured rules content is outdated",
 			})
 		}
+
+		// Warn when the file content exceeds the adapter's documented cap.
+		if cap := adapter.RulesFileSizeCap(); cap > 0 && len(expectedContent) > cap {
+			results = append(results, domain.VerifyResult{
+				Check:    "rules-file-size-cap",
+				Passed:   false,
+				Severity: domain.SeverityWarning,
+				Message: fmt.Sprintf("rules content is %d chars, exceeds %d-char cap for %s — Windsurf will truncate content beyond the limit",
+					len(expectedContent), cap, adapter.ID()),
+			})
+		} else if cap := adapter.RulesFileSizeCap(); cap > 0 {
+			results = append(results, domain.VerifyResult{
+				Check:  "rules-file-size-cap",
+				Passed: true,
+			})
+		}
+
 		return results, nil
 	}
 
