@@ -47,6 +47,7 @@ func (m *mockAdapter) MCPCommandStyle() string                   { return "split
 func (m *mockAdapter) MCPEnvKey() string                         { return "env" }
 func (m *mockAdapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
 func (m *mockAdapter) RulesFrontmatter() string                  { return "" }
+func (m *mockAdapter) RulesFileSizeCap() int                     { return 0 }
 
 // ─── Intro Screen ───────────────────────────────────────────────────────────
 

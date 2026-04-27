@@ -183,6 +183,9 @@ func (a *Adapter) RulesFrontmatter() string {
 	return "---\ntrigger: always_on\n---\n\n"
 }
 
+// RulesFileSizeCap returns 6000 — Windsurf's global_rules.md has a hard 6,000-character cap.
+func (a *Adapter) RulesFileSizeCap() int { return 6000 }
+
 // ConfigDir returns the root config directory for Windsurf.
 // On Windows it is %APPDATA%\Windsurf\User (falling back to homeDir\AppData\Roaming\Windsurf\User).
 // On all other platforms it is ~/.codeium/windsurf.

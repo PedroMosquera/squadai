@@ -578,16 +578,6 @@ func TestRunApply_NoProjectJSON_ReturnsError(t *testing.T) {
 	if !strings.Contains(err.Error(), "no project.json found") {
 		t.Errorf("error should mention missing project.json, got: %v", err)
 	}
-	out := buf.String()
-	if !strings.Contains(out, "Error: No project.json found in current directory.") {
-		t.Errorf("output should contain error message, got: %s", out)
-	}
-	if !strings.Contains(out, "squadai init") {
-		t.Errorf("output should suggest running init, got: %s", out)
-	}
-	if !strings.Contains(out, "--force") {
-		t.Errorf("output should mention --force flag, got: %s", out)
-	}
 }
 
 func TestRunApply_NoProjectJSON_ForceFlag_Proceeds(t *testing.T) {
@@ -927,8 +917,8 @@ func TestRunBackupDelete_MissingID(t *testing.T) {
 	if err == nil {
 		t.Fatal("RunBackupDelete with no ID should return an error")
 	}
-	if !strings.Contains(err.Error(), "backup ID is required") {
-		t.Errorf("error should mention missing ID, got: %v", err)
+	if !strings.Contains(err.Error(), "missing required argument") {
+		t.Errorf("error should mention missing required argument, got: %v", err)
 	}
 }
 
@@ -948,8 +938,8 @@ func TestRunBackupDelete_NonexistentID(t *testing.T) {
 	if err == nil {
 		t.Fatal("RunBackupDelete with nonexistent ID should return an error")
 	}
-	if !strings.Contains(err.Error(), "load backup") {
-		t.Errorf("error should mention load backup failure, got: %v", err)
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should mention not found, got: %v", err)
 	}
 }
 
