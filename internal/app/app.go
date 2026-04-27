@@ -9,6 +9,7 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/cli"
 	"github.com/PedroMosquera/squadai/internal/doctor"
+	"github.com/PedroMosquera/squadai/internal/mcpserver"
 	"github.com/PedroMosquera/squadai/internal/state"
 	"github.com/PedroMosquera/squadai/internal/tui"
 	"github.com/PedroMosquera/squadai/internal/update"
@@ -66,6 +67,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 
 	case "context":
 		return cli.RunContext(args[1:], stdout)
+
+	case "mcp-server":
+		return mcpserver.RunMCPServer(args[1:], stdout, stderr, Version, buildMCPRunners(stdout, stderr))
 
 	case "update":
 		return cli.RunUpdate(args[1:], stdout, stderr)
@@ -223,6 +227,52 @@ Subcommands:
 Flags:
   --json        Output results in JSON format
 `)
+}
+
+// ─── MCP tool runners ─────────────────────────────────────────────────────────
+
+// buildMCPRunners constructs the map of MCP tool name → SquadAI CLI handler.
+// Each runner mirrors the corresponding CLI command, adapting the args format
+// from MCP (flag map → cli args) to the existing RunXxx functions.
+func buildMCPRunners(stdout, stderr io.Writer) map[string]mcpserver.ToolRunner {
+	return map[string]mcpserver.ToolRunner{
+		"plan": func(args []string, w io.Writer) error {
+			return cli.RunPlan(args, w)
+		},
+		"apply": func(args []string, w io.Writer) error {
+			return cli.RunApply(args, w)
+		},
+		"verify": func(args []string, w io.Writer) error {
+			return cli.RunVerify(args, w)
+		},
+		"status": func(args []string, w io.Writer) error {
+			return cli.RunStatus(args, w)
+		},
+		"context": func(args []string, w io.Writer) error {
+			return cli.RunContext(args, w)
+		},
+		"init": func(args []string, w io.Writer) error {
+			return cli.RunInit(args, w)
+		},
+		"validate_policy": func(args []string, w io.Writer) error {
+			return cli.RunValidatePolicy(args, w)
+		},
+		"schema_export": func(args []string, w io.Writer) error {
+			return cli.RunSchemaExport(args, w)
+		},
+		"doctor": func(args []string, w io.Writer) error {
+			return cli.RunDoctor(args, w)
+		},
+		"plugins_sync": func(args []string, w io.Writer) error {
+			return cli.RunPluginsSync(args, w, stderr)
+		},
+		"plugins_list": func(args []string, w io.Writer) error {
+			return cli.RunPluginsList(args, w)
+		},
+		"install_hooks": func(args []string, w io.Writer) error {
+			return cli.RunInstallHooks(args, w)
+		},
+	}
 }
 
 // ─── machine-readable command registry ───────────────────────────────────────
@@ -400,6 +450,10 @@ func buildCommandRegistry() helpOutput {
 				},
 			},
 			{
+				Name:        "mcp-server",
+				Description: "Start SquadAI as an MCP stdio server. Exposes plan, apply, verify, status, context, init, doctor, plugins, and more as MCP tools callable by Claude Code.",
+			},
+			{
 				Name:        "update",
 				Description: "Check for a newer version of SquadAI and optionally download it.",
 				Flags: []cmdFlag{
@@ -461,6 +515,7 @@ Commands:
   remove             Remove all managed files (use --force to confirm)
   schema export      Export JSON Schema for project.json / policy.json (VS Code validation)
   context            Dump config as LLM-ready context (--format prompt|json|mcp)
+  mcp-server         Start SquadAI as an MCP stdio server (for Claude Code integration)
   update             Check for updates and download (see 'squadai update --help')
   version            Print version
 
