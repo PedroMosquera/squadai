@@ -182,3 +182,6 @@ func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string {
 
 // RulesFrontmatter returns empty string — Claude Code uses marker-based injection.
 func (a *Adapter) RulesFrontmatter() string { return "" }
+
+// RulesFileSizeCap returns 0 — Claude Code has no known rules file size limit.
+func (a *Adapter) RulesFileSizeCap() int { return 0 }

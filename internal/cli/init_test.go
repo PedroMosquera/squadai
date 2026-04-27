@@ -371,8 +371,8 @@ func TestRunInit_MethodologyFlag_Unknown_Error(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown methodology, got nil")
 	}
-	if !strings.Contains(err.Error(), "unknown methodology") {
-		t.Errorf("error = %q, want to contain 'unknown methodology'", err.Error())
+	if !strings.Contains(err.Error(), "unknown value") || !strings.Contains(err.Error(), "--methodology") {
+		t.Errorf("error = %q, want to contain 'unknown value' and '--methodology'", err.Error())
 	}
 }
 
@@ -1076,8 +1076,8 @@ func TestRunInit_Merge_MutuallyExclusiveWithForce(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when --merge and --force are combined, got nil")
 	}
-	if !strings.Contains(err.Error(), "mutually exclusive") {
-		t.Errorf("error = %q, want to contain 'mutually exclusive'", err.Error())
+	if !strings.Contains(err.Error(), "conflicting flags") {
+		t.Errorf("error = %q, want to contain 'conflicting flags'", err.Error())
 	}
 }
 
@@ -1735,8 +1735,8 @@ func TestRunInit_ModelTierFlag_InvalidReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown model tier, got nil")
 	}
-	if !strings.Contains(err.Error(), "unknown model tier") {
-		t.Errorf("error = %q, want to contain 'unknown model tier'", err.Error())
+	if !strings.Contains(err.Error(), "unknown value") || !strings.Contains(err.Error(), "--model-tier") {
+		t.Errorf("error = %q, want to contain 'unknown value' and '--model-tier'", err.Error())
 	}
 }
 
@@ -1821,6 +1821,7 @@ func (a *filterTestAdapter) MCPCommandStyle() string                   { return 
 func (a *filterTestAdapter) MCPEnvKey() string                         { return "env" }
 func (a *filterTestAdapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
 func (a *filterTestAdapter) RulesFrontmatter() string                  { return "" }
+func (a *filterTestAdapter) RulesFileSizeCap() int                     { return 0 }
 
 func makeFilterAdapters(ids ...domain.AgentID) []domain.Adapter {
 	result := make([]domain.Adapter, 0, len(ids))
@@ -2070,8 +2071,8 @@ func TestRunInit_PresetFlag_InvalidReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown preset, got nil")
 	}
-	if !strings.Contains(err.Error(), "unknown preset") {
-		t.Errorf("error = %q, want to contain 'unknown preset'", err.Error())
+	if !strings.Contains(err.Error(), "unknown value") || !strings.Contains(err.Error(), "--preset") {
+		t.Errorf("error = %q, want to contain 'unknown value' and '--preset'", err.Error())
 	}
 }
 

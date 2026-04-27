@@ -26,6 +26,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/exitcode"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/governance"
 	"github.com/PedroMosquera/squadai/internal/managed"
@@ -93,7 +94,7 @@ func RunInit(args []string, stdout io.Writer) error {
 				modelTier = domain.ModelTier(val)
 				modelTierExplicit = true
 			default:
-				return fmt.Errorf("unknown model tier %q (balanced|performance|starter|manual)", val)
+				return exitcode.ErrUnknownValue("--model-tier", val, "balanced, performance, starter, manual")
 			}
 			continue
 		}
@@ -110,7 +111,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			case domain.PresetFullSquad, domain.PresetLean, domain.PresetCustom:
 				presetValue = val
 			default:
-				return fmt.Errorf("unknown preset %q (full-squad|lean|custom)", val)
+				return exitcode.ErrUnknownValue("--preset", val, "full-squad, lean, custom")
 			}
 			continue
 		}
@@ -202,7 +203,7 @@ func RunInit(args []string, stdout io.Writer) error {
 	}
 
 	if merge && force {
-		return fmt.Errorf("--merge and --force are mutually exclusive")
+		return exitcode.ErrFlagConflict("--merge and --force")
 	}
 
 	// Parse MCP selections from flag.
@@ -235,7 +236,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		case domain.MethodologyTDD, domain.MethodologySDD, domain.MethodologyConventional:
 			// valid
 		default:
-			return fmt.Errorf("unknown methodology %q; use tdd, sdd, or conventional", methodology)
+			return exitcode.ErrUnknownValue("--methodology", methodology, "tdd, sdd, conventional")
 		}
 	}
 
@@ -894,7 +895,9 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 	policy, err := config.LoadPolicy(projectDir)
 	if err != nil {
 		if errors.Is(err, domain.ErrConfigNotFound) {
-			return fmt.Errorf("no policy file found at %s", policyPath)
+			return exitcode.ErrPrecondition(
+				fmt.Sprintf("no policy file found at %s", policyPath),
+				"Run 'squadai init --with-policy' to create one.")
 		}
 		return fmt.Errorf("load policy: %w", err)
 	}
@@ -917,7 +920,7 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 		}
 		fmt.Fprintln(stdout, string(data))
 		if len(issues) > 0 {
-			return fmt.Errorf("policy validation failed with %d issue(s)", len(issues))
+			return exitcode.ErrPolicyValidation(len(issues))
 		}
 		return nil
 	}
@@ -931,7 +934,7 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 	for i, issue := range issues {
 		fmt.Fprintf(stdout, "  %d. %s\n", i+1, issue)
 	}
-	return fmt.Errorf("policy validation failed with %d issue(s)", len(issues))
+	return exitcode.ErrPolicyValidation(len(issues))
 }
 
 // RunPlan computes and displays the action plan.
@@ -1133,9 +1136,9 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	projectConfigPath := config.ProjectConfigPath(projectDir)
 	if _, statErr := os.Stat(projectConfigPath); os.IsNotExist(statErr) {
 		if !force {
-			fmt.Fprintln(stdout, "Error: No project.json found in current directory.")
-			fmt.Fprintln(stdout, "Run 'squadai init' to create one, or use --force to apply with defaults.")
-			return fmt.Errorf("no project.json found in current directory")
+			return exitcode.ErrPrecondition(
+				"no project.json found in current directory",
+				"Run 'squadai init' to create one, or use --force to apply with defaults.")
 		}
 		fmt.Fprintln(stdout, "Warning: No project.json found. Running with default config (--force).")
 	}
@@ -1165,7 +1168,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	p := planner.New(planner.Options{SetClaudeDefaultAgent: setClaudeDefaultAgent})
 	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
 	if err != nil {
-		return fmt.Errorf("plan: %w", err)
+		return exitcode.ErrPlanFailed(err)
 	}
 
 	if dryRun {
@@ -1300,7 +1303,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 		}
 		fmt.Fprintln(stdout, string(data))
 		if !report.Success {
-			return fmt.Errorf("apply completed with failures (rolled back, backup: %s)", report.BackupID)
+			return exitcode.ErrApplyFailed(fmt.Sprintf("rolled back, backup: %s — run 'squadai restore %s' if needed", report.BackupID, report.BackupID))
 		}
 		return nil
 	}
@@ -1329,7 +1332,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	if !report.Success {
 		fmt.Fprintf(stdout, "\nApply failed. All changes rolled back (backup: %s).\n", report.BackupID)
 		fmt.Fprintf(stdout, "Use 'squadai restore %s' to manually restore if needed.\n", report.BackupID)
-		return fmt.Errorf("apply completed with failures")
+		return exitcode.ErrApplyFailed(fmt.Sprintf("run 'squadai restore %s' to manually restore if needed", report.BackupID))
 	}
 
 	fmt.Fprintln(stdout, "\nApply complete. Use 'squadai verify' to check.")
@@ -1398,7 +1401,9 @@ func RunVerify(args []string, stdout io.Writer) error {
 		}
 		fmt.Fprintln(stdout, string(data))
 		if !report.AllPass {
-			return fmt.Errorf("verification failed")
+			return exitcode.New(exitcode.Config, "E-301",
+				"verification failed",
+				"Run 'squadai diff' to see what's out of sync, then 'squadai apply' to fix.")
 		}
 		return nil
 	}
@@ -1421,7 +1426,9 @@ func RunVerify(args []string, stdout io.Writer) error {
 	printVerifySummary(stdout, report.Results)
 
 	if !report.AllPass {
-		return fmt.Errorf("verification failed")
+		return exitcode.New(exitcode.Config, "E-301",
+			"verification failed",
+			"Run 'squadai diff' to see what's out of sync, then 'squadai apply' to fix.")
 	}
 
 	if strict {
@@ -1473,7 +1480,9 @@ func runStrictDriftCheck(projectDir string, stdout io.Writer, jsonOut bool) erro
 			fmt.Fprintf(stdout, "  [FAIL] %s — %s (%s)\n", r.Path, r.Detail, r.Kind)
 		}
 	}
-	return fmt.Errorf("drift check failed: %d file(s) have drifted", len(drifted))
+	return exitcode.New(exitcode.Drift, "E-401",
+		fmt.Sprintf("drift check failed: %d file(s) have drifted", len(drifted)),
+		"Run 'squadai apply' to restore managed files to their expected state.")
 }
 
 // printVerifyResult prints a single verification result line.
@@ -1744,7 +1753,7 @@ func RunRestore(args []string, stdout io.Writer) error {
 	}
 
 	if backupID == "" {
-		return fmt.Errorf("backup ID is required — usage: squadai restore <backup-id>")
+		return exitcode.ErrMissingArg("backup-id", "squadai restore <backup-id>")
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -1764,7 +1773,7 @@ func RunRestore(args []string, stdout io.Writer) error {
 
 	manifest, err := store.Get(backupID)
 	if err != nil {
-		return fmt.Errorf("load backup: %w", err)
+		return exitcode.ErrBackupNotFound(backupID)
 	}
 
 	if dryRun {
@@ -2073,7 +2082,7 @@ func RunBackupDelete(args []string, stdout io.Writer) error {
 	}
 
 	if id == "" {
-		return fmt.Errorf("backup ID is required — usage: squadai backup delete <id>")
+		return exitcode.ErrMissingArg("backup-id", "squadai backup delete <id>")
 	}
 
 	projectDir, err := os.Getwd()
@@ -2098,7 +2107,7 @@ func RunBackupDelete(args []string, stdout io.Writer) error {
 
 	manifest, err := store.Get(id)
 	if err != nil {
-		return fmt.Errorf("load backup: %w", err)
+		return exitcode.ErrBackupNotFound(id)
 	}
 
 	fileCount := len(manifest.AffectedFiles)
@@ -3406,14 +3415,21 @@ func RunAudit(args []string, stdout io.Writer) error {
 // RunInstallHooks installs a pre-commit Git hook that runs `squadai verify --strict`.
 // Idempotent: if the hook already contains the check, it is not duplicated.
 func RunInstallHooks(args []string, stdout io.Writer) error {
+	jsonOut := false
 	for _, arg := range args {
-		if arg == "-h" || arg == "--help" {
-			fmt.Fprintln(stdout, "Usage: squadai install-hooks")
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: squadai install-hooks [--json]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Install a Git pre-commit hook that runs `squadai verify --strict`.")
 			fmt.Fprintln(stdout, "Idempotent: calling twice does not duplicate the hook.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "The hook is written to .git/hooks/pre-commit and made executable.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output the result as JSON.")
 			return nil
 		}
 	}
@@ -3425,7 +3441,9 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 
 	hooksDir := filepath.Join(projectDir, ".git", "hooks")
 	if _, err := os.Stat(hooksDir); os.IsNotExist(err) {
-		return fmt.Errorf("no .git/hooks directory found — is this a Git repository?")
+		return exitcode.ErrPrecondition(
+			"no .git/hooks directory found",
+			"Run this command from the root of a Git repository.")
 	}
 
 	hookPath := filepath.Join(hooksDir, "pre-commit")
@@ -3433,6 +3451,13 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 
 	existing, readErr := os.ReadFile(hookPath)
 	if readErr == nil && strings.Contains(string(existing), squadaiLine) {
+		if jsonOut {
+			writeJSONResult(stdout, true, map[string]any{
+				"hook_path": hookPath,
+				"status":    "already_installed",
+			})
+			return nil
+		}
 		fmt.Fprintln(stdout, "pre-commit hook already contains squadai verify — no changes made.")
 		return nil
 	}
@@ -3449,6 +3474,14 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 		return fmt.Errorf("write pre-commit hook: %w", err)
 	}
 
+	if jsonOut {
+		writeJSONResult(stdout, true, map[string]any{
+			"hook_path": hookPath,
+			"status":    "installed",
+		})
+		return nil
+	}
+
 	fmt.Fprintf(stdout, "installed pre-commit hook → %s\n", hookPath)
 	return nil
 }
@@ -3458,17 +3491,38 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 // RunPluginsSync fetches the remote plugin registry and caches it locally at
 // .squadai/plugins-registry.json.
 func RunPluginsSync(args []string, stdout, stderr io.Writer) error {
+	jsonOut := false
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+		}
+	}
+
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintln(stdout, "syncing plugin registry from github.com/wshobson/agents …")
+	if !jsonOut {
+		fmt.Fprintln(stdout, "syncing plugin registry from github.com/wshobson/agents …")
+	}
 	reg, err := marketplace.Sync(projectDir)
 	if err != nil {
-		return fmt.Errorf("sync registry: %w", err)
+		if jsonOut {
+			writeJSONResult(stdout, false, map[string]any{"error": err.Error()})
+		}
+		return exitcode.Wrap(exitcode.Network, "E-701", "sync registry failed",
+			"Check your internet connection and try again.", err)
 	}
 
+	if jsonOut {
+		writeJSONResult(stdout, true, map[string]any{
+			"plugins":      len(reg.Plugins),
+			"registry_path": projectDir + "/.squadai/plugins-registry.json",
+			"fetched_at":   reg.FetchedAt,
+		})
+		return nil
+	}
 	fmt.Fprintf(stdout, "synced %d plugins → %s/.squadai/plugins-registry.json\n",
 		len(reg.Plugins), projectDir)
 	return nil
@@ -3527,13 +3581,21 @@ func RunPluginsList(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// RunPluginsAdd downloads and installs a plugin into .claude/agents/ and
-// .claude/skills/, then records the installed version in project.json.
+// RunPluginsAdd downloads and installs a plugin into the project's agent/skill/command
+// directories for all enabled adapters, then records the version in project.json.
 func RunPluginsAdd(args []string, stdout, stderr io.Writer) error {
-	if len(args) == 0 {
+	jsonOut := false
+	var pluginName string
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+		} else if pluginName == "" {
+			pluginName = a
+		}
+	}
+	if pluginName == "" {
 		return fmt.Errorf("usage: squadai plugins add <plugin-name>")
 	}
-	pluginName := args[0]
 
 	projectDir, err := os.Getwd()
 	if err != nil {
@@ -3542,24 +3604,31 @@ func RunPluginsAdd(args []string, stdout, stderr io.Writer) error {
 
 	reg, err := marketplace.Load(projectDir)
 	if err != nil {
-		if err == marketplace.ErrRegistryNotFound {
-			fmt.Fprintln(stdout, "registry not found — syncing first…")
+		if errors.Is(err, marketplace.ErrRegistryNotFound) {
+			if !jsonOut {
+				fmt.Fprintln(stdout, "registry not found — syncing first…")
+			}
 			reg, err = marketplace.Sync(projectDir)
 			if err != nil {
-				return fmt.Errorf("auto-sync registry: %w", err)
+				return exitcode.Wrap(exitcode.Network, "E-701",
+					"auto-sync registry failed", "Check your internet connection.", err)
 			}
 		} else {
 			return err
 		}
 	}
 
-	fmt.Fprintf(stdout, "installing plugin %q …\n", pluginName)
+	if !jsonOut {
+		fmt.Fprintf(stdout, "installing plugin %q …\n", pluginName)
+	}
 	plugin, err := marketplace.Install(projectDir, pluginName, reg)
 	if err != nil {
-		return fmt.Errorf("install plugin: %w", err)
+		if jsonOut {
+			writeJSONResult(stdout, false, map[string]any{"error": err.Error(), "plugin": pluginName})
+		}
+		return exitcode.Wrap(exitcode.NotFound, "E-501", "install plugin failed", "", err)
 	}
 
-	// Update project.json marketplace.plugins.
 	proj, loadErr := config.LoadProject(projectDir)
 	if loadErr != nil {
 		return fmt.Errorf("load project config: %w", loadErr)
@@ -3572,6 +3641,16 @@ func RunPluginsAdd(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("update project.json: %w", err)
 	}
 
+	if jsonOut {
+		writeJSONResult(stdout, true, map[string]any{
+			"plugin":   pluginName,
+			"version":  plugin.Version,
+			"agents":   plugin.Agents,
+			"skills":   plugin.Skills,
+			"commands": plugin.Commands,
+		})
+		return nil
+	}
 	fmt.Fprintf(stdout, "installed %q v%s\n", pluginName, plugin.Version)
 	if len(plugin.Agents) > 0 {
 		fmt.Fprintf(stdout, "  agents   : %s\n", strings.Join(plugin.Agents, ", "))
@@ -3587,10 +3666,18 @@ func RunPluginsAdd(args []string, stdout, stderr io.Writer) error {
 
 // RunPluginsRemove removes an installed plugin's files and updates project.json.
 func RunPluginsRemove(args []string, stdout io.Writer) error {
-	if len(args) == 0 {
+	jsonOut := false
+	var pluginName string
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+		} else if pluginName == "" {
+			pluginName = a
+		}
+	}
+	if pluginName == "" {
 		return fmt.Errorf("usage: squadai plugins remove <plugin-name>")
 	}
-	pluginName := args[0]
 
 	projectDir, err := os.Getwd()
 	if err != nil {
@@ -3602,12 +3689,16 @@ func RunPluginsRemove(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	fmt.Fprintf(stdout, "removing plugin %q …\n", pluginName)
+	if !jsonOut {
+		fmt.Fprintf(stdout, "removing plugin %q …\n", pluginName)
+	}
 	if err := marketplace.Remove(projectDir, pluginName, reg); err != nil {
-		return fmt.Errorf("remove plugin: %w", err)
+		if jsonOut {
+			writeJSONResult(stdout, false, map[string]any{"error": err.Error(), "plugin": pluginName})
+		}
+		return exitcode.Wrap(exitcode.NotFound, "E-501", "remove plugin failed", "", err)
 	}
 
-	// Remove the entry from project.json marketplace.plugins.
 	proj, loadErr := config.LoadProject(projectDir)
 	if loadErr != nil {
 		return fmt.Errorf("load project config: %w", loadErr)
@@ -3617,6 +3708,23 @@ func RunPluginsRemove(args []string, stdout io.Writer) error {
 		return fmt.Errorf("update project.json: %w", err)
 	}
 
+	if jsonOut {
+		writeJSONResult(stdout, true, map[string]any{"plugin": pluginName, "removed": true})
+		return nil
+	}
 	fmt.Fprintf(stdout, "removed %q\n", pluginName)
 	return nil
+}
+
+// writeJSONResult writes a uniform JSON envelope to stdout.
+// success=true → {"success":true, ...extra fields merged at top level}
+// success=false → {"success":false, ...extra fields merged at top level}
+func writeJSONResult(w io.Writer, success bool, extra map[string]any) {
+	out := make(map[string]any, len(extra)+1)
+	out["success"] = success
+	for k, v := range extra {
+		out[k] = v
+	}
+	data, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Fprintln(w, string(data))
 }

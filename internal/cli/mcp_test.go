@@ -42,6 +42,7 @@ func (a mcpTestAdapter) MCPCommandStyle() string                   { return "spl
 func (a mcpTestAdapter) MCPEnvKey() string                         { return "env" }
 func (a mcpTestAdapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
 func (a mcpTestAdapter) RulesFrontmatter() string                  { return "" }
+func (a mcpTestAdapter) RulesFileSizeCap() int                     { return 0 }
 
 // ─── DefaultMCPServers ───────────────────────────────────────────────────────
 

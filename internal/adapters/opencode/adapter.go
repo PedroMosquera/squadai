@@ -185,3 +185,6 @@ func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string { return def.Type
 
 // RulesFrontmatter returns empty string — OpenCode uses marker-based injection.
 func (a *Adapter) RulesFrontmatter() string { return "" }
+
+// RulesFileSizeCap returns 0 — OpenCode has no known rules file size limit.
+func (a *Adapter) RulesFileSizeCap() int { return 0 }

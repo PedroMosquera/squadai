@@ -177,6 +177,9 @@ func (a *Adapter) RulesFrontmatter() string {
 	return "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n\n"
 }
 
+// RulesFileSizeCap returns 0 — Cursor has no known rules file size limit.
+func (a *Adapter) RulesFileSizeCap() int { return 0 }
+
 // ConfigDir returns the root config directory for Cursor.
 // On Windows it is %APPDATA%\Cursor\User (falling back to homeDir\AppData\Roaming\Cursor\User).
 // On all other platforms it is ~/.cursor.

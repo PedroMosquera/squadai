@@ -187,6 +187,9 @@ func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string {
 // RulesFrontmatter returns empty string — VS Code Copilot uses YAML frontmatter in .instructions.md but not for rules.
 func (a *Adapter) RulesFrontmatter() string { return "" }
 
+// RulesFileSizeCap returns 0 — VS Code Copilot has no known rules file size limit.
+func (a *Adapter) RulesFileSizeCap() int { return 0 }
+
 // ConfigDir returns the root config directory for VS Code Copilot.
 // On macOS it is ~/Library/Application Support/Code/User.
 // On Linux it is ~/.config/Code/User.
