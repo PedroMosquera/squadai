@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -52,8 +53,19 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return nil
 
 	case "help", "--help", "-h":
+		for _, a := range args[1:] {
+			if a == "--json" {
+				return printUsageJSON(stdout)
+			}
+		}
 		printUsage(stdout)
 		return nil
+
+	case "schema":
+		return cli.RunSchema(args[1:], stdout)
+
+	case "context":
+		return cli.RunContext(args[1:], stdout)
 
 	case "update":
 		return cli.RunUpdate(args[1:], stdout, stderr)
@@ -213,6 +225,212 @@ Flags:
 `)
 }
 
+// ─── machine-readable command registry ───────────────────────────────────────
+
+// cmdFlag is a single flag entry in the machine-readable command registry.
+type cmdFlag struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Type        string `json:"type,omitempty"`
+	Default     string `json:"default,omitempty"`
+}
+
+// cmdEntry describes a single command or subcommand.
+type cmdEntry struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Flags       []cmdFlag   `json:"flags,omitempty"`
+	Subcommands []cmdEntry  `json:"subcommands,omitempty"`
+}
+
+// helpOutput is the top-level envelope for `squadai help --json`.
+type helpOutput struct {
+	Version  string     `json:"version"`
+	Commands []cmdEntry `json:"commands"`
+}
+
+func buildCommandRegistry() helpOutput {
+	return helpOutput{
+		Version: Version,
+		Commands: []cmdEntry{
+			{
+				Name:        "init",
+				Description: "Initialize project config (.squadai/project.json) and optional policy template.",
+				Flags: []cmdFlag{
+					{Name: "--methodology", Type: "string", Description: "Set development methodology (tdd, sdd, conventional)"},
+					{Name: "--mcp", Type: "csv", Description: "Comma-separated MCP server IDs to enable"},
+					{Name: "--plugins", Type: "csv", Description: "Comma-separated plugin IDs to install"},
+					{Name: "--model-tier", Type: "string", Description: "Model tier (balanced, performance, starter, manual)", Default: "balanced"},
+					{Name: "--agents", Type: "csv", Description: "Comma-separated adapter IDs to enable"},
+					{Name: "--preset", Type: "string", Description: "Setup preset (full-squad, lean, custom)"},
+					{Name: "--with-policy", Type: "bool", Description: "Also generate a policy.json template"},
+					{Name: "--force", Type: "bool", Description: "Overwrite existing config without merging"},
+					{Name: "--merge", Type: "bool", Description: "Merge with existing config instead of replacing"},
+					{Name: "--global", Type: "bool", Description: "Write to home directory instead of current project"},
+					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
+				},
+			},
+			{
+				Name:        "validate-policy",
+				Description: "Validate policy.json schema, lock/required consistency.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output validation result as JSON"},
+				},
+			},
+			{
+				Name:        "plan",
+				Description: "Compute the action plan without writing any files.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output plan as JSON"},
+				},
+			},
+			{
+				Name:        "diff",
+				Description: "Show what apply would change as unified diffs.",
+			},
+			{
+				Name:        "apply",
+				Description: "Execute plan with automatic backup and rollback safety.",
+				Flags: []cmdFlag{
+					{Name: "--dry-run", Type: "bool", Description: "Preview changes without writing files"},
+					{Name: "--force", Type: "bool", Description: "Apply even without project.json"},
+					{Name: "--json", Type: "bool", Description: "Output apply report as JSON"},
+					{Name: "--verbose", Type: "bool", Description: "Stream step events as they execute"},
+				},
+			},
+			{
+				Name:        "verify",
+				Description: "Print compliance and health report.",
+				Flags: []cmdFlag{
+					{Name: "--strict", Type: "bool", Description: "Also fail on drift since last apply"},
+					{Name: "--json", Type: "bool", Description: "Output verify report as JSON"},
+				},
+			},
+			{
+				Name:        "status",
+				Description: "Show project configuration summary.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output status as JSON"},
+				},
+			},
+			{
+				Name:        "doctor",
+				Description: "Run pre-flight diagnostics (environment, agents, config, MCP, filesystem, drift).",
+				Flags: []cmdFlag{
+					{Name: "--fix", Type: "bool", Description: "Attempt to auto-fix detected issues"},
+					{Name: "--json", Type: "bool", Description: "Output diagnostics as JSON"},
+				},
+			},
+			{
+				Name:        "watch",
+				Description: "Monitor managed files for drift and stream events to stdout.",
+				Flags: []cmdFlag{
+					{Name: "--daemon", Type: "bool", Description: "Run in background (detached mode)"},
+				},
+			},
+			{
+				Name:        "audit",
+				Description: "Render the governance audit log (.squadai/audit.log).",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output audit events as JSON"},
+					{Name: "--since", Type: "duration", Description: "Filter events newer than duration (e.g. 24h)"},
+					{Name: "--filter", Type: "string", Description: "Filter by event kind (e.g. drift)"},
+				},
+			},
+			{
+				Name:        "install-hooks",
+				Description: "Install a Git pre-commit hook that runs 'squadai verify --strict'.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
+				},
+			},
+			{
+				Name:        "plugins",
+				Description: "Manage plugins from the community marketplace.",
+				Subcommands: []cmdEntry{
+					{Name: "sync", Description: "Fetch the plugin registry from github.com/wshobson/agents.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+					{Name: "list", Description: "List available plugins (✓ = installed in this project).", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output list as JSON"}}},
+					{Name: "add", Description: "Download and install a plugin into .claude/agents/, skills/, and commands/.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+					{Name: "remove", Description: "Remove an installed plugin's files.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+				},
+			},
+			{
+				Name:        "backup",
+				Description: "Manage backup snapshots of managed files.",
+				Subcommands: []cmdEntry{
+					{Name: "create", Description: "Snapshot all managed files.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output backup manifest as JSON"}}},
+					{Name: "list", Description: "List all backup snapshots.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output list as JSON"}}},
+					{Name: "delete", Description: "Delete a specific backup snapshot by ID.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+					{Name: "prune", Description: "Remove old backups, keeping N most recent.", Flags: []cmdFlag{
+						{Name: "--keep", Type: "int", Description: "Number of backups to keep", Default: "10"},
+						{Name: "--json", Type: "bool", Description: "Output result as JSON"},
+					}},
+				},
+			},
+			{
+				Name:        "restore",
+				Description: "Restore managed files from a backup snapshot.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
+				},
+			},
+			{
+				Name:        "remove",
+				Description: "Remove all managed files from the project.",
+				Flags: []cmdFlag{
+					{Name: "--force", Type: "bool", Description: "Confirm removal without interactive prompt"},
+				},
+			},
+			{
+				Name:        "schema",
+				Description: "Export JSON Schema for SquadAI config files.",
+				Subcommands: []cmdEntry{
+					{Name: "export", Description: "Write JSON Schema files for project.json and policy.json to stdout or a directory.", Flags: []cmdFlag{
+						{Name: "--out", Type: "string", Description: "Output directory (default: stdout)"},
+						{Name: "--format", Type: "string", Description: "Output format: project, policy, or all (default: all)"},
+					}},
+				},
+			},
+			{
+				Name:        "context",
+				Description: "Dump SquadAI configuration as LLM-ready context.",
+				Flags: []cmdFlag{
+					{Name: "--format", Type: "string", Description: "Output format: prompt, json, or mcp (default: prompt)"},
+					{Name: "--adapter", Type: "string", Description: "Scope output to a specific adapter"},
+				},
+			},
+			{
+				Name:        "update",
+				Description: "Check for a newer version of SquadAI and optionally download it.",
+				Flags: []cmdFlag{
+					{Name: "--check", Type: "bool", Description: "Only check, do not download"},
+				},
+			},
+			{
+				Name:        "version",
+				Description: "Print the SquadAI version string.",
+			},
+			{
+				Name:        "help",
+				Description: "Show the help text for all commands.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output machine-readable command registry as JSON"},
+				},
+			},
+		},
+	}
+}
+
+func printUsageJSON(w io.Writer) error {
+	reg := buildCommandRegistry()
+	data, err := json.MarshalIndent(reg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal help registry: %w", err)
+	}
+	fmt.Fprintln(w, string(data))
+	return nil
+}
+
 func printUsage(w io.Writer) {
 	fmt.Fprintf(w, `SquadAI %s — Team-consistent AI setup with safe local customization.
 
@@ -241,12 +459,15 @@ Commands:
   backup prune       Remove old backups (keep N most recent)
   restore <id>       Restore from a backup
   remove             Remove all managed files (use --force to confirm)
+  schema export      Export JSON Schema for project.json / policy.json (VS Code validation)
+  context            Dump config as LLM-ready context (--format prompt|json|mcp)
   update             Check for updates and download (see 'squadai update --help')
   version            Print version
 
 Flags:
   --dry-run          Preview changes without applying (plan, apply)
   --json             Machine-readable JSON output (all commands)
+  --json (help)      Output machine-readable command registry
   -h, --help         Show this help
 
 `, Version)
