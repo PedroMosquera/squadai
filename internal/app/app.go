@@ -136,6 +136,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "install-commands":
 		return cli.RunInstallCommands(args[1:], stdout)
 
+	case "explain":
+		return cli.RunExplain(args[1:], stdout)
+
 	case "plugins":
 		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" || args[1] == "help" {
 			printPluginsUsage(stdout)
@@ -507,6 +510,7 @@ Commands:
   audit              Render the governance audit log (.squadai/audit.log)
   install-hooks      Install a Git pre-commit hook running 'squadai verify --strict'
   install-commands   Install SquadAI slash commands + squadai-manager agent to .claude/
+  explain <topic>    Explain a SquadAI concept (config, policy, adapters, error-codes, ...)
   plugins sync          Fetch plugin registry from github.com/wshobson/agents
   plugins list          List available plugins (✓ = installed in this project)
   plugins add <name>    Download and install a plugin into .claude/agents/, skills/, and commands/
