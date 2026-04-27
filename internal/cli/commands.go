@@ -3568,6 +3568,112 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 	return nil
 }
 
+// RunInstallCommands writes SquadAI slash commands to .claude/commands/ and
+// the squadai-manager agent to .claude/agents/. Idempotent.
+func RunInstallCommands(args []string, stdout io.Writer) error {
+	jsonOut := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOut = true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "Usage: squadai install-commands [--json]")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Install SquadAI slash commands into .claude/commands/ and the")
+			fmt.Fprintln(stdout, "squadai-manager agent into .claude/agents/.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Slash commands installed:")
+			fmt.Fprintln(stdout, "  /squadai-plan      — Preview planned changes")
+			fmt.Fprintln(stdout, "  /squadai-apply     — Apply configuration")
+			fmt.Fprintln(stdout, "  /squadai-verify    — Run compliance checks")
+			fmt.Fprintln(stdout, "  /squadai-status    — Show health overview")
+			fmt.Fprintln(stdout, "  /squadai-doctor    — Run diagnostics")
+			fmt.Fprintln(stdout, "  /squadai-context   — Dump config as LLM context")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Flags:")
+			fmt.Fprintln(stdout, "  --json  Output result as JSON.")
+			return nil
+		}
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	commandsDir := filepath.Join(projectDir, ".claude", "commands")
+	agentsDir := filepath.Join(projectDir, ".claude", "agents")
+
+	if err := os.MkdirAll(commandsDir, 0755); err != nil {
+		return exitcode.ErrPermission(commandsDir, err)
+	}
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		return exitcode.ErrPermission(agentsDir, err)
+	}
+
+	type fileResult struct {
+		Path    string `json:"path"`
+		Status  string `json:"status"`
+	}
+
+	var installed []fileResult
+
+	// Install slash commands.
+	commandAssets := []string{
+		"squadai-plan",
+		"squadai-apply",
+		"squadai-verify",
+		"squadai-status",
+		"squadai-doctor",
+		"squadai-context",
+	}
+	for _, name := range commandAssets {
+		content, err := assets.Read("commands/" + name + ".md")
+		if err != nil {
+			return fmt.Errorf("read asset %s: %w", name, err)
+		}
+		dest := filepath.Join(commandsDir, name+".md")
+		status := "installed"
+		if _, statErr := os.Stat(dest); statErr == nil {
+			status = "updated"
+		}
+		if err := os.WriteFile(dest, []byte(content+"\n"), 0644); err != nil {
+			return exitcode.ErrPermission(dest, err)
+		}
+		installed = append(installed, fileResult{Path: dest, Status: status})
+		if !jsonOut {
+			fmt.Fprintf(stdout, "  [%s] %s\n", status, dest)
+		}
+	}
+
+	// Install squadai-manager agent.
+	agentContent, err := assets.Read("agents/squadai-manager.md")
+	if err != nil {
+		return fmt.Errorf("read asset squadai-manager.md: %w", err)
+	}
+	agentDest := filepath.Join(agentsDir, "squadai-manager.md")
+	agentStatus := "installed"
+	if _, statErr := os.Stat(agentDest); statErr == nil {
+		agentStatus = "updated"
+	}
+	if err := os.WriteFile(agentDest, []byte(agentContent+"\n"), 0644); err != nil {
+		return exitcode.ErrPermission(agentDest, err)
+	}
+	installed = append(installed, fileResult{Path: agentDest, Status: agentStatus})
+	if !jsonOut {
+		fmt.Fprintf(stdout, "  [%s] %s\n", agentStatus, agentDest)
+	}
+
+	if jsonOut {
+		writeJSONResult(stdout, true, map[string]any{"installed": installed})
+		return nil
+	}
+
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "Installed %d slash command(s) and 1 agent.\n", len(commandAssets))
+	return nil
+}
+
 // ─── Plugins marketplace ──────────────────────────────────────────────────────
 
 // RunPluginsSync fetches the remote plugin registry and caches it locally at
