@@ -29,7 +29,7 @@ func RunMemoryCommand(args []string) error {
 		return RunMemoryStatus(args[1:])
 	default:
 		printMemoryUsage()
-		return nil
+		return fmt.Errorf("unknown memory subcommand %q", args[0])
 	}
 }
 
