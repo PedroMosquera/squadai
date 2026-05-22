@@ -39,6 +39,8 @@ const (
 	screenTeamStatus
 	screenInitMCP
 	screenInitPlugins
+	screenInitProjectMemory         // project-memory toggle
+	screenInitProjectMemoryScaffold // conditional: prompt to scaffold when path missing
 	screenInitModelTier
 	screenInitAdapters       // agent selection checkboxes
 	screenInitPreset         // setup preset radio (full-squad / lean / custom)
@@ -147,6 +149,11 @@ type Model struct {
 	agentSelections map[string]bool    // key=AgentID string, val=selected
 	setupPreset     domain.SetupPreset // "full-squad", "lean", "custom"
 
+	// Project memory wizard state.
+	projectMemoryEnabled    bool // whether to enable the memory scaffold
+	projectMemoryScaffold   bool // whether to scaffold the memory folder
+	projectMemoryPathExists bool // whether docs/memory/ already exists
+
 	// Skill browser state.
 	skillCat         skillCatalog
 	skillCatErr      error
@@ -194,13 +201,14 @@ type Model struct {
 // NewModel creates a TUI model with the given state.
 func NewModel(version string, mode domain.OperationalMode, adapters []domain.Adapter, homeDir string) Model {
 	return Model{
-		version:            version,
-		mode:               mode,
-		adapters:           adapters,
-		homeDir:            homeDir,
-		screen:             screenIntro,
-		modelTier:          domain.ModelTierBalanced,
-		permissionsEnabled: true, // security overlay is on by default
+		version:             version,
+		mode:                mode,
+		adapters:            adapters,
+		homeDir:             homeDir,
+		screen:              screenIntro,
+		modelTier:           domain.ModelTierBalanced,
+		permissionsEnabled:  true, // security overlay is on by default
+		projectMemoryEnabled: true, // memory scaffold is on by default
 	}
 }
 
@@ -549,7 +557,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pluginSelections = make(map[string]bool)
 				m.screen = screenInitPlugins
 			} else {
-				m.screen = screenInitInstallSummary
+				// Non-custom: skip plugins, go directly to project memory.
+				if _, err := os.Stat("docs/memory"); err == nil {
+					m.projectMemoryPathExists = true
+				} else {
+					m.projectMemoryPathExists = false
+				}
+				m.screen = screenInitProjectMemory
 			}
 			return m, nil
 		case "esc":
@@ -581,11 +595,53 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.initCursor = 0
-			m.screen = screenInitInstallSummary
+			// Check if docs/memory/ already exists before showing the scaffold prompt.
+			if _, err := os.Stat("docs/memory"); err == nil {
+				m.projectMemoryPathExists = true
+			} else {
+				m.projectMemoryPathExists = false
+			}
+			m.screen = screenInitProjectMemory
 			return m, nil
 		case "esc":
 			m.initCursor = 0
 			m.screen = screenInitMCP
+			return m, nil
+		}
+
+	case screenInitProjectMemory:
+		switch key {
+		case " ":
+			m.projectMemoryEnabled = !m.projectMemoryEnabled
+		case "enter":
+			if m.projectMemoryEnabled && !m.projectMemoryPathExists {
+				m.screen = screenInitProjectMemoryScaffold
+			} else {
+				m.screen = screenInitInstallSummary
+			}
+			return m, nil
+		case "esc":
+			m.initCursor = 0
+			if m.setupPreset == domain.PresetCustom {
+				m.screen = screenInitPlugins
+			} else {
+				m.screen = screenInitMCP
+			}
+			return m, nil
+		}
+
+	case screenInitProjectMemoryScaffold:
+		switch key {
+		case "y", "Y":
+			m.projectMemoryScaffold = true
+			m.screen = screenInitInstallSummary
+			return m, nil
+		case "n", "N":
+			m.projectMemoryScaffold = false
+			m.screen = screenInitInstallSummary
+			return m, nil
+		case "esc":
+			m.screen = screenInitProjectMemory
 			return m, nil
 		}
 
@@ -792,17 +848,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !m.permissionsEnabled {
 				args = append(args, "--no-permissions")
 			}
+			// Pass memory flag.
+			if !m.projectMemoryEnabled {
+				args = append(args, "--without-memory")
+			}
 			return m, func() tea.Msg {
 				var buf bytes.Buffer
 				err := cli.RunInit(args, &buf)
 				return commandResult{output: buf.String(), err: err}
 			}
 		case "esc":
-			if m.setupPreset == domain.PresetCustom {
-				m.screen = screenInitPlugins
-			} else {
-				m.screen = screenInitMCP
-			}
+			m.screen = screenInitProjectMemory
 			return m, nil
 		}
 
@@ -1065,6 +1121,10 @@ func (m Model) viewBody() string {
 		return m.viewInitMCP()
 	case screenInitPlugins:
 		return m.viewInitPlugins()
+	case screenInitProjectMemory:
+		return m.viewInitProjectMemory()
+	case screenInitProjectMemoryScaffold:
+		return m.viewInitProjectMemoryScaffold()
 	case screenInitModelTier:
 		return m.viewInitModelTier()
 	case screenInitAdapters:

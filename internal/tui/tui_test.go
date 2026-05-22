@@ -513,7 +513,7 @@ func TestInitMCP_EnterGoesToPlugins_WhenCustom(t *testing.T) {
 	}
 }
 
-func TestInitMCP_EnterGoesToInstallSummary_WhenNonCustom(t *testing.T) {
+func TestInitMCP_EnterGoesToProjectMemory_WhenNonCustom(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
 	m.setupPreset = domain.PresetFullSquad
@@ -522,8 +522,8 @@ func TestInitMCP_EnterGoesToInstallSummary_WhenNonCustom(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitInstallSummary {
-		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter (non-custom)", model.screen, screenInitInstallSummary)
+	if model.screen != screenInitProjectMemory {
+		t.Errorf("screen = %d, want screenInitProjectMemory (%d) after enter (non-custom)", model.screen, screenInitProjectMemory)
 	}
 }
 
@@ -557,16 +557,17 @@ func TestInitMCP_EscGoesToAdapters_WhenNonCustom(t *testing.T) {
 
 // ─── Init Plugins Screen ──────────────────────────────────────────────────────
 
-func TestInitPlugins_EnterGoesToInstallSummary(t *testing.T) {
+func TestInitPlugins_EnterGoesToProjectMemory(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPlugins
+	m.setupPreset = domain.PresetCustom
 	m.pluginSelections = make(map[string]bool)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitInstallSummary {
-		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter", model.screen, screenInitInstallSummary)
+	if model.screen != screenInitProjectMemory {
+		t.Errorf("screen = %d, want screenInitProjectMemory (%d) after enter on plugins", model.screen, screenInitProjectMemory)
 	}
 }
 
@@ -1384,16 +1385,17 @@ func TestInitAdapters_ScreenExists(t *testing.T) {
 	}
 }
 
-func TestInitPlugins_Enter_GoesToInstallSummary(t *testing.T) {
+func TestInitPlugins_Enter_GoesToProjectMemory(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPlugins
+	m.setupPreset = domain.PresetCustom
 	m.pluginSelections = make(map[string]bool)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
 
-	if model.screen != screenInitInstallSummary {
-		t.Errorf("screen = %d, want screenInitInstallSummary (%d) after enter on plugins", model.screen, screenInitInstallSummary)
+	if model.screen != screenInitProjectMemory {
+		t.Errorf("screen = %d, want screenInitProjectMemory (%d) after enter on plugins", model.screen, screenInitProjectMemory)
 	}
 }
 
@@ -1720,29 +1722,15 @@ func TestInstallSummary_Enter_GoesToApplyPrompt(t *testing.T) {
 	}
 }
 
-func TestInstallSummary_Esc_GoesToPlugins_WhenCustom(t *testing.T) {
+func TestInstallSummary_Esc_GoesToProjectMemory(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitInstallSummary
-	m.setupPreset = domain.PresetCustom
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenInitPlugins {
-		t.Errorf("screen = %d, want screenInitPlugins (%d) after esc on install summary (custom)", model.screen, screenInitPlugins)
-	}
-}
-
-func TestInstallSummary_Esc_GoesToMCP_WhenNonCustom(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
-	m.screen = screenInitInstallSummary
-	m.setupPreset = domain.PresetFullSquad
-
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model := updated.(Model)
-
-	if model.screen != screenInitMCP {
-		t.Errorf("screen = %d, want screenInitMCP (%d) after esc on install summary (non-custom)", model.screen, screenInitMCP)
+	if model.screen != screenInitProjectMemory {
+		t.Errorf("screen = %d, want screenInitProjectMemory (%d) after esc on install summary", model.screen, screenInitProjectMemory)
 	}
 }
 
