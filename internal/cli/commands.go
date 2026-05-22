@@ -961,14 +961,17 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 func RunPlan(args []string, stdout io.Writer) error {
 	dryRun := false
 	jsonOut := false
+	verbose := false
 	for _, arg := range args {
 		switch arg {
 		case "--dry-run":
 			dryRun = true
 		case "--json":
 			jsonOut = true
+		case "--verbose", "-v":
+			verbose = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai plan [--dry-run] [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai plan [--dry-run] [--json] [--verbose]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Compute the set of actions needed to bring all detected agents into the desired")
 			fmt.Fprintln(stdout, "state described by .squadai/project.json. Covers all 9 components (memory,")
@@ -978,10 +981,12 @@ func RunPlan(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --dry-run  Accepted for consistency with apply; plan is inherently read-only.")
 			fmt.Fprintln(stdout, "  --json     Output the planned actions as a JSON array.")
+			fmt.Fprintln(stdout, "  --verbose  Show each action individually with its target path.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai plan")
 			fmt.Fprintln(stdout, "  squadai plan --json")
+			fmt.Fprintln(stdout, "  squadai plan --verbose")
 			return nil
 		}
 	}
@@ -1036,9 +1041,7 @@ func RunPlan(args []string, stdout io.Writer) error {
 	}
 
 	fmt.Fprintf(stdout, "Planned actions (%d):\n", len(actions))
-	for _, a := range actions {
-		fmt.Fprintf(stdout, "  %-8s %-40s %s\n", a.Action, a.Description, a.TargetPath)
-	}
+	writePlannedActions(stdout, actions, verbose)
 
 	fmt.Fprintln(stdout, "\nUse 'squadai apply' to execute.")
 	return nil
