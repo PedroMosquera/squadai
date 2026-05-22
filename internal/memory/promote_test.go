@@ -58,10 +58,3 @@ func TestPromote(t *testing.T) {
 		t.Errorf("promoted path %q does not contain category", newRel)
 	}
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
