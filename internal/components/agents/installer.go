@@ -20,6 +20,11 @@ const refinementSectionID = "refinement"
 const memorySectionID = "memory-protocol"
 const refinementPlaceholder = "<!-- empty until /squadai-init populates -->"
 
+// memoryProtocolSubagentStub is the short memory-protocol block injected into
+// subagent files. Subagents only need the two daily-use commands; the full
+// protocol (librarian, promote, etc.) lives in the orchestrator.
+const memoryProtocolSubagentStub = "## Project Memory Protocol\n\nBefore starting work, search memory: `/memory-search <query>`.\nAfter significant work, capture decisions: `/memory-add <note>`."
+
 // Options controls optional behavior of the agents installer.
 type Options struct {
 	// SetClaudeDefaultAgent writes .claude/settings.json with the orchestrator as
@@ -494,8 +499,12 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 	}
 	translated = marker.InjectSection(translated, refinementSectionID, refinementContent)
 
-	// Inject the per-adapter memory-protocol block (idempotent).
-	translated = injectMemoryProtocol(translated, action.Agent)
+	// Inject memory protocol: full block for orchestrator, short stub for subagents.
+	if roleName == "orchestrator" {
+		translated = injectMemoryProtocol(translated, action.Agent)
+	} else {
+		translated = injectMemoryProtocolStub(translated, action.Agent)
+	}
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(translated), 0644); err != nil {
 		return fmt.Errorf("write team agent %s: %w", roleName, err)
@@ -1035,6 +1044,15 @@ func injectMemoryProtocol(content string, agentID domain.AgentID) string {
 		return content
 	}
 	return marker.InjectSection(content, memorySectionID, proto)
+}
+
+// injectMemoryProtocolStub injects the short subagent memory-protocol stub.
+// Returns content unchanged for adapters that have no memory protocol asset.
+func injectMemoryProtocolStub(content string, agentID domain.AgentID) string {
+	if memoryProtocolAsset(agentID) == "" {
+		return content
+	}
+	return marker.InjectSection(content, memorySectionID, memoryProtocolSubagentStub)
 }
 
 func sortedKeys(m map[string]domain.AgentDef) []string {

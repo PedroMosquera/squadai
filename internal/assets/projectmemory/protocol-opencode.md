@@ -4,13 +4,13 @@
 and incidents. Sub-agents should use it as follows:
 
 **Before any research, planning, or implementation task:**
-Delegate to the `librarian` sub-agent to search memory for relevant prior
-decisions, ADRs, runbooks, or context. Pass findings as context to other agents.
+Delegate to @librarian to search memory for relevant prior decisions, ADRs,
+runbooks, or context. Pass findings as context to other agents.
 
 **After any non-trivial task:**
-Delegate to the `librarian` again with a summary of decisions made, asking it
-to propose new memory entries. The librarian writes drafts to
-`docs/memory/_inbox/`; the user runs `squadai memory promote` to accept them.
+Delegate to @librarian again with a summary of decisions made, asking it to
+propose new memory entries. @librarian writes drafts to `docs/memory/_inbox/`;
+the user runs `squadai memory promote` to accept them.
 
 **Available slash commands:**
 - `/memory-search <query>` — search and return ranked snippets

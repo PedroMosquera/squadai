@@ -991,3 +991,65 @@ func TestOrchestratorTemplate_ContainsLanguage(t *testing.T) {
 		t.Error("{{.Language}} should be rendered, not left as raw template syntax")
 	}
 }
+
+// ─── Memory-protocol dedup ──────────────────────────────────────────────────
+
+func TestApplyTeamNative_OrchestratorHasFullMemoryProtocol(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	cfg := tddTeamConfig()
+	inst := New(nil, cfg, project)
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+	}
+
+	data, err := os.ReadFile(filepath.Join(project, ".opencode", "agents", "orchestrator.md"))
+	if err != nil {
+		t.Fatalf("read orchestrator: %v", err)
+	}
+	content := string(data)
+	// Full protocol includes @librarian and /memory-promote references.
+	if !strings.Contains(content, "@librarian") {
+		t.Error("orchestrator should contain full memory protocol with @librarian reference")
+	}
+	if !strings.Contains(content, "/memory-promote") {
+		t.Error("orchestrator should contain full memory protocol with /memory-promote reference")
+	}
+}
+
+func TestApplyTeamNative_SubagentHasMemoryStub_NotFullProtocol(t *testing.T) {
+	project := t.TempDir()
+	adapter := opencode.New()
+	cfg := tddTeamConfig()
+	inst := New(nil, cfg, project)
+
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+	}
+
+	data, err := os.ReadFile(filepath.Join(project, ".opencode", "agents", "implementer.md"))
+	if err != nil {
+		t.Fatalf("read implementer: %v", err)
+	}
+	content := string(data)
+	// Subagent gets stub: has /memory-search but NOT @librarian or /memory-promote.
+	if !strings.Contains(content, "/memory-search") {
+		t.Error("subagent stub should contain /memory-search command")
+	}
+	if strings.Contains(content, "@librarian") {
+		t.Error("subagent should NOT contain full protocol @librarian reference")
+	}
+}
