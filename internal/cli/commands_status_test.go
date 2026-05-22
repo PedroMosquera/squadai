@@ -45,8 +45,8 @@ func TestRunStatus_RefinementSection(t *testing.T) {
 	if !strings.Contains(out, "Refinement") {
 		t.Errorf("status output should include a 'Refinement' section, got:\n%s", out)
 	}
-	if !strings.Contains(out, "never run") {
-		t.Errorf("status output should say 'never run' when .squad-refined is absent, got:\n%s", out)
+	if !strings.Contains(out, "never-refined") {
+		t.Errorf("status output should say 'never-refined' when .squad-refined is absent, got:\n%s", out)
 	}
 }
 

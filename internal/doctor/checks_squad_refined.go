@@ -4,13 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/squadrefine"
 )
-
-const catSquadRefined = "Project Configuration"
 
 // checkSquadRefined inspects the .squadai/.squad-refined state file and
 // reports whether the squad refinement is fresh, stale, or has never been run.
@@ -21,18 +20,18 @@ func (d *Doctor) checkSquadRefined(_ context.Context) CheckResult {
 	// Only meaningful when the project has been initialized (project.json exists).
 	projectConfigPath := filepath.Join(d.projectDir, config.ProjectConfigDir, "project.json")
 	if _, err := os.Stat(projectConfigPath); os.IsNotExist(err) {
-		return skip(catSquadRefined, "squad-refined",
+		return skip(catConfig, "squad-refined",
 			"skipped — project not initialized (run 'squadai init' first)")
 	}
 
 	state, exists, err := squadrefine.Load(d.projectDir)
 	if err != nil {
-		return warn(catSquadRefined, "squad-refined",
+		return warn(catConfig, "squad-refined",
 			"could not read .squad-refined: "+err.Error(), "", "")
 	}
 
 	if !exists {
-		return warn(catSquadRefined, "squad-refined",
+		return warn(catConfig, "squad-refined",
 			".squadai/.squad-refined absent — /squadai-init has never been run",
 			"",
 			"Run /squadai-init in your AI agent to tune the squad for this codebase")
@@ -42,12 +41,12 @@ func (d *Doctor) checkSquadRefined(_ context.Context) CheckResult {
 	reasons := squadrefine.DriftReasons(state, signals)
 
 	if len(reasons) == 0 {
-		return pass(catSquadRefined, "squad-refined",
+		return pass(catConfig, "squad-refined",
 			".squad-refined is fresh (no drift since last /squadai-init)",
 			"last_run_at="+state.LastRunAt)
 	}
 
-	return warn(catSquadRefined, "squad-refined",
+	return warn(catConfig, "squad-refined",
 		".squad-refined is stale — drift detected: "+strings.Join(reasons, ", "),
 		"reasons: "+strings.Join(reasons, ", "),
 		"Re-run /squadai-init to refresh agent context")
@@ -121,11 +120,7 @@ func hashTopLevelDirsDoctor(projectDir string) (string, bool) {
 		return "", false
 	}
 	// Sort for determinism.
-	for i := 1; i < len(names); i++ {
-		for j := i; j > 0 && names[j] < names[j-1]; j-- {
-			names[j], names[j-1] = names[j-1], names[j]
-		}
-	}
+	sort.Strings(names)
 	return squadrefine.HashContent([]byte(strings.Join(names, "\n"))), true
 }
 
