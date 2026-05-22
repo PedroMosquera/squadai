@@ -160,6 +160,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "_hook":
 		return cli.RunHookCommand(args[1:])
 
+	case "memory":
+		return cli.RunMemoryCommand(args[1:])
+
 	default:
 		return fmt.Errorf("unknown command %q — run 'squadai help' for available commands", args[0])
 	}
