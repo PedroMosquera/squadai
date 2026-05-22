@@ -157,6 +157,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("unknown plugins subcommand %q", args[1])
 		}
 
+	case "_hook":
+		return cli.RunHookCommand(args[1:])
+
 	default:
 		return fmt.Errorf("unknown command %q — run 'squadai help' for available commands", args[0])
 	}
