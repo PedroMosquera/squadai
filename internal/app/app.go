@@ -287,6 +287,12 @@ func buildMCPRunners(stdout, stderr io.Writer) map[string]mcpserver.ToolRunner {
 		"squad_init_status": func(args []string, w io.Writer) error {
 			return cli.RunSquadInitStatus(args, w)
 		},
+		"memory_search": func(args []string, w io.Writer) error {
+			return cli.RunMemorySearchTool(args, w)
+		},
+		"memory_add": func(args []string, w io.Writer) error {
+			return cli.RunMemoryAddTool(args, w)
+		},
 	}
 }
 
