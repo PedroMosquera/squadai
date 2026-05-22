@@ -175,3 +175,17 @@ Delegates to the same command handlers used by CLI.
 3. **Atomic writes everywhere** — temp file + rename via `fileutil.WriteAtomic`
 4. **Idempotency by default** — planner returns `ActionSkip` when state matches; writer skips when bytes match
 5. **Fail loudly** — errors and warnings are always surfaced, never silently ignored
+
+---
+
+## Planned subsystems (upcoming phases)
+
+### Squad Refinement (`/squadai-init`)
+An in-agent slash command that reads the repository and refines installed agent/skill/command
+templates per-codebase. State tracked in `.squadai/.squad-refined` (JSON). The `squadrefine`
+package (planned: `internal/squadrefine/`) handles drift detection and nudge throttling.
+
+### Project Memory
+An indexed `docs/memory/` tree with `_inbox/`, `decisions/`, `learnings/`, `incidents/` buckets.
+CLI: `squadai memory add|search|promote|reindex|status`. Librarian agent searches memory before
+planning. Per-adapter protocol injection (`<!-- squadai:memory-protocol -->` marker blocks).
