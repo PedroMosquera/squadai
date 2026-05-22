@@ -17,6 +17,7 @@ import (
 
 const teamSectionID = "team"
 const refinementSectionID = "refinement"
+const memorySectionID = "memory-protocol"
 const refinementPlaceholder = "<!-- empty until /squadai-init populates -->"
 
 // Options controls optional behavior of the agents installer.
@@ -265,12 +266,14 @@ func (i *Installer) planNativeAgentFile(adapter domain.Adapter, agentsDir, roleN
 		return domain.PlannedAction{}, fmt.Errorf("read team agent %s: %w", roleName, err)
 	}
 
-	// Strip the refinement block from the existing file before comparing so that
-	// /squadai-init content (or the placeholder) does not trigger a spurious update.
-	// Trim trailing newlines from both sides so that the blank line InjectSection
-	// inserts before the refinement block does not cause a spurious mismatch.
-	existingWithoutRefinement := strings.TrimRight(
-		marker.InjectSection(string(existing), refinementSectionID, ""), "\n")
+	// Strip the refinement and memory-protocol blocks from the existing file before
+	// comparing so that /squadai-init content and the injected memory-protocol section
+	// do not trigger spurious updates on re-plan.
+	// Trim trailing newlines from both sides so that blank lines inserted by
+	// InjectSection before each block do not cause a spurious mismatch.
+	stripped := marker.InjectSection(string(existing), refinementSectionID, "")
+	stripped = marker.InjectSection(stripped, memorySectionID, "")
+	existingWithoutRefinement := strings.TrimRight(stripped, "\n")
 
 	if existingWithoutRefinement == strings.TrimRight(content, "\n") {
 		return domain.PlannedAction{
@@ -491,6 +494,9 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 	}
 	translated = marker.InjectSection(translated, refinementSectionID, refinementContent)
 
+	// Inject the per-adapter memory-protocol block (idempotent).
+	translated = injectMemoryProtocol(translated, action.Agent)
+
 	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(translated), 0644); err != nil {
 		return fmt.Errorf("write team agent %s: %w", roleName, err)
 	}
@@ -539,6 +545,9 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 		refinementContent = ex
 	}
 	updated = marker.InjectSection(updated, refinementSectionID, refinementContent)
+
+	// Inject the per-adapter memory-protocol block (idempotent).
+	updated = injectMemoryProtocol(updated, action.Agent)
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644); err != nil {
 		return fmt.Errorf("write rules file: %w", err)
@@ -737,12 +746,14 @@ func verifyFileContent(path, expected, checkName string) domain.VerifyResult {
 			Message: fmt.Sprintf("file not found: %s", path),
 		}
 	}
-	// Strip the refinement block from disk content before comparing so that
-	// /squadai-init output does not cause a spurious "content does not match" failure.
-	// Trim trailing newlines from both sides for consistent comparison (InjectSection
-	// adds a blank line before the refinement block on append).
-	diskWithoutRefinement := strings.TrimRight(
-		marker.InjectSection(string(data), refinementSectionID, ""), "\n")
+	// Strip both the refinement and memory-protocol blocks from disk content before
+	// comparing so that /squadai-init output and the injected memory-protocol section
+	// do not cause spurious "content does not match" failures.
+	// Trim trailing newlines for consistent comparison (InjectSection adds a blank
+	// line before each injected block on append).
+	stripped := marker.InjectSection(string(data), refinementSectionID, "")
+	stripped = marker.InjectSection(stripped, memorySectionID, "")
+	diskWithoutRefinement := strings.TrimRight(stripped, "\n")
 	if diskWithoutRefinement == strings.TrimRight(expected, "\n") {
 		return domain.VerifyResult{
 			Check:  fmt.Sprintf("%s-current", checkName),
@@ -989,6 +1000,41 @@ func stripClaudeOnlyFields(content string) string {
 
 	rebuilt := sep + strings.Join(kept, "\n") + sep + body
 	return rebuilt
+}
+
+// memoryProtocolAsset returns the path of the per-adapter memory-protocol asset
+// embedded in internal/assets/projectmemory/. Returns an empty string for adapters
+// that have no dedicated protocol file (e.g. Cursor falls back to opencode).
+func memoryProtocolAsset(agentID domain.AgentID) string {
+	switch agentID {
+	case domain.AgentClaudeCode:
+		return "projectmemory/protocol-claude.md"
+	case domain.AgentOpenCode, domain.AgentCursor:
+		return "projectmemory/protocol-opencode.md"
+	case domain.AgentVSCodeCopilot:
+		return "projectmemory/protocol-vscode.md"
+	case domain.AgentWindsurf:
+		return "projectmemory/protocol-windsurf.md"
+	default:
+		return ""
+	}
+}
+
+// injectMemoryProtocol injects the memory-protocol block into content using the
+// marker package. If no asset exists for the given adapter the content is
+// returned unchanged. Injection is idempotent — InjectSection handles that.
+func injectMemoryProtocol(content string, agentID domain.AgentID) string {
+	assetPath := memoryProtocolAsset(agentID)
+	if assetPath == "" {
+		return content
+	}
+	proto, err := assets.Read(assetPath)
+	if err != nil {
+		// Asset missing at runtime — skip silently so a missing file doesn't
+		// break apply for unrelated adapters.
+		return content
+	}
+	return marker.InjectSection(content, memorySectionID, proto)
 }
 
 func sortedKeys(m map[string]domain.AgentDef) []string {
