@@ -14,12 +14,13 @@ import (
 const catConfig = "Project Configuration"
 
 // runProjectConfig checks all configuration files.
-func (d *Doctor) runProjectConfig(_ context.Context) []CheckResult {
+func (d *Doctor) runProjectConfig(ctx context.Context) []CheckResult {
 	return []CheckResult{
 		d.checkProjectConfig(),
 		d.checkPolicyConfig(),
 		d.checkUserConfig(),
 		d.checkStandards(),
+		d.checkSquadRefined(ctx),
 	}
 }
 

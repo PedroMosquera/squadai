@@ -35,6 +35,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/model"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
+	"github.com/PedroMosquera/squadai/internal/squadrefine"
 	"github.com/PedroMosquera/squadai/internal/state"
 	"github.com/PedroMosquera/squadai/internal/verify"
 )
@@ -1967,6 +1968,29 @@ func RunStatus(args []string, stdout io.Writer) error {
 		lastManifest = &manifests[0]
 	}
 
+	// Compute squad refinement status (skip when project not initialized).
+	type refinementInfo struct {
+		Status    string   `json:"status"`
+		Reasons   []string `json:"reasons"`
+		LastRunAt string   `json:"last_run_at,omitempty"`
+	}
+	var refInfo *refinementInfo
+	projectConfigPath := config.ProjectConfigPath(projectDir)
+	if _, statErr := os.Stat(projectConfigPath); statErr == nil {
+		refState, refExists, _ := squadrefine.Load(projectDir)
+		if !refExists {
+			refInfo = &refinementInfo{Status: "never run", Reasons: []string{}}
+		} else {
+			signals := sampleDriftSignals(projectDir)
+			reasons := squadrefine.DriftReasons(refState, signals)
+			if len(reasons) == 0 {
+				refInfo = &refinementInfo{Status: "fresh", Reasons: []string{}, LastRunAt: refState.LastRunAt}
+			} else {
+				refInfo = &refinementInfo{Status: "stale", Reasons: reasons, LastRunAt: refState.LastRunAt}
+			}
+		}
+	}
+
 	if jsonOut {
 		type adapterStatus struct {
 			ID         string `json:"id"`
@@ -1986,6 +2010,11 @@ func RunStatus(args []string, stdout io.Writer) error {
 			TotalChecks   int  `json:"total_checks"`
 			FailingChecks int  `json:"failing_checks"`
 		}
+		type refinementJSON struct {
+			Status    string   `json:"status"`
+			Reasons   []string `json:"reasons"`
+			LastRunAt string   `json:"last_run_at,omitempty"`
+		}
 		type statusResult struct {
 			ProjectDir  string            `json:"project_dir"`
 			Language    string            `json:"language,omitempty"`
@@ -1996,6 +2025,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			MCPServers  []string          `json:"mcp_servers"`
 			LastBackup  *backupInfo       `json:"last_backup,omitempty"`
 			Health      *healthSummary    `json:"health,omitempty"`
+			Refinement  *refinementJSON   `json:"refinement,omitempty"`
 		}
 
 		adapterList := make([]adapterStatus, 0, len(adapters))
@@ -2038,6 +2068,14 @@ func RunStatus(args []string, stdout io.Writer) error {
 			}
 		}
 
+		var refJSON *refinementJSON
+		if refInfo != nil {
+			refJSON = &refinementJSON{
+				Status:    refInfo.Status,
+				Reasons:   refInfo.Reasons,
+				LastRunAt: refInfo.LastRunAt,
+			}
+		}
 		result := statusResult{
 			ProjectDir:  projectDir,
 			Language:    mergedCfg.Meta.Language,
@@ -2048,6 +2086,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			MCPServers:  mcpNames,
 			LastBackup:  lastBackupJSON,
 			Health:      health,
+			Refinement:  refJSON,
 		}
 		data, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
@@ -2132,6 +2171,69 @@ func RunStatus(args []string, stdout io.Writer) error {
 		}
 	}
 
+	// Refinement section.
+	if refInfo != nil {
+		fmt.Fprintln(stdout)
+		switch refInfo.Status {
+		case "fresh":
+			fmt.Fprintln(stdout, "Refinement: fresh")
+		case "stale":
+			fmt.Fprintf(stdout, "Refinement: stale: %s\n", strings.Join(refInfo.Reasons, ", "))
+		default:
+			fmt.Fprintln(stdout, "Refinement: never run")
+		}
+	}
+
+	return nil
+}
+
+// RunSquadInitStatus returns the current squad refinement status as JSON.
+// It is used by the squad_init_status MCP tool and reads from the cwd.
+func RunSquadInitStatus(_ []string, stdout io.Writer) error {
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	type result struct {
+		Status    string   `json:"status"`
+		Reasons   []string `json:"reasons"`
+		LastRunAt string   `json:"last_run_at,omitempty"`
+	}
+
+	// When project.json does not exist, return not-initialized status.
+	projectConfigPath := config.ProjectConfigPath(projectDir)
+	if _, statErr := os.Stat(projectConfigPath); os.IsNotExist(statErr) {
+		r := result{Status: "not-initialized", Reasons: []string{}}
+		data, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	refState, exists, loadErr := squadrefine.Load(projectDir)
+	if loadErr != nil {
+		return fmt.Errorf("load squad-refined state: %w", loadErr)
+	}
+
+	if !exists {
+		r := result{Status: "never-refined", Reasons: []string{}}
+		data, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	signals := sampleDriftSignals(projectDir)
+	reasons := squadrefine.DriftReasons(refState, signals)
+	if len(reasons) == 0 {
+		r := result{Status: "fresh", Reasons: []string{}, LastRunAt: refState.LastRunAt}
+		data, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return nil
+	}
+
+	r := result{Status: "stale", Reasons: reasons, LastRunAt: refState.LastRunAt}
+	data, _ := json.MarshalIndent(r, "", "  ")
+	fmt.Fprintln(stdout, string(data))
 	return nil
 }
 
@@ -3592,6 +3694,7 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  /squadai-status    — Show health overview")
 			fmt.Fprintln(stdout, "  /squadai-doctor    — Run diagnostics")
 			fmt.Fprintln(stdout, "  /squadai-context   — Dump config as LLM context")
+			fmt.Fprintln(stdout, "  /squadai-init      — Tune agent roles for this codebase")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output result as JSON.")
@@ -3629,6 +3732,7 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 		"squadai-status",
 		"squadai-doctor",
 		"squadai-context",
+		"squadai-init",
 	}
 	for _, name := range commandAssets {
 		content, err := assets.Read("commands/" + name + ".md")
