@@ -1979,7 +1979,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 	if _, statErr := os.Stat(projectConfigPath); statErr == nil {
 		refState, refExists, _ := squadrefine.Load(projectDir)
 		if !refExists {
-			refInfo = &refinementInfo{Status: "never run", Reasons: []string{}}
+			refInfo = &refinementInfo{Status: "never-refined", Reasons: []string{}}
 		} else {
 			signals := sampleDriftSignals(projectDir)
 			reasons := squadrefine.DriftReasons(refState, signals)
@@ -2180,7 +2180,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 		case "stale":
 			fmt.Fprintf(stdout, "Refinement: stale: %s\n", strings.Join(refInfo.Reasons, ", "))
 		default:
-			fmt.Fprintln(stdout, "Refinement: never run")
+			fmt.Fprintln(stdout, "Refinement: never-refined")
 		}
 	}
 
