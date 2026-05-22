@@ -60,7 +60,11 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 				if a.TargetPath == "" || a.Action == domain.ActionDelete {
 					continue
 				}
-				pathToCategory[a.TargetPath] = string(a.Component)
+				cat := string(a.Component)
+				if cat == "" {
+					cat = "other"
+				}
+				pathToCategory[a.TargetPath] = cat
 			}
 		}
 	}
