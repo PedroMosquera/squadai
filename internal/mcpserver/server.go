@@ -341,6 +341,20 @@ func buildToolDefs() []toolDef {
 			Description: "Returns the current squad refinement status — whether /squadai-init has been run, whether the refinement is fresh or stale, and the drift reasons if stale.",
 			InputSchema: schema(nil, map[string]any{}),
 		},
+		{
+			Name:        "memory_search",
+			Description: "Search the project memory index for notes matching a query.",
+			InputSchema: schema([]string{"query"}, map[string]any{
+				"query": strProp("Search query"),
+			}),
+		},
+		{
+			Name:        "memory_add",
+			Description: "Add a note to the project memory inbox.",
+			InputSchema: schema([]string{"note"}, map[string]any{
+				"note": strProp("Note text to save"),
+			}),
+		},
 	}
 }
 

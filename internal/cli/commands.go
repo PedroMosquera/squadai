@@ -32,6 +32,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/marketplace"
+	"github.com/PedroMosquera/squadai/internal/memory"
 	"github.com/PedroMosquera/squadai/internal/model"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
@@ -60,6 +61,7 @@ type initResult struct {
 // standards, and writes starter skill files.
 func RunInit(args []string, stdout io.Writer) error {
 	withPolicy := false
+	withMemory := true // memory scaffold is opt-out
 	force := false
 	merge := false
 	jsonOut := false
@@ -119,6 +121,10 @@ func RunInit(args []string, stdout io.Writer) error {
 		switch arg {
 		case "--with-policy":
 			withPolicy = true
+		case "--with-memory":
+			withMemory = true
+		case "--without-memory":
+			withMemory = false
 		case "--force":
 			force = true
 		case "--merge":
@@ -132,7 +138,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		case "--no-permissions":
 			permissionsEnabled = false
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--force] [--merge] [--json] [--global]")
+			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--without-memory] [--force] [--merge] [--json] [--global]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Initialize .squadai/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
@@ -163,6 +169,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "                 custom: explicit flags or wizard defaults")
 			fmt.Fprintln(stdout, "  --global       Apply configuration globally (home directory) instead of the current project.")
 			fmt.Fprintln(stdout, "  --with-policy  Also create .squadai/policy.json with a starter template.")
+			fmt.Fprintln(stdout, "  --without-memory  Skip creating the docs/memory/ scaffold (memory is created by default).")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
 			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
 			fmt.Fprintln(stdout, "  --merge        Re-run init, merging new config on top of existing (preserves user customizations).")
@@ -175,6 +182,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  squadai init --model-tier=performance")
 			fmt.Fprintln(stdout, "  squadai init --agents=opencode,cursor")
 			fmt.Fprintln(stdout, "  squadai init --preset=full-squad")
+			fmt.Fprintln(stdout, "  squadai init --without-memory")
 			fmt.Fprintln(stdout, "  squadai init --force")
 			fmt.Fprintln(stdout, "  squadai init --merge")
 			fmt.Fprintln(stdout, "  squadai init --json")
@@ -402,6 +410,13 @@ func RunInit(args []string, stdout io.Writer) error {
 # .instructions.md               — VS Code Copilot instructions
 `
 	writeInitFile(humanOut, projectDir, filepath.Join(agentManagerDir, ".gitignore-suggestion"), gitignoreSuggestion, force)
+
+	// Create memory scaffold unless --without-memory was passed.
+	if withMemory {
+		if err := writeMemoryScaffold(humanOut, projectDir); err != nil {
+			fmt.Fprintf(humanOut, "  warning: memory scaffold: %v\n", err)
+		}
+	}
 
 	if jsonOut {
 		// Build adapter ID list.
@@ -849,6 +864,47 @@ func writeInitFile(stdout io.Writer, projectDir, path, content string, force boo
 	} else {
 		fmt.Fprintf(stdout, "  created %s\n", rel)
 	}
+}
+
+// writeMemoryScaffold creates the docs/memory/ directory structure from embedded scaffold files.
+// Files that already exist are skipped (no overwrites). Prints a single summary line on creation.
+func writeMemoryScaffold(stdout io.Writer, projectDir string) error {
+	type scaffoldEntry struct {
+		asset string // embedded asset path (relative to assets FS root)
+		dest  string // destination path relative to projectDir
+	}
+	entries := []scaffoldEntry{
+		{"projectmemory/scaffold/memory-README.md", filepath.Join("docs", "memory", "README.md")},
+		{"projectmemory/scaffold/inbox-README.md", filepath.Join("docs", "memory", "_inbox", "README.md")},
+		{"projectmemory/scaffold/decisions-README.md", filepath.Join("docs", "memory", "decisions", "README.md")},
+		{"projectmemory/scaffold/learnings-README.md", filepath.Join("docs", "memory", "learnings", "README.md")},
+		{"projectmemory/scaffold/incidents-README.md", filepath.Join("docs", "memory", "incidents", "README.md")},
+	}
+
+	anyCreated := false
+	for _, e := range entries {
+		destPath := filepath.Join(projectDir, e.dest)
+		if _, statErr := os.Stat(destPath); statErr == nil {
+			// File already exists — preserve it.
+			continue
+		}
+		content, readErr := assets.Read(e.asset)
+		if readErr != nil {
+			return fmt.Errorf("read scaffold asset %s: %w", e.asset, readErr)
+		}
+		if mkErr := os.MkdirAll(filepath.Dir(destPath), 0755); mkErr != nil {
+			return fmt.Errorf("create scaffold dir for %s: %w", e.dest, mkErr)
+		}
+		if _, writeErr := fileutil.WriteAtomic(destPath, []byte(content), 0644); writeErr != nil {
+			return fmt.Errorf("write scaffold file %s: %w", e.dest, writeErr)
+		}
+		anyCreated = true
+	}
+
+	if anyCreated {
+		fmt.Fprintf(stdout, "  Memory scaffold created at docs/memory/\n")
+	}
+	return nil
 }
 
 // adapterSummary returns a comma-separated list of adapter names.
@@ -2233,6 +2289,74 @@ func RunSquadInitStatus(_ []string, stdout io.Writer) error {
 
 	r := result{Status: "stale", Reasons: reasons, LastRunAt: refState.LastRunAt}
 	data, _ := json.MarshalIndent(r, "", "  ")
+	fmt.Fprintln(stdout, string(data))
+	return nil
+}
+
+// RunMemorySearchTool is the MCP tool handler for memory_search.
+// It reads the cwd, calls memory.Search, and returns results as a JSON array.
+func RunMemorySearchTool(args []string, stdout io.Writer) error {
+	var query string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--query=") {
+			query = strings.TrimPrefix(arg, "--query=")
+		}
+	}
+	if query == "" {
+		return fmt.Errorf("memory_search: query is required")
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	results, err := memory.Search(projectDir, query)
+	if err != nil {
+		return fmt.Errorf("memory search: %w", err)
+	}
+
+	if results == nil {
+		results = []memory.SearchResult{}
+	}
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal search results: %w", err)
+	}
+	fmt.Fprintln(stdout, string(data))
+	return nil
+}
+
+// RunMemoryAddTool is the MCP tool handler for memory_add.
+// It reads the cwd, calls memory.AddInbox, and returns the saved path as JSON.
+func RunMemoryAddTool(args []string, stdout io.Writer) error {
+	var note string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--note=") {
+			note = strings.TrimPrefix(arg, "--note=")
+		}
+	}
+	if note == "" {
+		return fmt.Errorf("memory_add: note is required")
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	savedPath, err := memory.AddInbox(projectDir, note)
+	if err != nil {
+		return fmt.Errorf("memory add: %w", err)
+	}
+
+	type result struct {
+		Path string `json:"path"`
+	}
+	data, err := json.MarshalIndent(result{Path: savedPath}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal memory add result: %w", err)
+	}
 	fmt.Fprintln(stdout, string(data))
 	return nil
 }
