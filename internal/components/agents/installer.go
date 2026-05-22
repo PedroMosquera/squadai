@@ -1047,7 +1047,8 @@ func injectMemoryProtocol(content string, agentID domain.AgentID) string {
 }
 
 // injectMemoryProtocolStub injects the short subagent memory-protocol stub.
-// Returns content unchanged for adapters that have no memory protocol asset.
+// Only injects for adapters that have a full-protocol asset — if an adapter has
+// no memory feature at all, we skip the stub too.
 func injectMemoryProtocolStub(content string, agentID domain.AgentID) string {
 	if memoryProtocolAsset(agentID) == "" {
 		return content
