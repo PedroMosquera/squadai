@@ -281,6 +281,9 @@ func buildMCPRunners(stdout, stderr io.Writer) map[string]mcpserver.ToolRunner {
 		"install_hooks": func(args []string, w io.Writer) error {
 			return cli.RunInstallHooks(args, w)
 		},
+		"squad_init_status": func(args []string, w io.Writer) error {
+			return cli.RunSquadInitStatus(args, w)
+		},
 	}
 }
 

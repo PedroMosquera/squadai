@@ -18,6 +18,10 @@ func newTestServer() *Server {
 			_, _ = w.Write([]byte(`{"mode":"team"}`))
 			return nil
 		},
+		"squad_init_status": func(args []string, w io.Writer) error {
+			_, _ = w.Write([]byte(`{"status":"never-refined","reasons":[]}`))
+			return nil
+		},
 	}
 	return New("test-version", runners)
 }
@@ -176,6 +180,65 @@ func TestServer_UnknownMethod(t *testing.T) {
 	code, _ := errObj["code"].(float64)
 	if code != -32601 {
 		t.Errorf("error code = %v, want -32601", code)
+	}
+}
+
+// TestSquadInitStatusTool verifies that the squad_init_status MCP tool is
+// registered and returns a valid JSON object with a "status" field.
+func TestSquadInitStatusTool(t *testing.T) {
+	s := newTestServer()
+
+	// Verify the tool is listed.
+	listResp := sendRequest(t, s, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      10,
+		"method":  "tools/list",
+	})
+	if listResp["error"] != nil {
+		t.Fatalf("tools/list error: %v", listResp["error"])
+	}
+	result, _ := listResp["result"].(map[string]any)
+	tools, _ := result["tools"].([]any)
+	found := false
+	for _, tool := range tools {
+		tm, ok := tool.(map[string]any)
+		if !ok {
+			continue
+		}
+		if tm["name"] == "squad_init_status" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("squad_init_status tool should appear in tools/list")
+	}
+
+	// Call the tool and verify the response is a valid JSON object with status field.
+	callResp := sendRequest(t, s, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      11,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "squad_init_status",
+			"arguments": map[string]any{},
+		},
+	})
+	if callResp["error"] != nil {
+		t.Fatalf("squad_init_status call error: %v", callResp["error"])
+	}
+	callResult, ok := callResp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result not object: %v", callResp["result"])
+	}
+	content, ok := callResult["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("content missing or empty: %v", callResult)
+	}
+	first, _ := content[0].(map[string]any)
+	text, _ := first["text"].(string)
+	if !strings.Contains(text, `"status"`) {
+		t.Errorf("squad_init_status response should contain 'status' field, got: %s", text)
 	}
 }
 

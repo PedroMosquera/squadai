@@ -336,6 +336,11 @@ func buildToolDefs() []toolDef {
 				"json": boolProp("Return result as JSON"),
 			}),
 		},
+		{
+			Name:        "squad_init_status",
+			Description: "Returns the current squad refinement status — whether /squadai-init has been run, whether the refinement is fresh or stale, and the drift reasons if stale.",
+			InputSchema: schema(nil, map[string]any{}),
+		},
 	}
 }
 
