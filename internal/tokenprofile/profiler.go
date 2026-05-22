@@ -22,9 +22,9 @@ type Entry struct {
 
 // CategorySummary aggregates token data for a category.
 type CategorySummary struct {
-	Files  int
-	Bytes  int
-	Tokens int
+	Files  int `json:"files"`
+	Bytes  int `json:"bytes"`
+	Tokens int `json:"tokens"`
 }
 
 // Report is the full output of a ScanPaths call.
