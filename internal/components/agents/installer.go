@@ -16,6 +16,8 @@ import (
 )
 
 const teamSectionID = "team"
+const refinementSectionID = "refinement"
+const refinementPlaceholder = "<!-- empty until /squadai-init populates -->"
 
 // Options controls optional behavior of the agents installer.
 type Options struct {
@@ -263,7 +265,14 @@ func (i *Installer) planNativeAgentFile(adapter domain.Adapter, agentsDir, roleN
 		return domain.PlannedAction{}, fmt.Errorf("read team agent %s: %w", roleName, err)
 	}
 
-	if string(existing) == content {
+	// Strip the refinement block from the existing file before comparing so that
+	// /squadai-init content (or the placeholder) does not trigger a spurious update.
+	// Trim trailing newlines from both sides so that the blank line InjectSection
+	// inserts before the refinement block does not cause a spurious mismatch.
+	existingWithoutRefinement := strings.TrimRight(
+		marker.InjectSection(string(existing), refinementSectionID, ""), "\n")
+
+	if existingWithoutRefinement == strings.TrimRight(content, "\n") {
 		return domain.PlannedAction{
 			ID:          actionID,
 			Agent:       adapter.ID(),
@@ -473,6 +482,15 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 		return fmt.Errorf("create agents dir: %w", err)
 	}
 
+	// Preserve existing refinement block so /squadai-init content survives re-apply.
+	refinementContent := refinementPlaceholder
+	if existing, readErr := os.ReadFile(action.TargetPath); readErr == nil {
+		if ex := marker.ExtractSection(string(existing), refinementSectionID); ex != "" {
+			refinementContent = ex
+		}
+	}
+	translated = marker.InjectSection(translated, refinementSectionID, refinementContent)
+
 	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(translated), 0644); err != nil {
 		return fmt.Errorf("write team agent %s: %w", roleName, err)
 	}
@@ -514,6 +532,13 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 	}
 
 	updated := marker.InjectSection(string(existing), teamSectionID, rendered)
+
+	// Preserve existing refinement block so /squadai-init content survives re-apply.
+	refinementContent := refinementPlaceholder
+	if ex := marker.ExtractSection(string(existing), refinementSectionID); ex != "" {
+		refinementContent = ex
+	}
+	updated = marker.InjectSection(updated, refinementSectionID, refinementContent)
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644); err != nil {
 		return fmt.Errorf("write rules file: %w", err)
@@ -700,6 +725,9 @@ func (i *Installer) verifyTeamAgents(adapter domain.Adapter, homeDir, projectDir
 }
 
 // verifyFileContent checks that a file exists and matches the expected content.
+// Squadai marker sections (e.g. the refinement block added by apply) are stripped
+// from the disk content before comparison so that /squadai-init output does not
+// cause a spurious "content does not match" failure.
 func verifyFileContent(path, expected, checkName string) domain.VerifyResult {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -709,7 +737,13 @@ func verifyFileContent(path, expected, checkName string) domain.VerifyResult {
 			Message: fmt.Sprintf("file not found: %s", path),
 		}
 	}
-	if string(data) == expected {
+	// Strip the refinement block from disk content before comparing so that
+	// /squadai-init output does not cause a spurious "content does not match" failure.
+	// Trim trailing newlines from both sides for consistent comparison (InjectSection
+	// adds a blank line before the refinement block on append).
+	diskWithoutRefinement := strings.TrimRight(
+		marker.InjectSection(string(data), refinementSectionID, ""), "\n")
+	if diskWithoutRefinement == strings.TrimRight(expected, "\n") {
 		return domain.VerifyResult{
 			Check:  fmt.Sprintf("%s-current", checkName),
 			Passed: true,
