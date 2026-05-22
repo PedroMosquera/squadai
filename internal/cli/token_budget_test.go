@@ -29,13 +29,17 @@ func writeTDDProjectForBudget(t *testing.T, dir string) {
 
 func TestRunTokenBudget_NoConfig_NoError(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
 	var buf bytes.Buffer
 	// With no config, the planner returns 0 actions and we print a no-install note.
-	err := RunTokenBudget([]string{}, &buf)
-	if err != nil {
+	if err := RunTokenBudget([]string{}, &buf); err != nil {
 		t.Errorf("unexpected error with no config: %v", err)
 	}
 }
@@ -53,12 +57,16 @@ func TestRunTokenBudget_Help(t *testing.T) {
 
 func TestRunTokenBudget_JSON_EmptyInstall(t *testing.T) {
 	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
 	var buf bytes.Buffer
-	err := RunTokenBudget([]string{"--json"}, &buf)
-	if err != nil {
+	if err := RunTokenBudget([]string{"--json"}, &buf); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var out map[string]interface{}
@@ -73,12 +81,16 @@ func TestRunTokenBudget_JSON_EmptyInstall(t *testing.T) {
 func TestRunTokenBudget_HumanOutput_ContainsExpectedFields(t *testing.T) {
 	dir := t.TempDir()
 	writeTDDProjectForBudget(t, dir)
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
 	var buf bytes.Buffer
-	err := RunTokenBudget([]string{}, &buf)
-	if err != nil {
+	if err := RunTokenBudget([]string{}, &buf); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	out := buf.String()

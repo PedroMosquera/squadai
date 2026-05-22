@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/planner"
 	"github.com/PedroMosquera/squadai/internal/tokenprofile"
 )
@@ -52,9 +53,11 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 	if merged != nil {
 		p := planner.New()
 		actions, planErr := p.Plan(merged, adapters, homeDir, projectDir)
-		if planErr == nil {
+		if planErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: plan failed: %v\n", planErr)
+		} else {
 			for _, a := range actions {
-				if a.TargetPath == "" {
+				if a.TargetPath == "" || a.Action == domain.ActionDelete {
 					continue
 				}
 				pathToCategory[a.TargetPath] = string(a.Component)
@@ -101,7 +104,7 @@ func printTokenBudgetHuman(w io.Writer, r *tokenprofile.Report) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n", "Component", "Files", "Bytes", "~Tokens")
 	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n",
-		"─────────────────", "─────", "─────────", "────────")
+		"────────────────", "─────", "─────────", "────────")
 
 	// Sort categories for deterministic output.
 	cats := make([]string, 0, len(r.ByCategory))
@@ -115,7 +118,7 @@ func printTokenBudgetHuman(w io.Writer, r *tokenprofile.Report) {
 		fmt.Fprintf(w, "%-16s  %5d  %9d  %8d\n", cat, s.Files, s.Bytes, s.Tokens)
 	}
 	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n",
-		"─────────────────", "─────", "─────────", "────────")
+		"────────────────", "─────", "─────────", "────────")
 	fmt.Fprintf(w, "%-16s  %5d  %9d  %8d\n",
 		"TOTAL", totalFiles(r), r.TotalBytes, r.TotalTokens)
 
