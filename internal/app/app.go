@@ -163,6 +163,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "memory":
 		return cli.RunMemoryCommand(args[1:])
 
+	case "token-budget":
+		return cli.RunTokenBudget(args[1:], stdout)
+
 	default:
 		return fmt.Errorf("unknown command %q — run 'squadai help' for available commands", args[0])
 	}
@@ -475,6 +478,13 @@ func buildCommandRegistry() helpOutput {
 				Description: "Start SquadAI as an MCP stdio server. Exposes plan, apply, verify, status, context, init, doctor, plugins, and more as MCP tools callable by Claude Code.",
 			},
 			{
+				Name:        "token-budget",
+				Description: "Estimate per-session token cost of the current squadai install.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output as JSON"},
+				},
+			},
+			{
 				Name:        "update",
 				Description: "Check for a newer version of SquadAI and optionally download it.",
 				Flags: []cmdFlag{
@@ -521,6 +531,7 @@ Commands:
   verify             Print compliance and health report (--strict adds drift check)
   status             Show project configuration summary
   doctor             Run pre-flight diagnostics (environment, agents, config, MCP, filesystem, drift)
+  token-budget       Estimate per-session token cost of the current install (--json for JSON)
   watch              Monitor managed files for drift, stream events to stdout
   audit              Render the governance audit log (.squadai/audit.log)
   install-hooks      Install a Git pre-commit hook running 'squadai verify --strict'
