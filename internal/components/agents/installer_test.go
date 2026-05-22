@@ -1045,9 +1045,12 @@ func TestApplyTeamNative_SubagentHasMemoryStub_NotFullProtocol(t *testing.T) {
 		t.Fatalf("read implementer: %v", err)
 	}
 	content := string(data)
-	// Subagent gets stub: has /memory-search but NOT @librarian or /memory-promote.
+	// Subagent gets stub: has /memory-search and /memory-add but NOT @librarian or /memory-promote.
 	if !strings.Contains(content, "/memory-search") {
 		t.Error("subagent stub should contain /memory-search command")
+	}
+	if !strings.Contains(content, "/memory-add") {
+		t.Error("subagent stub should contain /memory-add command")
 	}
 	if strings.Contains(content, "@librarian") {
 		t.Error("subagent should NOT contain full protocol @librarian reference")
