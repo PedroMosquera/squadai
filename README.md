@@ -1,6 +1,6 @@
 # SquadAI
 
-Standardize AI coding agent environments.
+Give every developer on your team the same AI coding agent setup — same methodology, same roles, same standards — regardless of which editor they use.
 
 [![Build](https://github.com/PedroMosquera/squadai/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroMosquera/squadai/actions)
 [![Go](https://img.shields.io/github/go-mod/go-version/PedroMosquera/squadai)](go.mod)
@@ -8,208 +8,202 @@ Standardize AI coding agent environments.
 
 ---
 
-## Why squadai
-
-Modern teams use multiple AI coding agents — OpenCode, Claude Code, Cursor, Windsurf, Copilot — and every developer configures their own differently. The result: inconsistent code quality, no shared methodology, drifting team standards, and no policy enforcement on what each agent is allowed to do.
-
-squadai treats AI agent setup as **infrastructure**: a single declarative config (`.squadai/project.json`), a three-layer merge with locked policy fields, and an idempotent apply pipeline that writes the right files for each agent in its native format. Run it once per machine and every developer is on the same setup, regardless of which editor they prefer.
+If you've ever opened a repo on a new machine and had your AI agent forget everything about how the team works — the methodology, the review process, the coding standards — that's the problem squadai solves. You declare the setup once (a config file in the repo), and `squadai apply` writes the right files for every agent each developer has installed: OpenCode, Claude Code, Cursor, Windsurf, VS Code Copilot. Run it after cloning, run it after pulling, and you're always in sync.
 
 ---
 
-## What It Does
-
-One command configures every AI coding agent on your team to use the same methodology, team structure, MCP servers, and coding standards.
+## Install
 
 ```sh
-squadai init --methodology tdd
-squadai apply
-```
-
-That's it. Every developer on the team gets identical agent configurations, regardless of which editor they use.
-
-**5 supported agents.** OpenCode, Claude Code, VS Code Copilot, Cursor, Windsurf.
-
-**9 components.** Memory protocols, team rules, editor settings, MCP servers, team agents, methodology skills, commands, plugins, workflows.
-
-**3 methodologies.** TDD (6 roles), SDD (8 roles), Conventional (4 roles) — each with an orchestrator that delegates to specialized sub-agents.
-
-**3 delegation strategies.** Native sub-agent files (OpenCode, Cursor), prompt-based Task tool injection (Claude Code), solo all-in-one prompts (VS Code, Windsurf).
-
-**MCP integration.** Context7 enabled by default. Each agent gets MCP config in its native format.
-
-**Community skills.** Vercel skills ecosystem integration via the `find-skills` shared skill.
-
----
-
-## Quick Start
-
-```sh
-# Install (macOS / Linux)
+# macOS / Linux via Homebrew (recommended)
 brew install PedroMosquera/tap/squadai
 
-# Launch the interactive wizard — recommended for first-time setup.
-# It guides you through methodology, MCP servers, plugins, and applies the config.
-squadai
+# or via curl
+curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
 
-# Need help at any time
-squadai --help            # global help and command list
-squadai <command> --help  # detailed help for a specific command
+# or from source
+go install github.com/PedroMosquera/squadai/cmd/squadai@latest
 ```
 
-Prefer scripting? Skip the wizard and run the steps directly:
+Linux `.deb` and `.rpm` packages are published on every [release](https://github.com/PedroMosquera/squadai/releases/latest) for Debian/Ubuntu and Fedora/RHEL users. Windows binaries (zip) are also published there.
+
+---
+
+## Getting started
+
+The fastest path is the interactive wizard:
 
 ```sh
-squadai init --methodology tdd   # initialize project config
-squadai plan --dry-run           # preview changes
-squadai apply                    # apply configuration
-squadai verify                   # check compliance
+cd your-project
+squadai
 ```
 
-Other install methods (curl, deb/rpm, `go install`, AI agent) are documented in the [Installation](#installation) section.
+It walks you through choosing a methodology, enabling MCP servers, and selecting plugins. At the end it asks to apply the config. That's it — your agents are configured.
 
-Run `squadai` with no arguments to launch the interactive TUI wizard (methodology, MCP servers, plugins, summary).
+If you'd rather script it:
 
----
+```sh
+squadai init --methodology tdd   # writes .squadai/project.json
+squadai apply                    # installs agent files for all detected editors
+squadai doctor                   # sanity-check everything looks right
+```
 
-## Supported Agents
+To see what `apply` would change before committing:
 
-| Agent | Config File | Delegation | MCP Strategy |
-|-------|------------|------------|--------------|
-| OpenCode | `AGENTS.md` | native (sub-agent files in `.opencode/agents/`) | MergeIntoSettings (`opencode.json` `"mcp"` key) |
-| Claude Code | `CLAUDE.md` | prompt (Task tool injection) | MCPConfigFile (`<project>/.mcp.json`) |
-| VS Code Copilot | `.instructions.md` | solo (all-in-one prompt) | MCPConfigFile (`.vscode/mcp.json`) |
-| Cursor | `.cursor/rules/squadai.mdc` | native (agent files in `.cursor/agents/`) | MCPConfigFile (`.cursor/mcp.json`) |
-| Windsurf | `.windsurf/rules/squadai.md` | solo + workflows | MCPConfigFile (`.windsurf/mcp_config.json`) |
-
-All detected agents are auto-enabled during `init`. The planner generates actions only for agents actually installed on each developer's machine.
-
----
-
-## Supported Languages
-
-| Language | Auto-detection | Standards Included |
-|----------|---------------|-------------------|
-| Go | `go.mod` | Error wrapping, table-driven tests, `context.Context`, MixedCaps |
-| TypeScript | `tsconfig.json` | `strict: true`, discriminated unions, explicit return types |
-| JavaScript | `package.json` | Module patterns, ESLint + Prettier, `const` by default |
-| Python | `pyproject.toml`, `requirements.txt` | Type hints, dataclasses, ruff, pytest fixtures |
-| Rust | `Cargo.toml` | Ownership, `thiserror`/`anyhow`, Clippy lints |
-| Java | `pom.xml`, `build.gradle` | Sealed classes, records, Optional, Javadoc |
-| Kotlin | `build.gradle.kts` | Shared Java standards |
-| Ruby | `Gemfile` | RuboCop, minitest/RSpec, frozen string literals |
-| C# | `*.csproj`, `*.sln` | Nullable refs, async/await, EditorConfig |
-| PHP | `composer.json` | PSR-12, PHPStan, type declarations |
-| Swift | `Package.swift`, `*.xcodeproj` | SwiftLint, value types, protocol-oriented |
-| C/C++ | `CMakeLists.txt` | Smart pointers, RAII, clang-tidy |
-| Dart | `pubspec.yaml` | Null safety, Flutter widgets, effective Dart |
-| Elixir | `mix.exs` | Pattern matching, GenServer, dialyzer |
-| Scala | `build.sbt` | Case classes, implicits, ScalaTest |
-
-Monorepo support: when multiple languages are detected, all language standards are combined.
+```sh
+squadai plan --dry-run
+squadai diff
+```
 
 ---
 
-## Components
+## How it works
 
-`squadai apply` installs up to 9 components per agent:
+When you run `squadai init`, it detects which AI agents are installed on the current machine and writes `.squadai/project.json` — a config that says which methodology to use, which roles exist, and which components each agent should get.
 
-| Component | ID | What It Installs |
-|-----------|-----|-----------------|
-| Memory Protocol | `memory` | Session persistence files (`AGENTS.md`, `CLAUDE.md`) with marker blocks |
-| Team Rules | `rules` | Team coding standards injected into each agent's system prompt |
-| Editor Settings | `settings` | Agent-specific config files (`opencode.json`, `.vscode/settings.json`, etc.) |
-| MCP Servers | `mcp` | MCP server definitions in each agent's native format |
-| Team Agents | `agents` | Sub-agent role definitions (orchestrator, implementer, reviewer, etc.) |
-| Methodology Skills | `skills` | Skill files for each methodology phase (TDD red-green-refactor, SDD spec workflow, etc.) |
-| Commands | `commands` | Agent-specific command definitions (OpenCode `.opencode/commands/`) |
-| Plugins | `plugins` | Third-party plugin installation (Claude Code plugins, skill files) |
-| Workflows | `workflows` | Agent-specific workflow files (Windsurf `.windsurf/workflows/`) |
+`squadai apply` reads that config, figures out which files each agent needs in its native format, and writes them. For Claude Code it updates `CLAUDE.md`. For OpenCode it writes `AGENTS.md` and individual agent files under `.opencode/agents/`. For Cursor it writes `.cursor/rules/` and `.cursor/agents/`. It never touches content outside its own marker blocks, so any customizations you've made in those files stay put.
 
-Not every agent supports every component. Each adapter declares which components it handles; the planner skips unsupported combinations.
+The result is a team where everyone's agents have:
+
+- **A methodology** — TDD (6 roles), SDD (8 roles), or Conventional (4 roles), each with an orchestrator that delegates to specialist sub-agents
+- **Consistent coding standards** — auto-detected by language (Go, TypeScript, Python, Rust, and [12 more](docs/architecture.md))
+- **Shared MCP servers** — Context7 is enabled by default; others are opt-in
+- **Memory protocols** — a structured `docs/memory/` system agents can read and write across sessions
+
+### Adapters and delegation
+
+Different agents handle sub-agents differently. squadai adapts:
+
+| Agent | Config file | Sub-agent strategy |
+|-------|-------------|-------------------|
+| OpenCode | `AGENTS.md` | Native agent files in `.opencode/agents/` |
+| Claude Code | `CLAUDE.md` | Task tool injection (prompt-based delegation) |
+| Cursor | `.cursor/rules/squadai.mdc` | Native agent files in `.cursor/agents/` |
+| Windsurf | `.windsurf/rules/squadai.md` | Solo all-in-one prompt + workflow files |
+| VS Code Copilot | `.github/copilot-instructions.md` | Solo all-in-one prompt |
 
 ---
 
-## Methodologies
+## Per-project refinement (`/squadai-init`)
 
-Each methodology defines a team of roles with an orchestrator that delegates work to specialized sub-agents.
+Agent files installed by `squadai apply` contain placeholder blocks. `/squadai-init` is a command you run inside your AI agent to fill those placeholders with project-specific context: the repo layout, which roles matter most, custom instructions per role.
 
-### TDD (6 roles)
+Agents will remind you when the refinement is stale (e.g. after a major refactor). To refresh it manually, just run `/squadai-init` in your agent again.
 
-| Role | Description |
-|------|-------------|
-| orchestrator | Delegates phases to specialized sub-agents |
-| brainstormer | Requirements exploration and question-asking |
-| planner | Test plan and implementation plan creation |
-| implementer | Red-green-refactor implementation cycles |
-| reviewer | Two-stage code review: automated + design |
-| debugger | 4-phase debugging: reproduce, isolate, fix, verify |
+---
 
-### SDD (8 roles)
+## Project memory
 
-| Role | Description |
-|------|-------------|
-| orchestrator | Manages spec-driven workflow |
-| explorer | Codebase analysis and context gathering |
-| proposer | Solution proposals with tradeoff analysis |
-| spec-writer | Formal specification document authoring |
-| designer | Architecture and interface design |
-| task-planner | Dependency-ordered task breakdown |
-| implementer | Spec-faithful implementation |
-| verifier | Spec compliance verification |
+Agents lose context between sessions. squadai's memory system is a `docs/memory/` folder the `@librarian` agent can read and write, structured as indexed notes organized by topic.
 
-### Conventional (4 roles)
+```sh
+# From inside your agent
+/memory-search authentication    # find prior decisions
+/memory-add "switched to JWT, see docs/adr/012.md"   # capture a decision
+/memory-promote                  # graduate inbox drafts to permanent storage
+```
 
-| Role | Description |
-|------|-------------|
-| orchestrator | Direct implementation with review gates |
-| implementer | General-purpose implementation |
-| reviewer | Code review checklist |
-| tester | Test writing and coverage |
+```sh
+# From the CLI (for scripting or CI)
+squadai memory search --query "authentication"
+squadai memory add --note "switched to JWT"
+squadai memory status
+```
+
+See [`docs/project-memory.md`](docs/project-memory.md) for the full protocol.
+
+---
+
+## Token cost
+
+Every squadai install adds agent instruction files to each session's system prompt. On a full TDD install those files add up. You can check the cost:
+
+```sh
+squadai token-budget          # human-readable per-component breakdown
+squadai token-budget --json   # machine-readable
+```
+
+Example output:
+```
+Component       Files   Tokens
+────────────────────────────────────────────────────────────────
+agents            6      4,210
+skills            6      3,890
+rules             1        480
+memory            1        260
+mcp               1         90
+────────────────────────────────────────────────────────────────
+TOTAL            15      8,930
+```
+
+The orchestrator gets the full memory protocol; sub-agents get a two-line stub — that alone cuts roughly 1,000 tokens per session from the default TDD install.
+
+---
+
+## Team policy
+
+If you want to enforce a standard setup across a team and prevent individuals from overriding it, create `.squadai/policy.json`:
+
+```json
+{
+  "version": 1,
+  "mode": "team",
+  "locked": ["methodology", "mcp"],
+  "required": {
+    "methodology": "tdd",
+    "mcp": { "context7": { "enabled": true } }
+  }
+}
+```
+
+Fields listed under `locked` can't be overridden by a developer's local `~/.squadai/config.json`. `squadai doctor` reports policy violations and `squadai validate-policy` checks the file itself.
+
+See [`docs/policy.md`](docs/policy.md) for the full reference.
+
+---
+
+## Commands
+
+The ones you'll use regularly:
+
+```sh
+squadai                     # interactive wizard (first-time setup or re-configure)
+squadai init                # initialize or re-initialize project.json
+squadai apply               # install agent files (idempotent — safe to re-run)
+squadai diff                # preview what apply would change
+squadai doctor              # run ~22 health checks; --fix auto-resolves common issues
+squadai status              # quick view of adapters, components, managed files
+squadai token-budget        # per-session token cost of the current install
+squadai explain <topic>     # explain a config field, error code, or concept
+squadai memory <subcommand> # manage project memory (search, add, promote, status)
+```
+
+Less common but good to know:
+
+```sh
+squadai verify              # post-apply compliance assertions
+squadai plan                # show the action plan without applying
+squadai update              # self-update (--check, --enable-checks, or apply latest)
+squadai remove --force      # remove all managed files
+squadai backup create       # snapshot managed files manually
+squadai restore <id>        # restore from a backup
+```
+
+For any command: `squadai <command> --help`.
 
 ---
 
 ## Configuration
 
-### Three-Layer Merge
-
-Configuration follows strict precedence:
-
-```
-Policy (locked fields)  >  Project config  >  User defaults
-```
-
-| Layer | File | Scope |
-|-------|------|-------|
-| User defaults | `~/.squadai/config.json` | Personal preferences, backup paths |
-| Project config | `.squadai/project.json` | Per-repo settings, methodology, team, MCP |
-| Team policy | `.squadai/policy.json` | Locked fields that cannot be overridden |
-
-### Example `project.json`
+`squadai init` creates `.squadai/project.json`. Most fields have sensible defaults; the ones you're likely to touch:
 
 ```json
 {
   "version": 1,
   "methodology": "tdd",
   "adapters": {
-    "opencode": { "enabled": true },
     "claude-code": { "enabled": true },
-    "vscode-copilot": { "enabled": true },
-    "cursor": { "enabled": true },
-    "windsurf": { "enabled": true }
-  },
-  "components": {
-    "memory": { "enabled": true },
-    "rules": { "enabled": true },
-    "settings": { "enabled": true },
-    "mcp": { "enabled": true },
-    "agents": { "enabled": true },
-    "skills": { "enabled": true },
-    "commands": { "enabled": true },
-    "plugins": { "enabled": true },
-    "workflows": { "enabled": true }
-  },
-  "copilot": {
-    "instructions_template": "standard"
+    "opencode": { "enabled": true }
   },
   "mcp": {
     "context7": {
@@ -218,307 +212,39 @@ Policy (locked fields)  >  Project config  >  User defaults
       "enabled": true
     }
   },
-  "team": {
-    "orchestrator": { "description": "TDD orchestrator", "mode": "subagent" },
-    "brainstormer": { "description": "Requirements exploration", "mode": "subagent", "skill_ref": "tdd/brainstorming" },
-    "planner": { "description": "Test plan creation", "mode": "subagent", "skill_ref": "tdd/writing-plans" },
-    "implementer": { "description": "Red-green-refactor cycles", "mode": "subagent", "skill_ref": "tdd/test-driven-development" },
-    "reviewer": { "description": "Two-stage code review", "mode": "subagent", "skill_ref": "shared/code-review" },
-    "debugger": { "description": "Systematic debugging", "mode": "subagent", "skill_ref": "tdd/systematic-debugging" }
-  },
-  "claude": {
-    "agent_teams": { "enabled": false }
-  },
   "meta": {
     "name": "my-project",
     "language": "go",
-    "test_command": "go test -race ./...",
-    "build_command": "go build ./..."
+    "test_command": "go test -race ./..."
   }
 }
 ```
 
-### Claude Code Agent Teams (experimental opt-in)
-
-Set `claude.agent_teams.enabled` to `true` to opt the project into Claude
-Code's experimental Agent Teams runtime. SquadAI writes
-`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` into `.claude/settings.json` under the
-`env` key, preserving any sibling user-defined env vars. Apply also reverses
-the toggle: setting `enabled` back to `false` removes the var, leaving other
-env entries intact.
-
-Teams that need to forbid (or mandate) Agent Teams across the org can lock
-the field via policy:
-
-```json
-// .squadai/policy.json
-{
-  "version": 1,
-  "mode": "team",
-  "locked": ["claude.agent_teams.enabled"],
-  "required": {
-    "claude": { "agent_teams": { "enabled": false } }
-  }
-}
-```
-
-`squadai doctor` reports an Agent Teams check under the AI Agents category;
-warnings are emitted whenever the env var on disk diverges from the
-configured desired state.
-
-### Operational Modes
-
-| Mode | Behavior |
-|------|----------|
-| `team` | Policy-controlled. Required settings enforced, locked fields immutable. |
-| `personal` | User-controlled. Optional adapters and personal defaults. |
-
----
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `squadai` (no args) | Launch interactive TUI wizard (methodology, MCP, plugins, summary, menu) |
-| `squadai init` | Initialize project config and detect agents |
-| `squadai plan` | Compute and display the action plan |
-| `squadai diff` | Preview what apply would change (unified diffs) |
-| `squadai apply` | Execute plan with backup and rollback safety (idempotent — re-run to sync) |
-| `squadai verify` | Run compliance checks and print health report |
-| `squadai doctor` | Run deep health checks (~22 across 6 categories); `--fix` resolves common issues |
-| `squadai update` | Self-update: `--check`, `--enable-checks`, or download + stage latest release |
-| `squadai status` | Show project health: adapters, components, managed files |
-| `squadai validate-policy` | Validate policy schema and lock/required consistency |
-| `squadai backup create` | Manually snapshot managed files |
-| `squadai backup list` | List available backups |
-| `squadai backup delete <id>` | Delete a specific backup snapshot |
-| `squadai backup prune --keep=N` | Remove old backups, keep N most recent |
-| `squadai restore <id>` | Restore files from a backup |
-| `squadai remove --force` | Remove all managed files and strip marker blocks |
-| `squadai version` | Print version |
-| `squadai help` / `--help` / `-h` | Show global help or per-command help (`squadai <command> --help`) |
-
-### Flags
-
-| Flag | Commands | Description |
-|------|----------|-------------|
-| `--methodology=<tdd\|sdd\|conventional>` | `init` | Set development methodology |
-| `--mcp=<csv>` | `init` | Comma-separated MCP server IDs to enable |
-| `--plugins=<csv>` | `init` | Comma-separated plugin IDs to enable |
-| `--with-policy` | `init` | Generate team policy template |
-| `--force` | `init`, `remove` | Overwrite existing template and skill files; required for remove |
-| `--merge` | `init` | Re-run init, merge new config on top of existing (preserves customizations) |
-| `--dry-run` | `plan`, `apply`, `restore` | Preview changes without writing files |
-| `--json` | `plan`, `apply`, `diff`, `verify`, `backup` | Machine-readable JSON output |
-| `--keep=N` | `backup prune` | Number of backups to retain (default 10) |
-| `--no-review` | `apply` | Skip the pre-apply review screen (non-interactive / CI) |
-| `--overwrite-unmanaged` | `apply` | Grant blanket consent to overwrite user-owned keys (pairs with `--no-review` in CI) |
-
-### Interactive TUI
-
-Run `squadai` with no arguments for a guided wizard:
-
-1. Intro screen with detected agents and mode
-2. Methodology selection (TDD / SDD / Conventional)
-3. MCP server configuration
-4. Plugin selection (filtered by methodology and detected agents)
-5. Summary and confirmation
-6. Menu: Plan, Apply, Verify, Restore, Quit
-
----
-
-### Review Screen (pre-apply safety)
-
-Interactive `squadai apply` (and the TUI Apply menu entry) open a **review
-screen** before any file is written. For each planned change you see the
-unified diff, the target path, and — when a JSON config already contains a
-top-level key SquadAI would write and that key is *not* recorded in the
-sidecar as SquadAI-managed — a **conflict** row.
-
-Per-conflict keybindings:
-
-| Key | Effect |
-|-----|--------|
-| `↑` / `↓`, `j` / `k` | Move between entries |
-| `Enter` | Open detail pane (per-entry diff + conflicts) |
-| `Tab` / `Shift+Tab` | Cycle between conflicts in the detail pane |
-| `o` | Toggle `[KEEP]` ↔ `[OVERWRITE]` on the hovered conflict |
-| `a` / `y` | Apply with current decisions |
-| `n` / `esc` / `q` | Cancel — nothing is written |
-
-Defaults to **keep** — the user-edited value wins. Only keys you explicitly
-flipped to `[OVERWRITE]` are replaced, and once applied they are recorded in
-`.squadai/managed.json` so future runs treat them as SquadAI-owned (no
-conflict on the next `apply`).
-
-#### Non-interactive flows
-
-- `--no-review` skips the TUI. With no override and a conflict present,
-  `apply` returns an error wrapping `ErrMergeConflict` and leaves the file +
-  sidecar untouched.
-- `--overwrite-unmanaged` grants blanket consent — SquadAI will overwrite any
-  user-owned top-level key it needs to write. Combine with `--no-review` in
-  CI when you've already decided to claim the config.
-- `squadai diff --json` emits a `conflicts` array per entry so CI pipelines
-  can detect drift without the TUI.
-
----
-
-## Architecture
-
-Six-layer architecture with strict dependency direction:
+Config is merged from three sources in this order (last wins, unless locked by policy):
 
 ```
-Layer 1: Domain       Types, interfaces, errors (no side effects)
-Layer 2: Config       Three-layer merge with policy enforcement
-Layer 3: Planner      Compute actions from merged config + detected adapters
-Layer 4: Pipeline     Execute actions with backup/rollback safety
-Layer 5: Verifier     Post-apply compliance assertions
-Layer 6: Interfaces   CLI commands, TUI wizard
-```
-
-Key design principles:
-
-- **Adapters own all paths.** No hardcoded agent paths outside adapter packages.
-- **Marker blocks for managed content.** User content outside `<!-- squadai:SECTION -->` markers is never modified.
-- **Atomic writes.** Temp file + rename via `fileutil.WriteAtomic` for crash safety.
-- **Idempotent by default.** Planner returns `ActionSkip` when state matches; writer skips when bytes are identical.
-- **Fail loudly.** Errors are always surfaced, never silently swallowed.
-
-Full architecture details: [`docs/architecture.md`](docs/architecture.md)
-
-### Safety
-
-Every `apply` operation:
-
-1. Snapshots all target files to a backup manifest
-2. Executes steps in deterministic order with step-level logging
-3. On failure, rolls back all completed steps from the manifest
-4. Emits a failure summary with the backup ID for manual recovery
-
----
-
-## Installation
-
-### Homebrew (macOS / Linux) — recommended
-
-```sh
-brew install PedroMosquera/tap/squadai
-```
-
-To upgrade:
-
-```sh
-brew upgrade squadai
-```
-
-The formula is published to [PedroMosquera/homebrew-tap](https://github.com/PedroMosquera/homebrew-tap) automatically by every release.
-
-### Linux native packages (deb / rpm)
-
-Every release publishes `.deb` and `.rpm` packages alongside the tarballs. Download the matching package from [Releases](https://github.com/PedroMosquera/squadai/releases/latest):
-
-```sh
-# Debian / Ubuntu
-sudo dpkg -i squadai_<version>_linux_<arch>.deb
-
-# Fedora / RHEL / openSUSE
-sudo rpm -i squadai_<version>_linux_<arch>.rpm
-```
-
-The binary lands at `/usr/bin/squadai`.
-
-### Shell script (macOS / Linux)
-
-```sh
-curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
-```
-
-### From source (requires Go 1.24+)
-
-```sh
-go install github.com/PedroMosquera/squadai/cmd/squadai@latest
-```
-
-### GitHub Releases
-
-Download the binary for your architecture from [Releases](https://github.com/PedroMosquera/squadai/releases).
-
-### Install via your AI agent
-
-If you use Claude Code, OpenCode, Cursor, Windsurf, or VS Code Copilot, paste this prompt into your agent and let it install squadai for you:
-
-> Install **squadai** on this machine following the numbered steps in the "Agent install protocol" section of `https://github.com/PedroMosquera/squadai/blob/main/README.md`. After install, run `squadai doctor` and report back any failed checks.
-
-#### Agent install protocol
-
-Agents: follow these steps in order. Stop at the first method that succeeds.
-
-1. **Detect the OS and architecture** with `uname -sm`.
-2. **Pick the best install method available**, in this order:
-   1. If `brew` is on PATH (macOS or Linux): `brew install PedroMosquera/tap/squadai`.
-   2. Else if `apt` is available (Debian/Ubuntu) and the user can `sudo`: download the matching `.deb` from the latest GitHub release and `sudo dpkg -i`.
-   3. Else if `dnf` or `rpm` is available (Fedora/RHEL): download the matching `.rpm` and `sudo rpm -i`.
-   4. Else if `curl` is available (macOS / Linux): `curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh`.
-   5. Else if `go` (>= 1.24) is on PATH: `go install github.com/PedroMosquera/squadai/cmd/squadai@latest`.
-   6. Else: stop and tell the user to install one of `brew`, `curl`, or `go` first.
-3. **Verify the install**: `squadai version` must print a non-empty version string.
-4. **Run health checks**: `squadai doctor`. If any checks fail, run `squadai doctor --fix` and re-run `squadai doctor`.
-5. **Offer to initialize the workspace**: ask the user if they want to run `squadai init` in the current directory before doing it. Do not run `init` without confirmation.
-
-Do **not** modify shell rc files, do **not** install with `sudo` unless step 2 explicitly requires it, and do **not** edit any project files outside the squadai install itself.
-
-### Self-update (built-in)
-
-Once installed, squadai can check for and apply its own updates:
-
-```sh
-squadai update --enable-checks   # opt in to once-per-day background checks
-squadai update --check           # see if a newer release exists
-squadai update                   # download + stage the latest; applies on next launch
-```
-
-Updates are disabled by default to avoid background network activity. The self-updater skips the swap if the binary lives in a system-managed path (e.g. installed via Homebrew) — use `brew upgrade squadai` instead.
-
-### Windows
-
-Windows binaries (`squadai_<version>_windows_<arch>.zip`) are published to every release. Native installer support (Scoop / WinGet) is **coming soon**. For now:
-
-```powershell
-# Option 1: from source (requires Go 1.24+)
-go install github.com/PedroMosquera/squadai/cmd/squadai@latest
-
-# Option 2: download the .zip from https://github.com/PedroMosquera/squadai/releases/latest
-# and extract squadai.exe to a directory on your PATH.
+~/.squadai/config.json        personal defaults
+.squadai/project.json         project config  (this file)
+.squadai/policy.json          team policy — locked fields override everything
 ```
 
 ---
 
-## Platform Support
+## Install via your AI agent
 
-| Platform | Status |
-|----------|--------|
-| macOS (darwin/arm64, darwin/amd64) | Fully supported — Homebrew + self-update |
-| Linux (linux/amd64, linux/arm64) | Fully supported — Homebrew + self-update |
-| Windows (windows/amd64, windows/arm64) | Binaries published — Scoop/WinGet planned |
+If you'd rather have your agent set things up, paste this into it:
+
+> Install squadai using the best available method on this machine (`brew` if available, otherwise the curl script), verify with `squadai version`, run `squadai doctor`, and let me know if any checks failed. Don't run `squadai init` yet — I'll do that myself.
 
 ---
 
-## Development Process
+## More docs
 
-SquadAI uses Spec-Driven Development for its own changes. The `openspec/` directory tracks
-in-flight specs (`changes/`), living specs (`specs/`), and completed work (`archive/`).
-See `openspec/config.yaml` for workflow rules and testing conventions.
-
----
-
-## Author
-
-Built by **Pedro Mosquera** — software engineer focused on developer tooling, clean architecture, and AI-assisted workflows.
-
-- GitHub: [@PedroMosquera](https://github.com/PedroMosquera)
-
-Feedback, issues, and pull requests are welcome.
+- [`docs/MANUAL.md`](docs/MANUAL.md) — 5-minute user manual
+- [`docs/project-memory.md`](docs/project-memory.md) — memory protocol deep dive  
+- [`docs/policy.md`](docs/policy.md) — policy and team enforcement
+- [`docs/architecture.md`](docs/architecture.md) — internals and design decisions
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) — common issues
 
 ---
 
