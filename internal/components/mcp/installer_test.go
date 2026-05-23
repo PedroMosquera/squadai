@@ -1518,23 +1518,6 @@ func installerWithSchema(adapter domain.Adapter) *Installer {
 	return inst
 }
 
-// adapterFor returns the production adapter implementation for an AgentID.
-// Used by serverToMap tests that need the schema cache populated.
-func adapterFor(id domain.AgentID) domain.Adapter {
-	switch id {
-	case domain.AgentOpenCode:
-		return opencode.New()
-	case domain.AgentClaudeCode:
-		return claude.New()
-	case domain.AgentVSCodeCopilot:
-		return vscode.New()
-	case domain.AgentCursor:
-		return cursor.New()
-	case domain.AgentWindsurf:
-		return windsurf.New()
-	}
-	return nil
-}
 
 // ─── VS Code inputs preservation ────────────────────────────────────────────
 
