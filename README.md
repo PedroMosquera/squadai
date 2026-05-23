@@ -31,14 +31,14 @@ Linux `.deb` and `.rpm` packages are published on every [release](https://github
 
 ## Getting started
 
-The fastest path is the interactive wizard:
+The fastest path is the interactive TUI wizard:
 
 ```sh
 cd your-project
 squadai
 ```
 
-It walks you through choosing a methodology, enabling MCP servers, and selecting plugins. At the end it asks to apply the config. That's it — your agents are configured.
+Running `squadai` with no arguments opens a terminal UI that walks you through choosing a methodology, enabling MCP servers, and selecting plugins. At the end it asks to apply the config. That's it — your agents are configured.
 
 If you'd rather script it:
 
@@ -167,7 +167,7 @@ See [`docs/policy.md`](docs/policy.md) for the full reference.
 The ones you'll use regularly:
 
 ```sh
-squadai                     # interactive wizard (first-time setup or re-configure)
+squadai                     # launch the interactive TUI wizard (first-time setup or re-configure)
 squadai init                # initialize or re-initialize project.json
 squadai apply               # install agent files (idempotent — safe to re-run)
 squadai diff                # preview what apply would change
