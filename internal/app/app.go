@@ -370,6 +370,7 @@ func buildCommandRegistry() helpOutput {
 					{Name: "--force", Type: "bool", Description: "Apply even without project.json"},
 					{Name: "--json", Type: "bool", Description: "Output apply report as JSON"},
 					{Name: "--verbose", Type: "bool", Description: "Stream step events as they execute"},
+					{Name: "--no-brand", Type: "bool", Description: "Skip brand banner component for this apply"},
 				},
 			},
 			{

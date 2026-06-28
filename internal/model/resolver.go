@@ -68,6 +68,16 @@ func NewVSCodeResolver() Resolver {
 	}}
 }
 
+// NewPiResolver returns a Resolver for Pi Agent.
+// Uses provider-qualified names like OpenCode (anthropic/...).
+func NewPiResolver() Resolver {
+	return &mapResolver{models: map[Tier]string{
+		TierPremium:  "anthropic/claude-opus-4",
+		TierStandard: "anthropic/claude-sonnet-4",
+		TierCheap:    "openai/gpt-4.1-mini",
+	}}
+}
+
 // ForAgent returns the Resolver appropriate for the given adapter ID.
 // Unknown agent IDs fall back to the OpenCode resolver.
 func ForAgent(id domain.AgentID) Resolver {
@@ -76,6 +86,8 @@ func ForAgent(id domain.AgentID) Resolver {
 		return NewClaudeResolver()
 	case domain.AgentOpenCode:
 		return NewOpenCodeResolver()
+	case domain.AgentPi:
+		return NewPiResolver()
 	case domain.AgentCursor:
 		return NewCursorResolver()
 	case domain.AgentWindsurf:

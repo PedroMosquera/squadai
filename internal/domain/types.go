@@ -9,6 +9,7 @@ const (
 	AgentVSCodeCopilot AgentID = "vscode-copilot"
 	AgentCursor        AgentID = "cursor"
 	AgentWindsurf      AgentID = "windsurf"
+	AgentPi            AgentID = "pi"
 )
 
 // Methodology identifies a development methodology preset.
@@ -80,6 +81,10 @@ const (
 	// ComponentCleanup is used for stale-file deletion actions that are not
 	// associated with a specific installable component.
 	ComponentCleanup ComponentID = "cleanup"
+	// ComponentBrand installs ASCII-art banner blocks into agent files so
+	// developers see a visual indicator that SquadAI is active at session start.
+	// Toggled via ProjectConfig.Brand.Enabled (default: true).
+	ComponentBrand ComponentID = "brand"
 )
 
 // OperationalMode determines config precedence behavior.

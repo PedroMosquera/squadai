@@ -13,6 +13,7 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/components/agent_teams"
 	"github.com/PedroMosquera/squadai/internal/components/agents"
+	"github.com/PedroMosquera/squadai/internal/components/brand"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/hooks"
@@ -48,6 +49,7 @@ type Set struct {
 	Workflows   *workflows.Installer
 	AgentTeams  *agent_teams.Installer
 	Hooks       *hooks.Installer
+	Brand       *brand.Installer
 	Copilot     *copilot.Manager
 }
 
@@ -58,6 +60,7 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 		Memory:      memory.New(),
 		Copilot:     copilot.New(),
 		Permissions: permissions.New(),
+		Brand:       brand.New(),
 	}
 
 	if rulesCfg, ok := cfg.Components[string(domain.ComponentRules)]; ok && rulesCfg.Enabled {

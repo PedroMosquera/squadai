@@ -69,6 +69,7 @@ The result is a team where everyone's agents have:
 - **Consistent coding standards** — auto-detected by language (Go, TypeScript, Python, Rust, and [12 more](docs/architecture.md))
 - **Shared MCP servers** — Context7 is enabled by default; others are opt-in
 - **Memory protocols** — a structured `docs/memory/` system agents can read and write across sessions
+- **Visual branding** — an ASCII-art banner injected into agent files so devs see SquadAI is active at session start (disable with `squadai apply --no-brand`)
 
 ### Adapters and delegation
 
@@ -81,6 +82,7 @@ Different agents handle sub-agents differently. squadai adapts:
 | Cursor | `.cursor/rules/squadai.mdc` | Native agent files in `.cursor/agents/` |
 | Windsurf | `.windsurf/rules/squadai.md` | Solo all-in-one prompt + workflow files |
 | VS Code Copilot | `.github/copilot-instructions.md` | Solo all-in-one prompt |
+| Pi | `~/.pi/agent/AGENTS.md` | Native agent files in `~/.pi/agent/agents/` + prompts in `~/.pi/agent/prompts/` |
 
 ---
 

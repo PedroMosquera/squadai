@@ -675,13 +675,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case screenInitAdapters:
-		// All 5 canonical agents in fixed order.
+		// All canonical agents in fixed order.
 		allAgents := []domain.AgentID{
 			domain.AgentOpenCode,
 			domain.AgentClaudeCode,
 			domain.AgentVSCodeCopilot,
 			domain.AgentCursor,
 			domain.AgentWindsurf,
+			domain.AgentPi,
 		}
 		switch key {
 		case "up", "k":
@@ -823,6 +824,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					string(domain.AgentVSCodeCopilot),
 					string(domain.AgentCursor),
 					string(domain.AgentWindsurf),
+					string(domain.AgentPi),
 				}
 				selectedSet := make(map[string]bool, len(selectedIDs))
 				for _, id := range selectedIDs {
@@ -1473,6 +1475,8 @@ func agentDisplayName(id domain.AgentID) string {
 		return "Cursor"
 	case domain.AgentWindsurf:
 		return "Windsurf"
+	case domain.AgentPi:
+		return "Pi"
 	default:
 		return string(id)
 	}
@@ -1667,13 +1671,14 @@ func (m Model) viewInitModelTier() string {
 
 // viewInitAdapters renders the agent selection checkbox screen.
 func (m Model) viewInitAdapters() string {
-	// All 5 canonical agents in fixed order.
+	// All canonical agents in fixed order.
 	allAgents := []domain.AgentID{
 		domain.AgentOpenCode,
 		domain.AgentClaudeCode,
 		domain.AgentVSCodeCopilot,
 		domain.AgentCursor,
 		domain.AgentWindsurf,
+		domain.AgentPi,
 	}
 
 	// Build a set of detected agent IDs for quick lookup.
@@ -1818,13 +1823,14 @@ func (m Model) viewInitInstallSummary() string {
 	content.WriteString("\n")
 	content.WriteString(headingStyle.Render("Agents") + "\n")
 
-	// List all 5 canonical agents; show only selected ones.
+	// List all canonical agents; show only selected ones.
 	allAgents := []domain.AgentID{
 		domain.AgentOpenCode,
 		domain.AgentClaudeCode,
 		domain.AgentVSCodeCopilot,
 		domain.AgentCursor,
 		domain.AgentWindsurf,
+		domain.AgentPi,
 	}
 
 	hasAny := false
