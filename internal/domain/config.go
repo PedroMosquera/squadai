@@ -12,6 +12,7 @@ type UserConfig struct {
 // ProjectConfig represents .squadai/project.json.
 type ProjectConfig struct {
 	Version     int                        `json:"version"`
+	Preset      SetupPreset                `json:"preset,omitempty"`
 	Adapters    map[string]AdapterConfig   `json:"adapters,omitempty"`
 	Components  map[string]ComponentConfig `json:"components"`
 	Copilot     CopilotConfig              `json:"copilot"`
@@ -23,11 +24,66 @@ type ProjectConfig struct {
 	Meta        ProjectMeta                `json:"meta,omitempty"`
 	Methodology Methodology                `json:"methodology,omitempty"`
 	ModelTier   ModelTier                  `json:"model_tier,omitempty"`
+	Memory      MemoryConfig               `json:"memory,omitempty"`
+	Context     ContextConfig              `json:"context,omitempty"`
+	Usage       UsageConfig                `json:"usage,omitempty"`
+	Models      ModelsConfig               `json:"models,omitempty"`
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
 	Hooks       HooksConfig                `json:"hooks,omitempty"`
 	Marketplace MarketplaceConfig          `json:"marketplace,omitempty"`
+}
+
+// MemoryConfig controls SquadAI's local-first project memory backend.
+type MemoryConfig struct {
+	Backend            string `json:"backend,omitempty"` // native, docs
+	AutoCapture        bool   `json:"auto_capture,omitempty"`
+	ProjectKeyStrategy string `json:"project_key_strategy,omitempty"` // git-remote, repo-name
+	ExportPath         string `json:"export_path,omitempty"`
+}
+
+// ContextConfig defines named context profiles for daily agent sessions.
+type ContextConfig struct {
+	DefaultProfile string                    `json:"default_profile,omitempty"`
+	Profiles       map[string]ContextProfile `json:"profiles,omitempty"`
+}
+
+// ContextProfile controls which local context is assembled for an agent run.
+type ContextProfile struct {
+	MemoryScope      string                 `json:"memory_scope,omitempty"`
+	MCPServers       []string               `json:"mcp_servers,omitempty"`
+	SkillScopes      []string               `json:"skill_scopes,omitempty"`
+	MaxApproxTokens  int                    `json:"max_approx_tokens,omitempty"`
+	Include          []string               `json:"include,omitempty"`
+	Exclude          []string               `json:"exclude,omitempty"`
+	AdapterOverrides map[string]interface{} `json:"adapter_overrides,omitempty"`
+}
+
+// UsageConfig stores approximate budget controls. Enforcement is best-effort
+// until an adapter exposes exact token and cost telemetry.
+type UsageConfig struct {
+	DailyTokenBudget   int               `json:"daily_token_budget,omitempty"`
+	SessionTokenBudget int               `json:"session_token_budget,omitempty"`
+	DailyCostBudget    float64           `json:"daily_cost_budget,omitempty"`
+	SessionCostBudget  float64           `json:"session_cost_budget,omitempty"`
+	Enforcement        string            `json:"enforcement,omitempty"` // off, warn, ask, block
+	Currency           string            `json:"currency,omitempty"`
+	PriceCatalogSource string            `json:"price_catalog_source,omitempty"`
+	ProfileTiers       map[string]string `json:"profile_tiers,omitempty"`
+}
+
+// ModelsConfig defines abstract model profiles and phase/role overrides.
+type ModelsConfig struct {
+	Profiles  map[string]ModelProfile `json:"profiles,omitempty"`
+	Overrides map[string]string       `json:"overrides,omitempty"`
+}
+
+// ModelProfile is an adapter-neutral model routing preset.
+type ModelProfile struct {
+	Tier        string            `json:"tier,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Adapters    map[string]string `json:"adapters,omitempty"`
 }
 
 // MarketplaceConfig tracks which plugin marketplace plugins are installed in
@@ -57,7 +113,7 @@ type AgentTeamsConfig struct {
 
 // HookEntry is a single hook action — currently only "command" type is supported.
 type HookEntry struct {
-	Type    string `json:"type"`              // always "command"
+	Type    string `json:"type"` // always "command"
 	Command string `json:"command"`
 	Async   bool   `json:"async,omitempty"`
 	Timeout int    `json:"timeout,omitempty"` // seconds; 0 = agent default (60 s)
@@ -233,6 +289,7 @@ type PathsConfig struct {
 // Policy locked fields are final. Project overrides user. User provides defaults.
 type MergedConfig struct {
 	Mode        OperationalMode            `json:"mode"`
+	Preset      SetupPreset                `json:"preset,omitempty"`
 	Adapters    map[string]AdapterConfig   `json:"adapters"`
 	Components  map[string]ComponentConfig `json:"components"`
 	Copilot     CopilotConfig              `json:"copilot"`
@@ -245,6 +302,10 @@ type MergedConfig struct {
 	Paths       PathsConfig                `json:"paths"`
 	Methodology Methodology                `json:"methodology,omitempty"`
 	ModelTier   ModelTier                  `json:"model_tier,omitempty"`
+	Memory      MemoryConfig               `json:"memory,omitempty"`
+	Context     ContextConfig              `json:"context,omitempty"`
+	Usage       UsageConfig                `json:"usage,omitempty"`
+	Models      ModelsConfig               `json:"models,omitempty"`
 	Team        map[string]TeamRole        `json:"team,omitempty"`
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
@@ -281,12 +342,88 @@ func DefaultUserConfig() *UserConfig {
 func DefaultProjectConfig() *ProjectConfig {
 	return &ProjectConfig{
 		Version: 1,
+		Preset:  PresetSoloMinimal,
 		Components: map[string]ComponentConfig{
 			string(ComponentMemory): {Enabled: true},
 			string(ComponentBrand):  {Enabled: true},
 		},
 		Copilot: CopilotConfig{
 			InstructionsTemplate: "standard",
+		},
+		Memory:  DefaultMemoryConfig(),
+		Context: DefaultContextConfig(),
+		Usage:   DefaultUsageConfig(),
+		Models:  DefaultModelsConfig(),
+	}
+}
+
+// DefaultMemoryConfig returns the local native memory defaults.
+func DefaultMemoryConfig() MemoryConfig {
+	return MemoryConfig{
+		Backend:            "native",
+		AutoCapture:        true,
+		ProjectKeyStrategy: "git-remote",
+		ExportPath:         "docs/memory",
+	}
+}
+
+// DefaultContextConfig returns the built-in context profiles.
+func DefaultContextConfig() ContextConfig {
+	return ContextConfig{
+		DefaultProfile: "default",
+		Profiles: map[string]ContextProfile{
+			"default":  {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 12000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"debug":    {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 16000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"feature":  {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd", "sdd"}, MaxApproxTokens: 20000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"review":   {MemoryScope: "project", MCPServers: []string{}, SkillScopes: []string{"shared/code-review"}, MaxApproxTokens: 10000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"docs":     {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 10000, Include: []string{"docs/**", "README.md", "*.md"}, Exclude: []string{".git/**", "node_modules/**"}},
+			"incident": {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 24000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"cheap":    {MemoryScope: "summary", MCPServers: []string{}, SkillScopes: []string{"shared"}, MaxApproxTokens: 6000, Include: []string{"README.md", "docs/**"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+		},
+	}
+}
+
+// DefaultUsageConfig returns conservative approximate budget defaults.
+func DefaultUsageConfig() UsageConfig {
+	return UsageConfig{
+		DailyTokenBudget:   200000,
+		SessionTokenBudget: 50000,
+		Enforcement:        "warn",
+		Currency:           "USD",
+		PriceCatalogSource: "embedded",
+		ProfileTiers: map[string]string{
+			"cheap":    "cheap",
+			"default":  "balanced",
+			"debug":    "balanced",
+			"feature":  "premium",
+			"review":   "balanced",
+			"docs":     "cheap",
+			"incident": "premium",
+		},
+	}
+}
+
+// DefaultModelsConfig returns adapter-neutral model profile labels.
+func DefaultModelsConfig() ModelsConfig {
+	return ModelsConfig{
+		Profiles: map[string]ModelProfile{
+			"cheap":    {Tier: "cheap", Description: "lowest-cost capable model for routine edits"},
+			"balanced": {Tier: "balanced", Description: "default cost/quality profile"},
+			"premium":  {Tier: "premium", Description: "flagship model profile for hard planning, debugging, and review"},
+			"default":  {Tier: "balanced", Description: "compatibility alias for model_tier"},
+		},
+		Overrides: map[string]string{
+			"tdd.brainstormer": "balanced",
+			"tdd.planner":      "premium",
+			"tdd.implementer":  "balanced",
+			"tdd.reviewer":     "premium",
+			"tdd.debugger":     "premium",
+			"sdd.explorer":     "balanced",
+			"sdd.proposer":     "premium",
+			"sdd.spec-writer":  "premium",
+			"sdd.designer":     "premium",
+			"sdd.implementer":  "balanced",
+			"sdd.verifier":     "premium",
 		},
 	}
 }

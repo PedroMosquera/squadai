@@ -1,6 +1,6 @@
 # SquadAI — 5-Minute User Guide
 
-SquadAI is a CLI tool that installs and maintains a consistent AI-agent configuration across every coding assistant in your project. It manages system prompts, sub-agent teams, MCP servers, skills, and settings for OpenCode, Claude Code, Cursor, VS Code Copilot, and Windsurf — all from a single source of truth in `.squadai/`.
+SquadAI is a local-first control plane for AI coding agents. It manages system prompts, sub-agent teams, MCP servers, skills, permissions, memory metadata, context profiles, model routing, usage budgets, and settings for OpenCode, Claude Code, Cursor, VS Code Copilot, Windsurf, and Pi from a single source of truth in `.squadai/`.
 
 ---
 
@@ -46,6 +46,10 @@ Each option shows the role pipeline it will generate.
 
 Displays the current methodology, team roles, active MCP servers, and enabled plugins. Available from the main menu as **Team Status**.
 
+### Daily status
+
+Use `squadai status --daily` for a compact daily-driver view: active repo, preset, context profile, memory backend, usage budgets, MCP servers, drift/refinement state, backup state, and health summary.
+
 ### MCP configuration screen
 
 Toggle which MCP servers to enable. Context7 (live documentation lookup) is pre-selected by default. MCP servers are written to each agent's native config format.
@@ -62,8 +66,10 @@ Shows all selections — methodology, MCP servers, plugins — before confirming
 |------|---------|
 | First-time setup (with wizard) | `squadai` |
 | First-time setup (CLI) | `squadai init --methodology=tdd && squadai apply` |
+| Solo power preset | `squadai init --preset=solo-power && squadai apply` |
 | Re-apply after editing config | `squadai apply` |
 | Health check | `squadai status` |
+| Daily control-plane summary | `squadai status --daily` |
 | Full compliance check | `squadai verify` |
 | Preview changes before applying | `squadai plan` or `squadai diff` |
 | Dry-run (no writes) | `squadai apply --dry-run` |
@@ -122,4 +128,4 @@ Backup and rollback details: [`docs/recovery.md`](recovery.md)
 Troubleshooting guide: [`docs/troubleshooting.md`](troubleshooting.md)  
 Architecture internals: [`docs/architecture.md`](architecture.md)
 
-**Coming soon:** Project Memory (an indexed `docs/memory/` tree for decisions, learnings, and incidents) and Squad Refinement (a per-codebase agent-template refinement workflow) are planned for upcoming releases.
+Project Memory and Squad Refinement are active features. Memory commands manage the indexed `docs/memory/` exchange format, while new project configs also include native local memory metadata for the daily-driver roadmap.

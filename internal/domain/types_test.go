@@ -117,6 +117,53 @@ func TestDefaultProjectConfig_HasStandardInstructionsTemplate(t *testing.T) {
 	}
 }
 
+func TestDefaultProjectConfig_HasSoloMinimalPreset(t *testing.T) {
+	cfg := DefaultProjectConfig()
+	if cfg.Preset != PresetSoloMinimal {
+		t.Errorf("Preset = %q, want %q", cfg.Preset, PresetSoloMinimal)
+	}
+}
+
+func TestDefaultProjectConfig_HasNativeMemoryDefaults(t *testing.T) {
+	cfg := DefaultProjectConfig()
+	if cfg.Memory.Backend != "native" {
+		t.Errorf("Memory.Backend = %q, want native", cfg.Memory.Backend)
+	}
+	if !cfg.Memory.AutoCapture {
+		t.Error("Memory.AutoCapture should default to true")
+	}
+	if cfg.Memory.ExportPath != "docs/memory" {
+		t.Errorf("Memory.ExportPath = %q, want docs/memory", cfg.Memory.ExportPath)
+	}
+}
+
+func TestDefaultProjectConfig_HasContextProfiles(t *testing.T) {
+	cfg := DefaultProjectConfig()
+	if cfg.Context.DefaultProfile != "default" {
+		t.Errorf("DefaultProfile = %q, want default", cfg.Context.DefaultProfile)
+	}
+	for _, name := range []string{"default", "debug", "feature", "review", "docs", "incident", "cheap"} {
+		if _, ok := cfg.Context.Profiles[name]; !ok {
+			t.Errorf("missing built-in context profile %q", name)
+		}
+	}
+}
+
+func TestDefaultProjectConfig_HasUsageAndModelProfiles(t *testing.T) {
+	cfg := DefaultProjectConfig()
+	if cfg.Usage.Enforcement != "warn" {
+		t.Errorf("Usage.Enforcement = %q, want warn", cfg.Usage.Enforcement)
+	}
+	if cfg.Usage.SessionTokenBudget == 0 {
+		t.Error("Usage.SessionTokenBudget should be non-zero")
+	}
+	for _, name := range []string{"cheap", "balanced", "premium", "default"} {
+		if _, ok := cfg.Models.Profiles[name]; !ok {
+			t.Errorf("missing model profile %q", name)
+		}
+	}
+}
+
 // ─── DefaultPolicyConfig tests ──────────────────────────────────────────────
 
 func TestDefaultPolicyConfig_HasCorrectVersion(t *testing.T) {

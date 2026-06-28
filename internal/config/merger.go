@@ -44,6 +44,10 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 
 	// Layer 2: project overrides user.
 	if project != nil {
+		if project.Preset != "" {
+			merged.Preset = project.Preset
+		}
+
 		// Merge project adapter settings into user adapter settings.
 		for k, v := range project.Adapters {
 			if existing, exists := merged.Adapters[k]; exists {
@@ -88,6 +92,18 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		}
 		if project.ModelTier != "" {
 			merged.ModelTier = project.ModelTier
+		}
+		if project.Memory.Backend != "" || project.Memory.ProjectKeyStrategy != "" || project.Memory.ExportPath != "" || project.Memory.AutoCapture {
+			merged.Memory = project.Memory
+		}
+		if project.Context.DefaultProfile != "" || len(project.Context.Profiles) > 0 {
+			merged.Context = project.Context
+		}
+		if project.Usage.Enforcement != "" || project.Usage.DailyTokenBudget > 0 || project.Usage.SessionTokenBudget > 0 || project.Usage.DailyCostBudget > 0 || project.Usage.SessionCostBudget > 0 {
+			merged.Usage = project.Usage
+		}
+		if len(project.Models.Profiles) > 0 || len(project.Models.Overrides) > 0 {
+			merged.Models = project.Models
 		}
 		if project.Team != nil {
 			merged.Team = cloneTeamRoles(project.Team)

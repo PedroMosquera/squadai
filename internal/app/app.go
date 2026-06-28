@@ -151,6 +151,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			return cli.RunPluginsList(args[2:], stdout)
 		case "add":
 			return cli.RunPluginsAdd(args[2:], stdout, stderr)
+		case "add-git":
+			return cli.RunPluginsAddGit(args[2:], stdout, stderr)
 		case "remove":
 			return cli.RunPluginsRemove(args[2:], stdout)
 		default:
@@ -165,6 +167,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 
 	case "token-budget":
 		return cli.RunTokenBudget(args[1:], stdout)
+
+	case "token-usage":
+		return cli.RunTokenUsage(args[1:], stdout)
 
 	default:
 		return fmt.Errorf("unknown command %q — run 'squadai help' for available commands", args[0])
@@ -224,8 +229,9 @@ func printPluginsUsage(w io.Writer) {
 Subcommands:
   sync             Fetch the plugin registry from github.com/wshobson/agents
   list             List available plugins (--json for machine output)
-  add <name>       Download and install a plugin; updates project.json marketplace
-  remove <name>    Remove an installed plugin's files; updates project.json marketplace
+  add <name>       Download and install a marketplace plugin; updates project.json
+  add-git <url>    Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/
+  remove <name>    Remove an installed plugin's files; updates project.json
 
 `)
 }
@@ -371,6 +377,8 @@ func buildCommandRegistry() helpOutput {
 					{Name: "--json", Type: "bool", Description: "Output apply report as JSON"},
 					{Name: "--verbose", Type: "bool", Description: "Stream step events as they execute"},
 					{Name: "--no-brand", Type: "bool", Description: "Skip brand banner component for this apply"},
+					{Name: "--max-tokens", Type: "int", Description: "Budget cap: fit components within N tokens"},
+					{Name: "--fit-model", Type: "string", Description: "Model name for budget fitting (e.g. claude-sonnet-4)"},
 				},
 			},
 			{
@@ -414,7 +422,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "install-hooks",
-				Description: "Install a Git pre-commit hook that runs 'squadai verify --strict'.",
+				Description: "Install Git hooks (pre-commit, post-merge, post-checkout) for squadai.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
 				},
@@ -425,7 +433,8 @@ func buildCommandRegistry() helpOutput {
 				Subcommands: []cmdEntry{
 					{Name: "sync", Description: "Fetch the plugin registry from github.com/wshobson/agents.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 					{Name: "list", Description: "List available plugins (✓ = installed in this project).", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output list as JSON"}}},
-					{Name: "add", Description: "Download and install a plugin into .claude/agents/, skills/, and commands/.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+					{Name: "add", Description: "Download and install a marketplace plugin.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+					{Name: "add-git", Description: "Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 					{Name: "remove", Description: "Remove an installed plugin's files.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 				},
 			},
@@ -483,6 +492,15 @@ func buildCommandRegistry() helpOutput {
 				Description: "Estimate per-session token cost of the current squadai install.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output as JSON"},
+					{Name: "--model", Type: "string", Description: "Model name for tokenizer (e.g. claude-sonnet-4, gpt-4o)"},
+				},
+			},
+			{
+				Name:        "token-usage",
+				Description: "Aggregate real token usage from agent session transcripts.",
+				Flags: []cmdFlag{
+					{Name: "--since", Type: "string", Description: "Time window: 7d, 30d, or all (default: 7d)"},
+					{Name: "--json", Type: "bool", Description: "Output as JSON"},
 				},
 			},
 			{
@@ -532,15 +550,17 @@ Commands:
   verify             Print compliance and health report (--strict adds drift check)
   status             Show project configuration summary
   doctor             Run pre-flight diagnostics (environment, agents, config, MCP, filesystem, drift)
-  token-budget       Estimate per-session token cost of the current install (--json for JSON)
+  token-budget       Estimate per-session token cost of the current install (--model for BPE, --json for JSON)
+  token-usage        Aggregate real token usage from agent session transcripts (--since=7d, --json)
   watch              Monitor managed files for drift, stream events to stdout
   audit              Render the governance audit log (.squadai/audit.log)
-  install-hooks      Install a Git pre-commit hook running 'squadai verify --strict'
+  install-hooks      Install Git hooks (pre-commit, post-merge, post-checkout) for squadai
   install-commands   Install SquadAI slash commands + squadai-manager agent to .claude/
   explain <topic>    Explain a SquadAI concept (config, policy, adapters, error-codes, ...)
   plugins sync          Fetch plugin registry from github.com/wshobson/agents
   plugins list          List available plugins (✓ = installed in this project)
-  plugins add <name>    Download and install a plugin into .claude/agents/, skills/, and commands/
+  plugins add <name>    Download and install a marketplace plugin
+  plugins add-git <url> Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/
   plugins remove <name> Remove an installed plugin's files
   backup create      Snapshot managed files
   backup list        List available backups

@@ -19,7 +19,7 @@ These flags are accepted by all mutating commands:
 Initialize a project for SquadAI.
 
 ```sh
-squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]
+squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<solo-minimal|solo-power|team-standard|enterprise-locked|full-squad|lean|custom>] [--with-policy] [--force]
 ```
 
 Creates:
@@ -35,6 +35,21 @@ With `--methodology=<tdd|sdd|conventional>`:
 - Sets the development methodology in `project.json`
 - Generates team composition (TDD: 6 roles, SDD: 8 roles, Conventional: 4 roles)
 - Enables the `agents` and `commands` components
+
+With `--preset=<name>`:
+- `solo-minimal` — Conventional workflow, starter models, low-overhead local defaults
+- `solo-power` — TDD workflow, balanced models, native memory/context/usage defaults
+- `team-standard` — TDD workflow, balanced models, shared governance baseline
+- `enterprise-locked` — SDD workflow, performance models, strict-profile baseline
+- `full-squad` — compatibility preset for SDD + balanced models
+- `lean` — compatibility preset for Conventional + starter models
+- `custom` — keep explicit flags or wizard defaults
+
+New configs include these local control-plane blocks:
+- `memory` — native backend metadata with `docs/memory` export compatibility
+- `context` — built-in profiles: `default`, `debug`, `feature`, `review`, `docs`, `incident`, `cheap`
+- `usage` — approximate session/daily token budgets and enforcement mode
+- `models` — cheap, balanced, and premium routing labels plus role overrides
 
 With `--mcp=<csv>`:
 - Comma-separated list of MCP server IDs to enable (e.g., `context7`)
@@ -234,10 +249,19 @@ Failed checks include a message explaining what's wrong.
 Show project health: detected adapters, enabled components, and managed file states.
 
 ```sh
-squadai status [--json]
+squadai status [--json] [--fix] [--daily]
 ```
 
-Provides an at-a-glance summary of the current project configuration and file state without computing a full plan or running compliance checks. Faster than `verify` for quick orientation.
+Provides an at-a-glance summary of the current project configuration, managed files, compliance health, latest backup, and refinement state.
+
+With `--daily`, prints a compact daily-driver dashboard for the current repo:
+- active preset, methodology, mode, and context profile
+- detected agents and configured MCP servers
+- memory backend/export path and auto-capture flag
+- approximate usage budgets and enforcement mode
+- health, refinement drift, and latest backup
+
+Use `--json` for the same data in machine-readable form, including `preset`, `context_profile`, `memory`, `usage`, and `model_tier`.
 
 **Example:**
 
