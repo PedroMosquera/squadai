@@ -1810,10 +1810,10 @@ func (a *filterTestAdapter) ProjectCommandsDir(_ string) string          { retur
 func (a *filterTestAdapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationSoloAgent
 }
-func (a *filterTestAdapter) SupportsSubAgents() bool       { return false }
-func (a *filterTestAdapter) SubAgentsDir(_ string) string  { return "" }
-func (a *filterTestAdapter) SupportsWorkflows() bool       { return false }
-func (a *filterTestAdapter) WorkflowsDir(_ string) string  { return "" }
+func (a *filterTestAdapter) SupportsSubAgents() bool                   { return false }
+func (a *filterTestAdapter) SubAgentsDir(_ string) string              { return "" }
+func (a *filterTestAdapter) SupportsWorkflows() bool                   { return false }
+func (a *filterTestAdapter) WorkflowsDir(_ string) string              { return "" }
 func (a *filterTestAdapter) MCPRootKey() string                        { return "mcpServers" }
 func (a *filterTestAdapter) MCPURLKey() string                         { return "url" }
 func (a *filterTestAdapter) MCPConfigPath(_ string) string             { return "" }
@@ -2062,6 +2062,47 @@ func TestRunInit_PresetFlag_FullSquadSetsMethodology(t *testing.T) {
 	}
 	if proj.ModelTier != domain.ModelTierBalanced {
 		t.Errorf("ModelTier = %q, want balanced for full-squad preset", proj.ModelTier)
+	}
+	if proj.Preset != domain.PresetFullSquad {
+		t.Errorf("Preset = %q, want full-squad", proj.Preset)
+	}
+}
+
+func TestRunInit_PresetFlag_SoloPowerSetsRoadmapDefaults(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--preset=solo-power"}, &buf); err != nil {
+		t.Fatalf("RunInit --preset=solo-power error: %v", err)
+	}
+
+	proj, err := config.LoadProject(dir)
+	if err != nil {
+		t.Fatalf("load project: %v", err)
+	}
+
+	if proj.Preset != domain.PresetSoloPower {
+		t.Errorf("Preset = %q, want solo-power", proj.Preset)
+	}
+	if proj.Methodology != domain.MethodologyTDD {
+		t.Errorf("Methodology = %q, want tdd for solo-power preset", proj.Methodology)
+	}
+	if proj.Memory.Backend != "native" {
+		t.Errorf("Memory.Backend = %q, want native", proj.Memory.Backend)
+	}
+	if proj.Context.DefaultProfile != "default" {
+		t.Errorf("Context.DefaultProfile = %q, want default", proj.Context.DefaultProfile)
+	}
+	if proj.Usage.Enforcement != "warn" {
+		t.Errorf("Usage.Enforcement = %q, want warn", proj.Usage.Enforcement)
 	}
 }
 

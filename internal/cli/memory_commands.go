@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PedroMosquera/squadai/internal/memory"
 )
@@ -27,6 +29,8 @@ func RunMemoryCommand(args []string) error {
 		return RunMemoryReindex(args[1:])
 	case "status":
 		return RunMemoryStatus(args[1:])
+	case "gc":
+		return RunMemoryGC(args[1:])
 	default:
 		printMemoryUsage()
 		return fmt.Errorf("unknown memory subcommand %q", args[0])
@@ -41,6 +45,7 @@ Subcommands:
   search <query>         Search indexed memory notes (--json for JSON output)
   promote <inbox-path>   Move an inbox note to categorized memory with frontmatter
   reindex                Rebuild the search index from docs/memory/
+  gc                     Archive stale unreferenced notes (--older-than=180d, --dry-run)
   status                 Show inbox, total, and indexed counts
 
 `)
@@ -96,9 +101,12 @@ func RunMemorySearch(args []string) error {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
 
-	results, err := memory.Search(projectDir, query)
+	results, err := memory.SearchTFIDF(projectDir, query)
 	if err != nil {
-		return fmt.Errorf("memory search: %w", err)
+		results, err = memory.Search(projectDir, query)
+		if err != nil {
+			return fmt.Errorf("memory search: %w", err)
+		}
 	}
 
 	if jsonOut {
@@ -172,7 +180,9 @@ func RunMemoryReindex(args []string) error {
 		return fmt.Errorf("memory reindex: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "Index rebuilt. %d entries indexed.\n", n)
+	tfidfN, _ := memory.ReindexTFIDF(projectDir)
+
+	fmt.Fprintf(os.Stdout, "Index rebuilt. %d entries indexed (TF-IDF: %d).\n", n, tfidfN)
 	return nil
 }
 
@@ -194,5 +204,56 @@ func RunMemoryStatus(args []string) error {
 	fmt.Fprintf(os.Stdout, "  inbox:   %d notes\n", s.InboxCount)
 	fmt.Fprintf(os.Stdout, "  total:   %d notes\n", s.TotalCount)
 	fmt.Fprintf(os.Stdout, "  indexed: %d entries\n", s.IndexedCount)
+	return nil
+}
+
+// RunMemoryGC archives stale unreferenced notes.
+func RunMemoryGC(args []string) error {
+	dryRun := false
+	olderThanStr := "180d"
+
+	for _, arg := range args {
+		switch {
+		case arg == "--dry-run":
+			dryRun = true
+		case strings.HasPrefix(arg, "--older-than="):
+			olderThanStr = arg[len("--older-than="):]
+		case arg == "-h", arg == "--help":
+			fmt.Fprintln(os.Stdout, "Usage: squadai memory gc [--older-than=<dur>] [--dry-run]")
+			fmt.Fprintln(os.Stdout)
+			fmt.Fprintln(os.Stdout, "Archive stale unreferenced memory notes to docs/memory/.archive/")
+			fmt.Fprintln(os.Stdout, "Notes referenced in decisions/ ADR files are exempt.")
+			fmt.Fprintln(os.Stdout)
+			fmt.Fprintln(os.Stdout, "Flags:")
+			fmt.Fprintln(os.Stdout, "  --older-than=<dur>  Age threshold (e.g. 180d, 90d). Default: 180d")
+			fmt.Fprintln(os.Stdout, "  --dry-run           Show what would be archived without moving files")
+			return nil
+		}
+	}
+
+	days, err := strconv.Atoi(strings.TrimSuffix(olderThanStr, "d"))
+	if err != nil {
+		return fmt.Errorf("invalid --older-than value %q (expected e.g. 180d)", olderThanStr)
+	}
+
+	projectDir, err := resolveProjectDir()
+	if err != nil {
+		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	result, err := memory.GC(projectDir, time.Duration(days)*24*time.Hour, dryRun)
+	if err != nil {
+		return fmt.Errorf("memory gc: %w", err)
+	}
+
+	if dryRun {
+		fmt.Fprintf(os.Stdout, "Dry run — %d note(s) would be archived:\n", len(result.Archived))
+	} else {
+		fmt.Fprintf(os.Stdout, "Archived %d note(s) to docs/memory/.archive/.\n", len(result.Archived))
+	}
+	for _, p := range result.Archived {
+		fmt.Fprintf(os.Stdout, "  %s\n", p)
+	}
+	fmt.Fprintf(os.Stdout, "Remaining: %d notes\n", result.Remaining)
 	return nil
 }

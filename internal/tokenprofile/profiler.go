@@ -34,6 +34,7 @@ type Report struct {
 	TotalBytes  int
 	TotalTokens int
 	Missing     int // count of paths that did not exist on disk
+	Model       string // model name used for tokenization, empty = heuristic
 }
 
 // ScanPaths reads each file in paths (map[filepath]category) from disk,

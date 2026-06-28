@@ -25,9 +25,13 @@ const (
 type SetupPreset string
 
 const (
-	PresetFullSquad SetupPreset = "full-squad"
-	PresetLean      SetupPreset = "lean"
-	PresetCustom    SetupPreset = "custom"
+	PresetSoloMinimal    SetupPreset = "solo-minimal"
+	PresetSoloPower      SetupPreset = "solo-power"
+	PresetTeamStandard   SetupPreset = "team-standard"
+	PresetEnterpriseLock SetupPreset = "enterprise-locked"
+	PresetFullSquad      SetupPreset = "full-squad"
+	PresetLean           SetupPreset = "lean"
+	PresetCustom         SetupPreset = "custom"
 )
 
 // ModelTier identifies the AI model cost/quality preset for agent configuration.

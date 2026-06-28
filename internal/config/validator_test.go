@@ -135,6 +135,57 @@ func TestValidateProject_UnknownComponent(t *testing.T) {
 	assertContainsIssue(t, issues, `unknown component "fancy-widget"`)
 }
 
+func TestValidateProject_NewPresetsAreValid(t *testing.T) {
+	for _, preset := range []domain.SetupPreset{
+		domain.PresetSoloMinimal,
+		domain.PresetSoloPower,
+		domain.PresetTeamStandard,
+		domain.PresetEnterpriseLock,
+		domain.PresetFullSquad,
+		domain.PresetLean,
+		domain.PresetCustom,
+	} {
+		cfg := domain.DefaultProjectConfig()
+		cfg.Preset = preset
+		issues := ValidateProject(cfg)
+		for _, issue := range issues {
+			if contains(issue, "unknown preset") {
+				t.Errorf("preset %q should be valid, got %q", preset, issue)
+			}
+		}
+	}
+}
+
+func TestValidateProject_UnknownPreset(t *testing.T) {
+	cfg := domain.DefaultProjectConfig()
+	cfg.Preset = "chaos"
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `unknown preset "chaos"`)
+}
+
+func TestValidateProject_InvalidRoadmapBlocks(t *testing.T) {
+	cfg := domain.DefaultProjectConfig()
+	cfg.Memory.Backend = "cloud-only"
+	cfg.Memory.ProjectKeyStrategy = "random"
+	cfg.Context.DefaultProfile = "missing"
+	cfg.Context.Profiles = map[string]domain.ContextProfile{
+		"default": {MemoryScope: "planet", MaxApproxTokens: -1},
+	}
+	cfg.Usage.Enforcement = "panic"
+	cfg.Usage.SessionTokenBudget = -1
+	cfg.Models.Profiles["weird"] = domain.ModelProfile{Tier: "gold"}
+
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, "memory.backend")
+	assertContainsIssue(t, issues, "memory.project_key_strategy")
+	assertContainsIssue(t, issues, "context.default_profile")
+	assertContainsIssue(t, issues, "max_approx_tokens")
+	assertContainsIssue(t, issues, "memory_scope")
+	assertContainsIssue(t, issues, "usage.enforcement")
+	assertContainsIssue(t, issues, "usage.session_token_budget")
+	assertContainsIssue(t, issues, `models profile "weird"`)
+}
+
 // ─── ValidatePolicy tests ───────────────────────────────────────────────────
 
 func TestValidatePolicy_ValidConfig_NoIssues(t *testing.T) {

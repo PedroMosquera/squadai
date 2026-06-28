@@ -1,6 +1,6 @@
 # V2 User Guide
 
-squadai V2 adds sub-agent teams, methodology-driven workflows, MCP server management, and plugin integration. This guide covers the concepts and configuration needed to use these features.
+SquadAI V2 turns per-agent setup into a local control plane for daily AI engineering work. It adds sub-agent teams, methodology-driven workflows, MCP server management, plugin integration, native memory metadata, context profiles, usage budgets, and model routing labels.
 
 ---
 
@@ -14,6 +14,7 @@ V1 standardized system prompts and settings across agents. V2 extends this with:
 - **Plugins.** Third-party capabilities from a curated catalog, filtered by methodology compatibility and detected agents.
 - **Methodology skills.** Embedded skill files installed per methodology phase (TDD red-green-refactor, SDD spec workflow, etc.) alongside shared skills (code-review, testing, pr-description).
 - **Community skills.** The `find-skills` meta-skill connects to the Vercel skills ecosystem (skills.sh) for discovering and installing 91K+ community skill definitions.
+- **Daily-driver controls.** New project configs include `preset`, `memory`, `context`, `usage`, and `models` blocks so a repo can describe the whole operating model, not just generated files.
 
 ---
 
@@ -481,7 +482,9 @@ When a project or user value conflicts with a policy-locked field, the policy va
 ```json
 {
   "version": 1,
+  "preset": "solo-power",
   "methodology": "tdd",
+  "model_tier": "balanced",
   "meta": {
     "name": "my-project",
     "language": "Go",
@@ -509,6 +512,51 @@ When a project or user value conflicts with a policy-locked field, the policy va
   },
   "copilot": {
     "instructions_template": "standard"
+  },
+  "memory": {
+    "backend": "native",
+    "auto_capture": true,
+    "project_key_strategy": "git-remote",
+    "export_path": "docs/memory"
+  },
+  "context": {
+    "default_profile": "default",
+    "profiles": {
+      "default": {
+        "memory_scope": "project",
+        "mcp_servers": ["context7"],
+        "skill_scopes": ["shared"],
+        "max_approx_tokens": 12000,
+        "include": ["**/*"],
+        "exclude": [".git/**", "node_modules/**", "dist/**"]
+      },
+      "cheap": {
+        "memory_scope": "summary",
+        "mcp_servers": [],
+        "skill_scopes": ["shared"],
+        "max_approx_tokens": 6000
+      }
+    }
+  },
+  "usage": {
+    "daily_token_budget": 200000,
+    "session_token_budget": 50000,
+    "enforcement": "warn",
+    "currency": "USD",
+    "price_catalog_source": "embedded"
+  },
+  "models": {
+    "profiles": {
+      "cheap": { "tier": "cheap" },
+      "balanced": { "tier": "balanced" },
+      "premium": { "tier": "premium" },
+      "default": { "tier": "balanced" }
+    },
+    "overrides": {
+      "tdd.planner": "premium",
+      "tdd.reviewer": "premium",
+      "tdd.debugger": "premium"
+    }
   },
   "mcp": {
     "context7": {
@@ -603,7 +651,7 @@ Locked fields cannot be overridden by project or user config. See [`docs/policy.
 Initialize `.squadai/project.json`. Detects installed agents, project language, and writes starter files.
 
 ```sh
-squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--with-policy] [--force]
+squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<solo-minimal|solo-power|team-standard|enterprise-locked|full-squad|lean|custom>] [--with-policy] [--force]
 ```
 
 | Flag | Description |
@@ -611,6 +659,9 @@ squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<cs
 | `--methodology=<tdd\|sdd\|conventional>` | Set the development methodology. Generates team composition and enables agents/commands components. |
 | `--mcp=<csv>` | Comma-separated MCP server IDs to enable. Omit to include all recommended servers. |
 | `--plugins=<csv>` | Comma-separated plugin IDs to enable. Omit to skip plugin installation. |
+| `--model-tier=<balanced\|performance\|starter\|manual>` | Set compatibility model defaults for generated agent config. |
+| `--agents=<csv>` | Configure only the listed detected agents; OpenCode is always included. |
+| `--preset=<name>` | Use `solo-minimal`, `solo-power`, `team-standard`, `enterprise-locked`, or compatibility presets `full-squad`, `lean`, `custom`. |
 | `--with-policy` | Also create `.squadai/policy.json` with a starter template. |
 | `--force` | Overwrite existing template and skill files. |
 
@@ -618,6 +669,7 @@ Examples:
 
 ```sh
 squadai init --methodology=tdd
+squadai init --preset=solo-power
 squadai init --methodology=sdd --mcp=context7 --plugins=code-review
 squadai init --with-policy --force
 ```
@@ -653,6 +705,16 @@ squadai verify [--json]
 ```
 
 Checks that all enabled components are correctly installed for each detected agent: expected files exist, marker blocks are present, settings are valid.
+
+### `squadai status`
+
+Show the current project configuration, health, backup, and refinement summary.
+
+```sh
+squadai status [--json] [--fix] [--daily]
+```
+
+Use `--daily` for the compact local control-plane dashboard: active repo, agents, preset, context profile, memory backend, usage budgets, MCP servers, drift/refinement state, and health.
 
 ### `squadai validate-policy`
 

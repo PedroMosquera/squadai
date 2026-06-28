@@ -37,6 +37,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/model"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
+	"github.com/PedroMosquera/squadai/internal/planner/budget"
 	"github.com/PedroMosquera/squadai/internal/squadrefine"
 	"github.com/PedroMosquera/squadai/internal/state"
 	"github.com/PedroMosquera/squadai/internal/verify"
@@ -112,10 +113,12 @@ func RunInit(args []string, stdout io.Writer) error {
 		if strings.HasPrefix(arg, "--preset=") {
 			val := strings.TrimPrefix(arg, "--preset=")
 			switch domain.SetupPreset(val) {
-			case domain.PresetFullSquad, domain.PresetLean, domain.PresetCustom:
+			case domain.PresetSoloMinimal, domain.PresetSoloPower, domain.PresetTeamStandard,
+				domain.PresetEnterpriseLock, domain.PresetFullSquad, domain.PresetLean,
+				domain.PresetCustom:
 				presetValue = val
 			default:
-				return exitcode.ErrUnknownValue("--preset", val, "full-squad, lean, custom")
+				return exitcode.ErrUnknownValue("--preset", val, "solo-minimal, solo-power, team-standard, enterprise-locked, full-squad, lean, custom")
 			}
 			continue
 		}
@@ -139,7 +142,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		case "--no-permissions":
 			permissionsEnabled = false
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<full-squad|lean|custom>] [--with-policy] [--without-memory] [--force] [--merge] [--json] [--global]")
+			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<solo-minimal|solo-power|team-standard|enterprise-locked|full-squad|lean|custom>] [--with-policy] [--without-memory] [--force] [--merge] [--json] [--global]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Initialize .squadai/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
@@ -163,8 +166,12 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "                 manual: configure models yourself — no defaults applied")
 			fmt.Fprintln(stdout, "  --agents=<csv> Comma-separated list of agent IDs to configure (e.g. opencode,cursor).")
 			fmt.Fprintln(stdout, "                 OpenCode is always included. Omit to configure all detected agents.")
-			fmt.Fprintln(stdout, "  --preset=<full-squad|lean|custom>")
+			fmt.Fprintln(stdout, "  --preset=<solo-minimal|solo-power|team-standard|enterprise-locked|full-squad|lean|custom>")
 			fmt.Fprintln(stdout, "                 Apply a named setup preset:")
+			fmt.Fprintln(stdout, "                 solo-minimal: conventional workflow, starter models, low context budget")
+			fmt.Fprintln(stdout, "                 solo-power: TDD workflow, balanced models, daily-driver defaults")
+			fmt.Fprintln(stdout, "                 team-standard: TDD workflow, balanced models, shared governance")
+			fmt.Fprintln(stdout, "                 enterprise-locked: SDD workflow, performance models, strict profile")
 			fmt.Fprintln(stdout, "                 full-squad: SDD methodology, balanced models, all components")
 			fmt.Fprintln(stdout, "                 lean: conventional methodology, starter models, core only")
 			fmt.Fprintln(stdout, "                 custom: explicit flags or wizard defaults")
@@ -182,6 +189,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  squadai init --methodology=sdd --mcp=context7 --plugins=code-review")
 			fmt.Fprintln(stdout, "  squadai init --model-tier=performance")
 			fmt.Fprintln(stdout, "  squadai init --agents=opencode,cursor")
+			fmt.Fprintln(stdout, "  squadai init --preset=solo-power")
 			fmt.Fprintln(stdout, "  squadai init --preset=full-squad")
 			fmt.Fprintln(stdout, "  squadai init --without-memory")
 			fmt.Fprintln(stdout, "  squadai init --force")
@@ -194,6 +202,38 @@ func RunInit(args []string, stdout io.Writer) error {
 	// Apply preset AFTER flag parsing but BEFORE building config.
 	// Preset sets methodology/modelTier only when not already explicitly set.
 	switch domain.SetupPreset(presetValue) {
+	case domain.PresetSoloMinimal:
+		if !methodologyExplicit {
+			methodology = string(domain.MethodologyConventional)
+			methodologyExplicit = true
+		}
+		if !modelTierExplicit {
+			modelTier = domain.ModelTierStarter
+		}
+	case domain.PresetSoloPower:
+		if !methodologyExplicit {
+			methodology = string(domain.MethodologyTDD)
+			methodologyExplicit = true
+		}
+		if !modelTierExplicit {
+			modelTier = domain.ModelTierBalanced
+		}
+	case domain.PresetTeamStandard:
+		if !methodologyExplicit {
+			methodology = string(domain.MethodologyTDD)
+			methodologyExplicit = true
+		}
+		if !modelTierExplicit {
+			modelTier = domain.ModelTierBalanced
+		}
+	case domain.PresetEnterpriseLock:
+		if !methodologyExplicit {
+			methodology = string(domain.MethodologySDD)
+			methodologyExplicit = true
+		}
+		if !modelTierExplicit {
+			modelTier = domain.ModelTierPerformance
+		}
 	case domain.PresetFullSquad:
 		if !methodologyExplicit {
 			methodology = string(domain.MethodologySDD)
@@ -304,6 +344,9 @@ func RunInit(args []string, stdout io.Writer) error {
 			return fmt.Errorf("load existing project config for merge: %w", loadErr)
 		}
 		fresh := buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		if presetValue != "" {
+			fresh.Preset = domain.SetupPreset(presetValue)
+		}
 		if !permissionsEnabled {
 			fresh.Components[string(domain.ComponentPermissions)] = domain.ComponentConfig{Enabled: false}
 		}
@@ -315,6 +358,9 @@ func RunInit(args []string, stdout io.Writer) error {
 	} else {
 		// New or force: build fresh config.
 		proj = buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		if presetValue != "" {
+			proj.Preset = domain.SetupPreset(presetValue)
+		}
 		if !permissionsEnabled {
 			proj.Components[string(domain.ComponentPermissions)] = domain.ComponentConfig{Enabled: false}
 		}
@@ -331,6 +377,9 @@ func RunInit(args []string, stdout io.Writer) error {
 	// When proj was not written (exists + no-op skip), build it for JSON output.
 	if proj == nil {
 		proj = buildSmartProjectConfig(meta, selectedAdapters, meth, mcpSelections, pluginSelections, modelTier)
+		if presetValue != "" {
+			proj.Preset = domain.SetupPreset(presetValue)
+		}
 		if !permissionsEnabled {
 			proj.Components[string(domain.ComponentPermissions)] = domain.ComponentConfig{Enabled: false}
 		}
@@ -537,14 +586,18 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 					"team_standards_file": "templates/team-standards.md",
 				},
 			},
-		string(domain.ComponentSkills):      {Enabled: true},
-		string(domain.ComponentWorkflows):   {Enabled: true},
-		string(domain.ComponentPermissions): {Enabled: true},
-		string(domain.ComponentBrand):       {Enabled: true},
+			string(domain.ComponentSkills):      {Enabled: true},
+			string(domain.ComponentWorkflows):   {Enabled: true},
+			string(domain.ComponentPermissions): {Enabled: true},
+			string(domain.ComponentBrand):       {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{
 			InstructionsTemplate: "standard",
 		},
+		Memory:  domain.DefaultMemoryConfig(),
+		Context: domain.DefaultContextConfig(),
+		Usage:   domain.DefaultUsageConfig(),
+		Models:  domain.DefaultModelsConfig(),
 		Skills: map[string]domain.SkillDef{
 			"code-review": {
 				Description: "Structured code review",
@@ -653,6 +706,7 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 //   - Methodology, Team, Commands: if methodologyExplicit is true, overwrite from fresh;
 //     otherwise preserve existing values
 //   - ModelTier: if modelTierExplicit is true, overwrite from fresh; otherwise preserve
+//   - Preset and roadmap blocks: preserve existing values unless fresh explicitly sets them
 //   - Copilot, Rules: always preserved from existing (user-managed)
 func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExplicit bool, modelTierExplicit bool) *domain.ProjectConfig {
 	result := *existing
@@ -660,6 +714,9 @@ func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExpli
 	// Always overwrite version and meta from fresh.
 	result.Version = fresh.Version
 	result.Meta = fresh.Meta
+	if fresh.Preset != "" {
+		result.Preset = fresh.Preset
+	}
 
 	// Map-merge Adapters: add new keys from fresh, never overwrite existing.
 	result.Adapters = make(map[string]domain.AdapterConfig, len(existing.Adapters))
@@ -730,6 +787,19 @@ func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExpli
 		result.ModelTier = fresh.ModelTier
 	}
 
+	if isZeroMemoryConfig(result.Memory) && !isZeroMemoryConfig(fresh.Memory) {
+		result.Memory = fresh.Memory
+	}
+	if isZeroContextConfig(result.Context) && !isZeroContextConfig(fresh.Context) {
+		result.Context = fresh.Context
+	}
+	if isZeroUsageConfig(result.Usage) && !isZeroUsageConfig(fresh.Usage) {
+		result.Usage = fresh.Usage
+	}
+	if isZeroModelsConfig(result.Models) && !isZeroModelsConfig(fresh.Models) {
+		result.Models = fresh.Models
+	}
+
 	// Copilot and Rules are always preserved from existing (user-managed).
 	result.Copilot = existing.Copilot
 	result.Rules = existing.Rules
@@ -747,6 +817,25 @@ func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExpli
 	}
 
 	return &result
+}
+
+func isZeroMemoryConfig(c domain.MemoryConfig) bool {
+	return c.Backend == "" && !c.AutoCapture && c.ProjectKeyStrategy == "" && c.ExportPath == ""
+}
+
+func isZeroContextConfig(c domain.ContextConfig) bool {
+	return c.DefaultProfile == "" && len(c.Profiles) == 0
+}
+
+func isZeroUsageConfig(c domain.UsageConfig) bool {
+	return c.DailyTokenBudget == 0 && c.SessionTokenBudget == 0 &&
+		c.DailyCostBudget == 0 && c.SessionCostBudget == 0 &&
+		c.Enforcement == "" && c.Currency == "" && c.PriceCatalogSource == "" &&
+		len(c.ProfileTiers) == 0
+}
+
+func isZeroModelsConfig(c domain.ModelsConfig) bool {
+	return len(c.Profiles) == 0 && len(c.Overrides) == 0
 }
 
 // defaultCommandsForMethodology returns a set of command definitions appropriate
@@ -1129,6 +1218,8 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	setClaudeDefaultAgent := false
 	respectState := true
 	noBrand := false
+	maxTokens := 0
+	fitModel := ""
 	var explicitAgents []string
 	var modelOverrides []string // raw "role=tier" pairs from --model flag
 	for _, arg := range args {
@@ -1145,6 +1236,12 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			noReview = true
 		case arg == "--no-brand":
 			noBrand = true
+		case strings.HasPrefix(arg, "--max-tokens="):
+			if v, err := strconv.Atoi(arg[len("--max-tokens="):]); err == nil {
+				maxTokens = v
+			}
+		case strings.HasPrefix(arg, "--fit-model="):
+			fitModel = arg[len("--fit-model="):]
 		case arg == "--overwrite-unmanaged":
 			overwriteUnmanaged = true
 		case arg == "--set-claude-default-agent":
@@ -1169,7 +1266,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 				}
 			}
 		case arg == "-h" || arg == "--help":
-			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--verbose] [--model role=tier,...] [--no-brand]")
+			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--verbose] [--model role=tier,...] [--no-brand] [--max-tokens=N] [--fit-model=<name>]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -1186,6 +1283,8 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			fmt.Fprintln(stdout, "  --verbose           Stream per-step progress to stderr as each action executes.")
 			fmt.Fprintln(stdout, "  --no-review         Skip the pre-apply review screen (non-interactive / CI).")
 			fmt.Fprintln(stdout, "  --no-brand          Skip the brand banner component for this apply (useful in CI).")
+			fmt.Fprintln(stdout, "  --max-tokens=N      Budget cap: fit components within N tokens (drops lowest priority first).")
+			fmt.Fprintln(stdout, "  --fit-model=<name>  Model to use for budget fitting (e.g. claude-sonnet-4, gpt-4o).")
 			fmt.Fprintln(stdout, "  --overwrite-unmanaged  Grant blanket consent to overwrite any user-owned key")
 			fmt.Fprintln(stdout, "                         SquadAI would write. Complements --no-review / CI flows;")
 			fmt.Fprintln(stdout, "                         without this flag non-TTY applies halt on merge conflicts.")
@@ -1263,6 +1362,25 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	actions, err := p.Plan(merged, adapters, homeDir, projectDir)
 	if err != nil {
 		return exitcode.ErrPlanFailed(err)
+	}
+
+	if maxTokens > 0 {
+		fitResult, fitErr := budget.Fit(actions, budget.Options{
+			MaxTokens: maxTokens,
+			Model:     fitModel,
+		})
+		if fitErr != nil {
+			return fmt.Errorf("budget fit: %w", fitErr)
+		}
+		if !fitResult.FitAchieved {
+			fmt.Fprintf(os.Stderr, "warning: could not fit within %d tokens even with all truncation. Proceeding with minimal set.\n", maxTokens)
+		}
+		actions = fitResult.Actions
+		if !dryRun {
+			if persistErr := budget.Persist(projectDir, fitResult); persistErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not persist budget: %v\n", persistErr)
+			}
+		}
 	}
 
 	if dryRun {
@@ -1919,29 +2037,40 @@ func RunRestore(args []string, stdout io.Writer) error {
 	return nil
 }
 
+type squadRefinementInfo struct {
+	Status    string   `json:"status"`
+	Reasons   []string `json:"reasons"`
+	LastRunAt string   `json:"last_run_at,omitempty"`
+}
+
 // RunStatus shows the current project configuration summary with health checks.
 func RunStatus(args []string, stdout io.Writer) error {
 	jsonOut := false
 	fix := false
+	daily := false
 	for _, arg := range args {
 		switch arg {
 		case "--json":
 			jsonOut = true
 		case "--fix":
 			fix = true
+		case "--daily":
+			daily = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai status [--json] [--fix]")
+			fmt.Fprintln(stdout, "Usage: squadai status [--json] [--fix] [--daily]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Show the current project configuration summary: detected agents, active components,")
 			fmt.Fprintln(stdout, "configured MCP servers, health checks, and the most recent backup.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --json  Output the status as JSON.")
-			fmt.Fprintln(stdout, "  --fix   Run 'squadai apply' to fix any health issues found.")
+			fmt.Fprintln(stdout, "  --json   Output the status as JSON.")
+			fmt.Fprintln(stdout, "  --fix    Run 'squadai apply' to fix any health issues found.")
+			fmt.Fprintln(stdout, "  --daily  Show the daily-driver dashboard summary.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai status")
 			fmt.Fprintln(stdout, "  squadai status --json")
+			fmt.Fprintln(stdout, "  squadai status --daily")
 			fmt.Fprintln(stdout, "  squadai status --fix")
 			return nil
 		default:
@@ -2039,24 +2168,19 @@ func RunStatus(args []string, stdout io.Writer) error {
 	}
 
 	// Compute squad refinement status (skip when project not initialized).
-	type refinementInfo struct {
-		Status    string   `json:"status"`
-		Reasons   []string `json:"reasons"`
-		LastRunAt string   `json:"last_run_at,omitempty"`
-	}
-	var refInfo *refinementInfo
+	var refInfo *squadRefinementInfo
 	projectConfigPath := config.ProjectConfigPath(projectDir)
 	if _, statErr := os.Stat(projectConfigPath); statErr == nil {
 		refState, refExists, _ := squadrefine.Load(projectDir)
 		if !refExists {
-			refInfo = &refinementInfo{Status: "never-refined", Reasons: []string{}}
+			refInfo = &squadRefinementInfo{Status: "never-refined", Reasons: []string{}}
 		} else {
 			signals := sampleDriftSignals(projectDir)
 			reasons := squadrefine.DriftReasons(refState, signals)
 			if len(reasons) == 0 {
-				refInfo = &refinementInfo{Status: "fresh", Reasons: []string{}, LastRunAt: refState.LastRunAt}
+				refInfo = &squadRefinementInfo{Status: "fresh", Reasons: []string{}, LastRunAt: refState.LastRunAt}
 			} else {
-				refInfo = &refinementInfo{Status: "stale", Reasons: reasons, LastRunAt: refState.LastRunAt}
+				refInfo = &squadRefinementInfo{Status: "stale", Reasons: reasons, LastRunAt: refState.LastRunAt}
 			}
 		}
 	}
@@ -2086,16 +2210,21 @@ func RunStatus(args []string, stdout io.Writer) error {
 			LastRunAt string   `json:"last_run_at,omitempty"`
 		}
 		type statusResult struct {
-			ProjectDir  string            `json:"project_dir"`
-			Language    string            `json:"language,omitempty"`
-			Methodology string            `json:"methodology,omitempty"`
-			Mode        string            `json:"mode,omitempty"`
-			Adapters    []adapterStatus   `json:"adapters"`
-			Components  []componentStatus `json:"components"`
-			MCPServers  []string          `json:"mcp_servers"`
-			LastBackup  *backupInfo       `json:"last_backup,omitempty"`
-			Health      *healthSummary    `json:"health,omitempty"`
-			Refinement  *refinementJSON   `json:"refinement,omitempty"`
+			ProjectDir     string              `json:"project_dir"`
+			Language       string              `json:"language,omitempty"`
+			Methodology    string              `json:"methodology,omitempty"`
+			Mode           string              `json:"mode,omitempty"`
+			Preset         string              `json:"preset,omitempty"`
+			ContextProfile string              `json:"context_profile,omitempty"`
+			Memory         domain.MemoryConfig `json:"memory,omitempty"`
+			Usage          domain.UsageConfig  `json:"usage,omitempty"`
+			ModelTier      string              `json:"model_tier,omitempty"`
+			Adapters       []adapterStatus     `json:"adapters"`
+			Components     []componentStatus   `json:"components"`
+			MCPServers     []string            `json:"mcp_servers"`
+			LastBackup     *backupInfo         `json:"last_backup,omitempty"`
+			Health         *healthSummary      `json:"health,omitempty"`
+			Refinement     *refinementJSON     `json:"refinement,omitempty"`
 		}
 
 		adapterList := make([]adapterStatus, 0, len(adapters))
@@ -2147,16 +2276,21 @@ func RunStatus(args []string, stdout io.Writer) error {
 			}
 		}
 		result := statusResult{
-			ProjectDir:  projectDir,
-			Language:    mergedCfg.Meta.Language,
-			Methodology: string(mergedCfg.Methodology),
-			Mode:        string(mergedCfg.Mode),
-			Adapters:    adapterList,
-			Components:  componentList,
-			MCPServers:  mcpNames,
-			LastBackup:  lastBackupJSON,
-			Health:      health,
-			Refinement:  refJSON,
+			ProjectDir:     projectDir,
+			Language:       mergedCfg.Meta.Language,
+			Methodology:    string(mergedCfg.Methodology),
+			Mode:           string(mergedCfg.Mode),
+			Preset:         string(mergedCfg.Preset),
+			ContextProfile: mergedCfg.Context.DefaultProfile,
+			Memory:         mergedCfg.Memory,
+			Usage:          mergedCfg.Usage,
+			ModelTier:      string(mergedCfg.ModelTier),
+			Adapters:       adapterList,
+			Components:     componentList,
+			MCPServers:     mcpNames,
+			LastBackup:     lastBackupJSON,
+			Health:         health,
+			Refinement:     refJSON,
 		}
 		data, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
@@ -2179,10 +2313,25 @@ func RunStatus(args []string, stdout io.Writer) error {
 	if mode == "" {
 		mode = "standard"
 	}
+	preset := string(mergedCfg.Preset)
+	if preset == "" {
+		preset = "custom"
+	}
+	contextProfile := mergedCfg.Context.DefaultProfile
+	if contextProfile == "" {
+		contextProfile = "default"
+	}
+
+	if daily {
+		printDailyStatus(stdout, projectDir, language, methodology, mode, preset, contextProfile, mergedCfg, adapters, mcpNames, lastManifest, verifyReport, refInfo)
+		return nil
+	}
 
 	fmt.Fprintf(stdout, "Project: %s (%s)\n", filepath.Base(projectDir), language)
 	fmt.Fprintf(stdout, "Methodology: %s\n", methodology)
 	fmt.Fprintf(stdout, "Mode: %s\n", mode)
+	fmt.Fprintf(stdout, "Preset: %s\n", preset)
+	fmt.Fprintf(stdout, "Context profile: %s\n", contextProfile)
 	fmt.Fprintln(stdout)
 
 	fmt.Fprintf(stdout, "Agents (%d enabled):\n", len(adapters))
@@ -2255,6 +2404,87 @@ func RunStatus(args []string, stdout io.Writer) error {
 	}
 
 	return nil
+}
+
+func printDailyStatus(stdout io.Writer, projectDir, language, methodology, mode, preset, contextProfile string, mergedCfg *domain.MergedConfig, adapters []domain.Adapter, mcpNames []string, lastManifest *backup.Manifest, verifyReport *domain.VerifyReport, refInfo *squadRefinementInfo) {
+	fmt.Fprintf(stdout, "Daily Status: %s\n", filepath.Base(projectDir))
+	fmt.Fprintf(stdout, "Project: %s (%s)\n", projectDir, language)
+	fmt.Fprintf(stdout, "Setup: preset=%s methodology=%s mode=%s profile=%s\n", preset, methodology, mode, contextProfile)
+
+	agentIDs := make([]string, 0, len(adapters))
+	for _, a := range adapters {
+		agentIDs = append(agentIDs, string(a.ID()))
+	}
+	sort.Strings(agentIDs)
+	if len(agentIDs) == 0 {
+		fmt.Fprintln(stdout, "Agents: none detected")
+	} else {
+		fmt.Fprintf(stdout, "Agents: %s\n", strings.Join(agentIDs, ", "))
+	}
+
+	mcpDisplay := "none"
+	if len(mcpNames) > 0 {
+		mcpDisplay = strings.Join(mcpNames, ", ")
+	}
+	fmt.Fprintf(stdout, "MCP: %s\n", mcpDisplay)
+
+	memoryBackend := mergedCfg.Memory.Backend
+	if memoryBackend == "" {
+		memoryBackend = "docs"
+	}
+	memoryExport := mergedCfg.Memory.ExportPath
+	if memoryExport == "" {
+		memoryExport = "docs/memory"
+	}
+	autoCapture := "off"
+	if mergedCfg.Memory.AutoCapture {
+		autoCapture = "on"
+	}
+	fmt.Fprintf(stdout, "Memory: backend=%s auto_capture=%s export=%s\n", memoryBackend, autoCapture, memoryExport)
+
+	enforcement := mergedCfg.Usage.Enforcement
+	if enforcement == "" {
+		enforcement = "off"
+	}
+	fmt.Fprintf(stdout, "Usage: enforcement=%s session_tokens=%d daily_tokens=%d", enforcement, mergedCfg.Usage.SessionTokenBudget, mergedCfg.Usage.DailyTokenBudget)
+	if mergedCfg.Usage.SessionCostBudget > 0 || mergedCfg.Usage.DailyCostBudget > 0 {
+		currency := mergedCfg.Usage.Currency
+		if currency == "" {
+			currency = "USD"
+		}
+		fmt.Fprintf(stdout, " session_cost=%.2f%s daily_cost=%.2f%s", mergedCfg.Usage.SessionCostBudget, currency, mergedCfg.Usage.DailyCostBudget, currency)
+	}
+	fmt.Fprintln(stdout)
+
+	if verifyReport != nil {
+		failing := 0
+		for _, r := range verifyReport.Results {
+			if !r.Passed && r.Severity == domain.SeverityError {
+				failing++
+			}
+		}
+		if failing == 0 {
+			fmt.Fprintf(stdout, "Health: OK (%d checks)\n", len(verifyReport.Results))
+		} else {
+			fmt.Fprintf(stdout, "Health: %d failing check(s) of %d\n", failing, len(verifyReport.Results))
+		}
+	} else {
+		fmt.Fprintln(stdout, "Health: unavailable")
+	}
+
+	if refInfo != nil {
+		refinement := refInfo.Status
+		if len(refInfo.Reasons) > 0 {
+			refinement += " (" + strings.Join(refInfo.Reasons, ", ") + ")"
+		}
+		fmt.Fprintf(stdout, "Refinement: %s\n", refinement)
+	}
+
+	if lastManifest != nil {
+		fmt.Fprintf(stdout, "Last backup: %s (%d files)\n", lastManifest.Timestamp.Format("2006-01-02 15:04:05 UTC"), len(lastManifest.AffectedFiles))
+	} else {
+		fmt.Fprintln(stdout, "Last backup: none")
+	}
 }
 
 // RunSquadInitStatus returns the current squad refinement status as JSON.
@@ -3753,10 +3983,13 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: squadai install-hooks [--json]")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Install a Git pre-commit hook that runs `squadai verify --strict`.")
-			fmt.Fprintln(stdout, "Idempotent: calling twice does not duplicate the hook.")
+			fmt.Fprintln(stdout, "Install Git hooks for squadai:")
+			fmt.Fprintln(stdout, "  pre-commit    → squadai verify --strict")
+			fmt.Fprintln(stdout, "  post-merge    → squadai apply --quiet (when .squadai/ changed)")
+			fmt.Fprintln(stdout, "  post-checkout → squadai apply --quiet (when .squadai/ changed)")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "The hook is written to .git/hooks/pre-commit and made executable.")
+			fmt.Fprintln(stdout, "Idempotent: calling twice does not duplicate hooks.")
+			fmt.Fprintln(stdout, "User-added lines outside the squadai block are preserved.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output the result as JSON.")
@@ -3776,44 +4009,84 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 			"Run this command from the root of a Git repository.")
 	}
 
-	hookPath := filepath.Join(hooksDir, "pre-commit")
-	const squadaiLine = "squadai verify --strict"
+	installed := []string{}
 
+	// pre-commit hook
+	if err := installHook(hooksDir, "pre-commit", "squadai verify --strict"); err != nil {
+		return fmt.Errorf("write pre-commit hook: %w", err)
+	}
+	installed = append(installed, "pre-commit")
+
+	// post-merge hook — runs squadai apply when .squadai/ changed
+	postMergeBody := `if git diff --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '^\.squadai/'; then
+  squadai apply --quiet
+fi`
+	if err := installHookWithBody(hooksDir, "post-merge", postMergeBody); err != nil {
+		return fmt.Errorf("write post-merge hook: %w", err)
+	}
+	installed = append(installed, "post-merge")
+
+	// post-checkout hook — runs squadai apply when .squadai/ changed
+	postCheckoutBody := `if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q '^\.squadai/'; then
+  squadai apply --quiet
+fi`
+	if err := installHookWithBody(hooksDir, "post-checkout", postCheckoutBody); err != nil {
+		return fmt.Errorf("write post-checkout hook: %w", err)
+	}
+	installed = append(installed, "post-checkout")
+
+	if jsonOut {
+		writeJSONResult(stdout, true, map[string]any{
+			"hooks":     installed,
+			"hooks_dir": hooksDir,
+		})
+		return nil
+	}
+
+	for _, h := range installed {
+		fmt.Fprintf(stdout, "installed %s hook → %s\n", h, filepath.Join(hooksDir, h))
+	}
+	return nil
+}
+
+// installHook writes a hook that runs a single squadai command, appending to
+// an existing hook if one exists (without duplicating the squadai line).
+func installHook(hooksDir, name, squadaiCmd string) error {
+	hookPath := filepath.Join(hooksDir, name)
 	existing, readErr := os.ReadFile(hookPath)
-	if readErr == nil && strings.Contains(string(existing), squadaiLine) {
-		if jsonOut {
-			writeJSONResult(stdout, true, map[string]any{
-				"hook_path": hookPath,
-				"status":    "already_installed",
-			})
-			return nil
-		}
-		fmt.Fprintln(stdout, "pre-commit hook already contains squadai verify — no changes made.")
+	if readErr == nil && strings.Contains(string(existing), squadaiCmd) {
 		return nil
 	}
 
 	var content string
 	if readErr == nil && len(existing) > 0 {
-		// Append to existing hook.
-		content = strings.TrimRight(string(existing), "\n") + "\n\n" + squadaiLine + "\n"
+		content = strings.TrimRight(string(existing), "\n") + "\n\n" + squadaiCmd + "\n"
 	} else {
-		content = "#!/bin/sh\nset -e\n\n" + squadaiLine + "\n"
+		content = "#!/bin/sh\nset -e\n\n" + squadaiCmd + "\n"
 	}
 
-	if err := os.WriteFile(hookPath, []byte(content), 0755); err != nil {
-		return fmt.Errorf("write pre-commit hook: %w", err)
-	}
+	return os.WriteFile(hookPath, []byte(content), 0755)
+}
 
-	if jsonOut {
-		writeJSONResult(stdout, true, map[string]any{
-			"hook_path": hookPath,
-			"status":    "installed",
-		})
+// installHookWithBody writes a hook with a multi-line body, appending to
+// an existing hook if one exists (without duplicating the squadai marker).
+func installHookWithBody(hooksDir, name, body string) error {
+	hookPath := filepath.Join(hooksDir, name)
+	marker := "# squadai: " + name
+
+	existing, readErr := os.ReadFile(hookPath)
+	if readErr == nil && strings.Contains(string(existing), marker) {
 		return nil
 	}
 
-	fmt.Fprintf(stdout, "installed pre-commit hook → %s\n", hookPath)
-	return nil
+	var content string
+	if readErr == nil && len(existing) > 0 {
+		content = strings.TrimRight(string(existing), "\n") + "\n\n" + marker + "\n" + body + "\n"
+	} else {
+		content = "#!/bin/sh\n\n" + marker + "\n" + body + "\n"
+	}
+
+	return os.WriteFile(hookPath, []byte(content), 0755)
 }
 
 // RunInstallCommands writes SquadAI slash commands to .claude/commands/ and
@@ -3861,8 +4134,8 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 	}
 
 	type fileResult struct {
-		Path    string `json:"path"`
-		Status  string `json:"status"`
+		Path   string `json:"path"`
+		Status string `json:"status"`
 	}
 
 	var installed []fileResult
@@ -3955,9 +4228,9 @@ func RunPluginsSync(args []string, stdout, stderr io.Writer) error {
 
 	if jsonOut {
 		writeJSONResult(stdout, true, map[string]any{
-			"plugins":      len(reg.Plugins),
+			"plugins":       len(reg.Plugins),
 			"registry_path": projectDir + "/.squadai/plugins-registry.json",
-			"fetched_at":   reg.FetchedAt,
+			"fetched_at":    reg.FetchedAt,
 		})
 		return nil
 	}
@@ -4783,8 +5056,8 @@ func buildProjectSchema() ([]byte, error) {
 				},
 			},
 			"agents": map[string]any{
-				"type":        "object",
-				"description": "Custom agent definitions.",
+				"type":                 "object",
+				"description":          "Custom agent definitions.",
 				"additionalProperties": schemaAgentDef(),
 			},
 			"skills": map[string]any{
@@ -4812,8 +5085,8 @@ func buildProjectSchema() ([]byte, error) {
 				},
 			},
 			"mcp": map[string]any{
-				"type":        "object",
-				"description": "MCP server definitions to inject into agent settings.",
+				"type":                 "object",
+				"description":          "MCP server definitions to inject into agent settings.",
 				"additionalProperties": schemaMCPDef(),
 			},
 			"team": map[string]any{
@@ -4845,8 +5118,8 @@ func buildProjectSchema() ([]byte, error) {
 			},
 			"hooks": schemaHooksConfig(),
 			"plugins": map[string]any{
-				"type":        "object",
-				"description": "Plugin definitions for community marketplace plugins.",
+				"type":                 "object",
+				"description":          "Plugin definitions for community marketplace plugins.",
 				"additionalProperties": schemaPluginDef(),
 			},
 			"marketplace": map[string]any{
@@ -5118,12 +5391,12 @@ func RunContext(args []string, stdout io.Writer) error {
 
 // contextResource is the MCP-compatible context payload.
 type contextResource struct {
-	Type      string         `json:"type"`
-	URI       string         `json:"uri"`
-	ProjectDir string        `json:"project_dir"`
-	Mode      string         `json:"mode,omitempty"`
-	Adapters  []string       `json:"adapters,omitempty"`
-	Summary   map[string]any `json:"summary,omitempty"`
+	Type       string         `json:"type"`
+	URI        string         `json:"uri"`
+	ProjectDir string         `json:"project_dir"`
+	Mode       string         `json:"mode,omitempty"`
+	Adapters   []string       `json:"adapters,omitempty"`
+	Summary    map[string]any `json:"summary,omitempty"`
 }
 
 func buildContextResource(merged *domain.MergedConfig, projectDir, adapterFilter string) contextResource {
