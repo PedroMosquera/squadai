@@ -1,6 +1,6 @@
 # SquadAI
 
-Give every developer on your team the same AI coding agent setup — same methodology, same roles, same standards — regardless of which editor they use.
+One local control plane for setup, context, memory, permissions, model usage, and workflows across every coding agent you use.
 
 [![Build](https://github.com/PedroMosquera/squadai/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroMosquera/squadai/actions)
 [![Go](https://img.shields.io/github/go-mod/go-version/PedroMosquera/squadai)](go.mod)
@@ -8,7 +8,9 @@ Give every developer on your team the same AI coding agent setup — same method
 
 ---
 
-If you've ever opened a repo on a new machine and had your AI agent forget everything about how the team works — the methodology, the review process, the coding standards — that's the problem squadai solves. You declare the setup once (a config file in the repo), and `squadai apply` writes the right files for every agent each developer has installed: OpenCode, Claude Code, Cursor, Windsurf, VS Code Copilot. Run it after cloning, run it after pulling, and you're always in sync.
+If you've ever opened a repo and had your AI agent lose the thread — project memory, standards, MCP servers, permissions, model choices, and workflow habits — that's the problem squadai solves. You declare the local operating model once in `.squadai/project.json`, and `squadai apply` writes the right native files for every supported agent: OpenCode, Claude Code, Cursor, Windsurf, VS Code Copilot, and Pi.
+
+SquadAI is solo-first: it should make your daily agent sessions predictable on one machine and one repo. The same primitives also scale to teams through policy, verification, backup, rollback, and drift checks.
 
 ---
 
@@ -48,6 +50,15 @@ squadai apply                    # installs agent files for all detected editors
 squadai doctor                   # sanity-check everything looks right
 ```
 
+Use a daily-driver preset when you want a ready-made operating model:
+
+```sh
+squadai init --preset=solo-minimal      # lightweight conventional workflow
+squadai init --preset=solo-power        # TDD workflow with local memory/context defaults
+squadai init --preset=team-standard     # shared governance-friendly team baseline
+squadai init --preset=enterprise-locked # strict SDD-oriented baseline
+```
+
 To see what `apply` would change before committing:
 
 ```sh
@@ -59,7 +70,7 @@ squadai diff
 
 ## How it works
 
-When you run `squadai init`, it detects which AI agents are installed on the current machine and writes `.squadai/project.json` — a config that says which methodology to use, which roles exist, and which components each agent should get.
+When you run `squadai init`, it detects which AI agents are installed on the current machine and writes `.squadai/project.json` — a config that says which methodology to use, which roles exist, which context profile is active, how memory works, and which components each agent should get.
 
 `squadai apply` reads that config, figures out which files each agent needs in its native format, and writes them. For Claude Code it updates `CLAUDE.md`. For OpenCode it writes `AGENTS.md` and individual agent files under `.opencode/agents/`. For Cursor it writes `.cursor/rules/` and `.cursor/agents/`. It never touches content outside its own marker blocks, so any customizations you've made in those files stay put.
 
@@ -68,7 +79,10 @@ The result is a team where everyone's agents have:
 - **A methodology** — TDD (6 roles), SDD (8 roles), or Conventional (4 roles), each with an orchestrator that delegates to specialist sub-agents
 - **Consistent coding standards** — auto-detected by language (Go, TypeScript, Python, Rust, and [12 more](docs/architecture.md))
 - **Shared MCP servers** — Context7 is enabled by default; others are opt-in
-- **Memory protocols** — a structured `docs/memory/` system agents can read and write across sessions
+- **Native memory defaults** — local-first project memory metadata with `docs/memory/` export/import compatibility
+- **Context profiles** — built-in profiles for default, debug, feature, review, docs, incident, and cheap sessions
+- **Usage controls** — approximate session/daily token budgets and enforcement mode metadata
+- **Model routing metadata** — cheap, balanced, and premium profile labels, plus methodology role overrides
 - **Visual branding** — an ASCII-art banner injected into agent files so devs see SquadAI is active at session start (disable with `squadai apply --no-brand`)
 
 ### Adapters and delegation
@@ -96,7 +110,7 @@ Agents will remind you when the refinement is stale (e.g. after a major refactor
 
 ## Project memory
 
-Agents lose context between sessions. squadai's memory system is a `docs/memory/` folder the `@librarian` agent can read and write, structured as indexed notes organized by topic.
+Agents lose context between sessions. SquadAI now defaults new configs to native local memory metadata and keeps the existing `docs/memory/` folder as the shared export/import format agents can read and write, structured as indexed notes organized by topic.
 
 ```sh
 # From inside your agent
@@ -175,6 +189,7 @@ squadai apply               # install agent files (idempotent — safe to re-run
 squadai diff                # preview what apply would change
 squadai doctor              # run ~22 health checks; --fix auto-resolves common issues
 squadai status              # quick view of adapters, components, managed files
+squadai status --daily      # daily control-plane summary for the current repo
 squadai token-budget        # per-session token cost of the current install
 squadai explain <topic>     # explain a config field, error code, or concept
 squadai memory <subcommand> # manage project memory (search, add, promote, status)

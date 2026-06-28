@@ -10,24 +10,33 @@ import (
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/planner"
 	"github.com/PedroMosquera/squadai/internal/tokenprofile"
+	"github.com/PedroMosquera/squadai/internal/tokenprofile/tokenizer"
 )
 
 // RunTokenBudget reports the approximate token cost of the current squadai install.
 func RunTokenBudget(args []string, stdout io.Writer) error {
 	jsonOut := false
+	model := ""
 	for _, arg := range args {
 		switch arg {
 		case "--json":
 			jsonOut = true
+		case "--model":
+			model = ""
+		default:
+			if len(arg) > 8 && arg[:8] == "--model=" {
+				model = arg[8:]
+			}
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai token-budget [--json]")
+			fmt.Fprintln(stdout, "Usage: squadai token-budget [--json] [--model=<name>]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Estimate the per-session token cost of the current squadai install.")
 			fmt.Fprintln(stdout, "Reads installed files on disk and groups by component.")
-			fmt.Fprintln(stdout, "Token count uses a 4 chars/token approximation.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --json   Output as JSON")
+			fmt.Fprintln(stdout, "  --json         Output as JSON")
+			fmt.Fprintln(stdout, "  --model=<name> Use model-aware tokenizer (e.g. claude-sonnet-4, gpt-4o)")
+			fmt.Fprintln(stdout, "                 Falls back to 4 chars/token heuristic when omitted.")
 			return nil
 		}
 	}
@@ -74,6 +83,26 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 		return fmt.Errorf("scan paths: %w", err)
 	}
 
+	if model != "" {
+		counter := tokenizer.ForModel(model)
+		for i, e := range report.Entries {
+			data, _ := os.ReadFile(e.Path)
+			report.Entries[i].Tokens = counter.Count(string(data))
+		}
+		report.TotalTokens = 0
+		for k, s := range report.ByCategory {
+			s.Tokens = 0
+			report.ByCategory[k] = s
+		}
+		for _, e := range report.Entries {
+			s := report.ByCategory[e.Category]
+			s.Tokens += e.Tokens
+			report.ByCategory[e.Category] = s
+			report.TotalTokens += e.Tokens
+		}
+		report.Model = model
+	}
+
 	if jsonOut {
 		return printTokenBudgetJSON(stdout, report)
 	}
@@ -104,7 +133,11 @@ func printTokenBudgetJSON(w io.Writer, r *tokenprofile.Report) error {
 }
 
 func printTokenBudgetHuman(w io.Writer, r *tokenprofile.Report) {
-	fmt.Fprintln(w, "Token Budget (approx. 4 chars/token)")
+	method := "approx. 4 chars/token"
+	if r.Model != "" {
+		method = "model-aware (" + r.Model + ")"
+	}
+	fmt.Fprintf(w, "Token Budget (%s)\n", method)
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n", "Component", "Files", "Bytes", "~Tokens")
 	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n",

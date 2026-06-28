@@ -1,0 +1,21 @@
+name: squadai-check
+
+on:
+  pull_request:
+    paths:
+      - '.squadai/**'
+
+jobs:
+  squadai:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install squadai
+        run: |
+          curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
+      - name: Validate policy
+        run: squadai validate-policy
+      - name: Doctor check
+        run: squadai doctor --strict
+      - name: Diff check
+        run: squadai diff --exit-code

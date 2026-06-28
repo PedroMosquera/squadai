@@ -98,7 +98,12 @@ func ValidateProject(cfg *domain.ProjectConfig) []string {
 	issues = append(issues, validateSkillDefs(cfg.Skills)...)
 	issues = append(issues, validateCommandDefs(cfg.Commands)...)
 	issues = append(issues, validateMCPDefs(cfg.MCP)...)
+	issues = append(issues, validatePreset(cfg.Preset)...)
 	issues = append(issues, validateMethodology(cfg.Methodology)...)
+	issues = append(issues, validateMemoryConfig(cfg.Memory)...)
+	issues = append(issues, validateContextConfig(cfg.Context)...)
+	issues = append(issues, validateUsageConfig(cfg.Usage)...)
+	issues = append(issues, validateModelsConfig(cfg.Models)...)
 	issues = append(issues, validateTeamRoles(cfg.Team)...)
 	issues = append(issues, validatePluginDefs(cfg.Plugins, cfg.Methodology)...)
 
@@ -300,6 +305,21 @@ func validateMCPDefs(mcpServers map[string]domain.MCPServerDef) []string {
 	return issues
 }
 
+// validatePreset checks that preset is a supported solo/team setup shortcut.
+func validatePreset(p domain.SetupPreset) []string {
+	if p == "" {
+		return nil
+	}
+	switch p {
+	case domain.PresetSoloMinimal, domain.PresetSoloPower, domain.PresetTeamStandard,
+		domain.PresetEnterpriseLock, domain.PresetFullSquad, domain.PresetLean,
+		domain.PresetCustom:
+		return nil
+	default:
+		return []string{fmt.Sprintf("unknown preset %q (expected: solo-minimal, solo-power, team-standard, enterprise-locked, full-squad, lean, custom)", p)}
+	}
+}
+
 // validateMethodology checks that methodology is a known value or empty.
 func validateMethodology(m domain.Methodology) []string {
 	if m == "" {
@@ -311,6 +331,86 @@ func validateMethodology(m domain.Methodology) []string {
 	default:
 		return []string{fmt.Sprintf("unknown methodology %q (expected: tdd, sdd, conventional)", m)}
 	}
+}
+
+func validateMemoryConfig(memory domain.MemoryConfig) []string {
+	var issues []string
+	if memory.Backend != "" {
+		switch memory.Backend {
+		case "native", "docs":
+			// valid
+		default:
+			issues = append(issues, fmt.Sprintf("memory.backend has unknown value %q (expected: native, docs)", memory.Backend))
+		}
+	}
+	if memory.ProjectKeyStrategy != "" {
+		switch memory.ProjectKeyStrategy {
+		case "git-remote", "repo-name":
+			// valid
+		default:
+			issues = append(issues, fmt.Sprintf("memory.project_key_strategy has unknown value %q (expected: git-remote, repo-name)", memory.ProjectKeyStrategy))
+		}
+	}
+	return issues
+}
+
+func validateContextConfig(contextCfg domain.ContextConfig) []string {
+	var issues []string
+	if contextCfg.DefaultProfile != "" && len(contextCfg.Profiles) > 0 {
+		if _, ok := contextCfg.Profiles[contextCfg.DefaultProfile]; !ok {
+			issues = append(issues, fmt.Sprintf("context.default_profile %q is not defined in context.profiles", contextCfg.DefaultProfile))
+		}
+	}
+	for name, profile := range contextCfg.Profiles {
+		if profile.MaxApproxTokens < 0 {
+			issues = append(issues, fmt.Sprintf("context profile %q max_approx_tokens must be >= 0", name))
+		}
+		switch profile.MemoryScope {
+		case "", "none", "summary", "project", "full":
+			// valid
+		default:
+			issues = append(issues, fmt.Sprintf("context profile %q has unknown memory_scope %q (expected: none, summary, project, full)", name, profile.MemoryScope))
+		}
+	}
+	return issues
+}
+
+func validateUsageConfig(usage domain.UsageConfig) []string {
+	var issues []string
+	if usage.DailyTokenBudget < 0 {
+		issues = append(issues, "usage.daily_token_budget must be >= 0")
+	}
+	if usage.SessionTokenBudget < 0 {
+		issues = append(issues, "usage.session_token_budget must be >= 0")
+	}
+	if usage.DailyCostBudget < 0 {
+		issues = append(issues, "usage.daily_cost_budget must be >= 0")
+	}
+	if usage.SessionCostBudget < 0 {
+		issues = append(issues, "usage.session_cost_budget must be >= 0")
+	}
+	if usage.Enforcement != "" {
+		switch usage.Enforcement {
+		case "off", "warn", "ask", "block":
+			// valid
+		default:
+			issues = append(issues, fmt.Sprintf("usage.enforcement has unknown value %q (expected: off, warn, ask, block)", usage.Enforcement))
+		}
+	}
+	return issues
+}
+
+func validateModelsConfig(models domain.ModelsConfig) []string {
+	var issues []string
+	for name, profile := range models.Profiles {
+		switch profile.Tier {
+		case "", "cheap", "balanced", "premium":
+			// valid
+		default:
+			issues = append(issues, fmt.Sprintf("models profile %q has unknown tier %q (expected: cheap, balanced, premium)", name, profile.Tier))
+		}
+	}
+	return issues
 }
 
 // validateTeamRoles checks that team role definitions have valid fields.

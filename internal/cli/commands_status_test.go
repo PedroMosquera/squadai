@@ -88,6 +88,48 @@ func TestRunStatus_RefinementSection_JSON(t *testing.T) {
 	}
 }
 
+func TestRunStatus_DailyIncludesControlPlaneFields(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	proj := domain.DefaultProjectConfig()
+	proj.Preset = domain.PresetSoloPower
+	proj.Meta = domain.ProjectMeta{Language: "Go"}
+	projectPath := filepath.Join(dir, config.ProjectConfigDir, "project.json")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := config.WriteJSON(projectPath, proj); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunStatus([]string{"--daily"}, &buf); err != nil {
+		t.Fatalf("RunStatus --daily should not error: %v", err)
+	}
+
+	out := buf.String()
+	for _, want := range []string{
+		"Daily Status:",
+		"preset=solo-power",
+		"profile=default",
+		"Memory: backend=native",
+		"Usage: enforcement=warn",
+		"Refinement: never-refined",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status --daily output should contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
 // TestRunSquadInitStatus_NeverRefined verifies that RunSquadInitStatus
 // returns a JSON object with status=never-refined when .squad-refined is absent.
 func TestRunSquadInitStatus_NeverRefined(t *testing.T) {
