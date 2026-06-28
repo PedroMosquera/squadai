@@ -364,6 +364,7 @@ var knownAdapters = map[string]struct{}{
 	string(domain.AgentVSCodeCopilot): {},
 	string(domain.AgentCursor):        {},
 	string(domain.AgentWindsurf):      {},
+	string(domain.AgentPi):            {},
 }
 
 var knownComponents = map[string]struct{}{
@@ -378,6 +379,7 @@ var knownComponents = map[string]struct{}{
 	string(domain.ComponentWorkflows):   {},
 	string(domain.ComponentPermissions): {},
 	string(domain.ComponentHooks):       {},
+	string(domain.ComponentBrand):       {},
 }
 
 func isKnownAdapter(name string) bool {

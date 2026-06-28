@@ -264,10 +264,12 @@ func DefaultUserConfig() *UserConfig {
 		Adapters: map[string]AdapterConfig{
 			string(AgentOpenCode):   {Enabled: true},
 			string(AgentClaudeCode): {Enabled: false},
+			string(AgentPi):         {Enabled: false},
 		},
 		Components: map[string]ComponentConfig{
 			string(ComponentMemory):      {Enabled: true},
 			string(ComponentPermissions): {Enabled: true},
+			string(ComponentBrand):       {Enabled: true},
 		},
 		Paths: PathsConfig{
 			BackupDir: "~/.squadai/backups",
@@ -281,6 +283,7 @@ func DefaultProjectConfig() *ProjectConfig {
 		Version: 1,
 		Components: map[string]ComponentConfig{
 			string(ComponentMemory): {Enabled: true},
+			string(ComponentBrand):  {Enabled: true},
 		},
 		Copilot: CopilotConfig{
 			InstructionsTemplate: "standard",

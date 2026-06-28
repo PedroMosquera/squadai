@@ -19,6 +19,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
 	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/pi"
 	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/assets"
@@ -536,9 +537,10 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 					"team_standards_file": "templates/team-standards.md",
 				},
 			},
-			string(domain.ComponentSkills):      {Enabled: true},
-			string(domain.ComponentWorkflows):   {Enabled: true},
-			string(domain.ComponentPermissions): {Enabled: true},
+		string(domain.ComponentSkills):      {Enabled: true},
+		string(domain.ComponentWorkflows):   {Enabled: true},
+		string(domain.ComponentPermissions): {Enabled: true},
+		string(domain.ComponentBrand):       {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{
 			InstructionsTemplate: "standard",
@@ -1126,6 +1128,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	overwriteUnmanaged := false
 	setClaudeDefaultAgent := false
 	respectState := true
+	noBrand := false
 	var explicitAgents []string
 	var modelOverrides []string // raw "role=tier" pairs from --model flag
 	for _, arg := range args {
@@ -1140,6 +1143,8 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			verbose = true
 		case arg == "--no-review":
 			noReview = true
+		case arg == "--no-brand":
+			noBrand = true
 		case arg == "--overwrite-unmanaged":
 			overwriteUnmanaged = true
 		case arg == "--set-claude-default-agent":
@@ -1164,7 +1169,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 				}
 			}
 		case arg == "-h" || arg == "--help":
-			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--verbose] [--model role=tier,...]")
+			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--verbose] [--model role=tier,...] [--no-brand]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -1180,6 +1185,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			fmt.Fprintln(stdout, "  --force             Apply with default config even when no project.json is found.")
 			fmt.Fprintln(stdout, "  --verbose           Stream per-step progress to stderr as each action executes.")
 			fmt.Fprintln(stdout, "  --no-review         Skip the pre-apply review screen (non-interactive / CI).")
+			fmt.Fprintln(stdout, "  --no-brand          Skip the brand banner component for this apply (useful in CI).")
 			fmt.Fprintln(stdout, "  --overwrite-unmanaged  Grant blanket consent to overwrite any user-owned key")
 			fmt.Fprintln(stdout, "                         SquadAI would write. Complements --no-review / CI flows;")
 			fmt.Fprintln(stdout, "                         without this flag non-TTY applies halt on merge conflicts.")
@@ -1226,6 +1232,14 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	merged, err := loadAndMerge(homeDir, projectDir)
 	if err != nil {
 		return err
+	}
+
+	// Apply --no-brand: disable the brand component in-memory for this run.
+	if noBrand {
+		if merged.Components == nil {
+			merged.Components = make(map[string]domain.ComponentConfig)
+		}
+		merged.Components[string(domain.ComponentBrand)] = domain.ComponentConfig{Enabled: false}
 	}
 
 	// Apply --model overrides in-memory (does NOT write back to config file).
@@ -3032,7 +3046,7 @@ func removeEmptyManagedDirs(projectDir string, deletedPaths []string) []string {
 
 // DetectAdapters returns all registered adapters that are installed or have config.
 // OpenCode (team lane) is always included. Personal-lane adapters (Claude Code,
-// VS Code Copilot, Cursor, Windsurf) are included only when detected on the system.
+// VS Code Copilot, Cursor, Windsurf, Pi) are included only when detected on the system.
 func DetectAdapters(homeDir string) []domain.Adapter {
 	ctx := context.Background()
 	var adapters []domain.Adapter
@@ -3060,6 +3074,11 @@ func DetectAdapters(homeDir string) []domain.Adapter {
 	ws := windsurf.New()
 	if installed, configFound, err := ws.Detect(ctx, homeDir); err == nil && (installed || configFound) {
 		adapters = append(adapters, ws)
+	}
+
+	piAgent := pi.New()
+	if installed, configFound, err := piAgent.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, piAgent)
 	}
 
 	return adapters
@@ -4169,7 +4188,9 @@ func RunExplain(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  policy           Explain the policy.json structure and locked fields")
 			fmt.Fprintln(stdout, "  methodology      Explain available methodologies (tdd, sdd, conventional)")
 			fmt.Fprintln(stdout, "  adapters         Explain supported adapters and their capabilities")
-			fmt.Fprintln(stdout, "  components       Explain available components (memory, rules, mcp, agents, etc.)")
+			fmt.Fprintln(stdout, "  components       Explain available components (memory, rules, mcp, agents, brand, etc.)")
+			fmt.Fprintln(stdout, "  brand            Explain the brand banner component")
+			fmt.Fprintln(stdout, "  budget           Explain token budget management")
 			fmt.Fprintln(stdout, "  error-codes      Explain error codes (E-1xx through E-8xx)")
 			fmt.Fprintln(stdout, "  merge            Show the config merge trace (user → project → policy)")
 			fmt.Fprintln(stdout, "  drift            Explain drift detection and the governance workflow")
@@ -4190,7 +4211,7 @@ func RunExplain(args []string, stdout io.Writer) error {
 	if topic == "" {
 		// List available topics.
 		if jsonOut {
-			topics := []string{"config", "policy", "methodology", "adapters", "components", "error-codes", "merge", "drift", "mcp"}
+			topics := []string{"config", "policy", "methodology", "adapters", "components", "brand", "budget", "error-codes", "merge", "drift", "mcp"}
 			data, _ := json.Marshal(map[string]any{"topics": topics})
 			fmt.Fprintln(stdout, string(data))
 			return nil
@@ -4198,7 +4219,7 @@ func RunExplain(args []string, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "Usage: squadai explain <topic>")
 		fmt.Fprintln(stdout)
 		fmt.Fprintln(stdout, "Available topics: config, policy, methodology, adapters, components,")
-		fmt.Fprintln(stdout, "  error-codes, merge, drift, mcp")
+		fmt.Fprintln(stdout, "  brand, budget, error-codes, merge, drift, mcp")
 		return nil
 	}
 
@@ -4317,7 +4338,7 @@ Focus: balanced general-purpose software development without methodology lock-in
 	case "adapters":
 		return `# Adapters
 
-SquadAI manages configurations for five AI coding agents ("adapters"):
+SquadAI manages configurations for six AI coding agents ("adapters"):
 
   claude     Claude Code — .claude/CLAUDE.md, .claude/agents/, .claude/settings.json
              Delegation: multi-agent (orchestrator + subagents)
@@ -4336,8 +4357,28 @@ SquadAI manages configurations for five AI coding agents ("adapters"):
   vscode     VS Code Copilot — .github/copilot-instructions.md
              Delegation: solo agent (inline only)
 
+  pi         Pi Agent — ~/.pi/agent/AGENTS.md, ~/.pi/agent/agents/, ~/.pi/agent/prompts/
+             Delegation: multi-agent (native subagents)
+             Commands render as prompt templates in prompts/
+             Supports per-agent banner branding
+
 Adapters are auto-detected by checking PATH and config directory presence.
-Override detection with 'adapters' in project.json.`, true
+Override detection with 'adapters' in project.json.
+
+## Adapter path overrides (.squadai/adapters/<id>.json)
+
+Built-in adapters are curated defaults. You can override specific path fields
+without replacing the adapter entirely by creating a JSON file:
+
+  .squadai/adapters/pi.json:
+  {
+    "config_dir": "~/.pi/agent",
+    "agents_subdir": "agents",
+    "delegation": "native"
+  }
+
+Fields not specified fall back to the built-in defaults. This lets you adapt
+SquadAI to custom agent installs or non-standard config locations.`, true
 
 	case "components":
 		return `# Components
@@ -4357,6 +4398,12 @@ Components are the building blocks SquadAI manages per adapter:
   permissions Claude Code permission policy.
   copilot     VS Code Copilot instructions.
   hooks       Claude Code hook event handlers.
+  brand       ASCII-art banner injected into agent files so developers see a
+              visual indicator that SquadAI is active at session start.
+              Per-agent themed variants (SquadAI standalone, co-branded for
+              OpenCode and Pi). Toggle via project.json:
+              "components": { "brand": { "enabled": true } }
+              Disable per-apply with: squadai apply --no-brand
 
 Enable/disable per adapter via project.json:
   "components": { "mcp": { "enabled": true }, "agents": { "enabled": false } }`, true
@@ -4506,6 +4553,84 @@ Register it in .claude/settings.json:
   { "mcpServers": { "squadai": { "command": "squadai", "args": ["mcp-server"] } } }
 
 Then use 'squadai install-commands' to add slash commands to .claude/commands/.`, true
+
+	case "brand":
+		return `# Brand Component
+
+The brand component injects an ASCII-art banner into agent instruction files so
+developers see a visual indicator that SquadAI is active when they start a session.
+
+## How it works
+
+When 'squadai apply' runs with the brand component enabled (default: true), it
+injects a fenced code block into the agent's system prompt or project rules file,
+wrapped in marker blocks for idempotent updates:
+
+  <!-- squadai:brand -->
+  ` + "```text" + `
+  <ASCII banner>
+  ` + "```" + `
+  <!-- /squadai:brand -->
+
+## Per-agent themed variants
+
+  SquadAI standalone  — used by Claude Code, Cursor, Windsurf, VS Code Copilot
+  SquadAI + OpenCode   — co-branded banner for OpenCode
+  SquadAI + Pi         — co-branded banner for Pi Agent
+
+## Configuration
+
+  project.json:
+    "components": { "brand": { "enabled": true } }
+
+  Disable per-apply without changing config:
+    squadai apply --no-brand
+
+  Check token cost:
+    squadai token-budget   (brand appears as its own row)
+
+  Policy enforcement:
+    .squadai/policy.json can lock "components.brand.enabled" to enforce
+    consistent branding across a team.`, true
+
+	case "budget":
+		return `# Token Budget
+
+SquadAI's token budget system helps you understand and control the per-session
+token cost of your agent configuration.
+
+## Current: static estimation
+
+  squadai token-budget          # human-readable per-component breakdown
+  squadai token-budget --json   # machine-readable
+
+This reads the installed agent files and estimates tokens using a chars/4
+heuristic. The brand component appears as its own row.
+
+## Planned: active fitting (--fit)
+
+A future release will add active budget fitting to 'squadai apply':
+
+  squadai apply --max-tokens 60000 --model claude-sonnet-4
+
+This will order components by priority and truncate/omit lowest-priority ones
+to fit within the target model's context window:
+
+  Priority (drop lowest first):
+    plugins → commands → skills → memory → rules → orchestrator
+
+  Truncation modes: full, summary, omit
+
+The chosen layout will be persisted to .squadai/.applied-budget.json so that
+'doctor' and 'diff' can detect budget drift (e.g. after swapping agents).
+
+## Planned: per-session telemetry
+
+  squadai token-usage --since 7d   # aggregate real session token usage
+  squadai token-usage --watch      # live tail of current session
+
+This will parse agent session transcripts and compute real system+completion
+tokens with per-model pricing.`, true
 
 	default:
 		return "", false
@@ -4954,7 +5079,7 @@ func RunContext(args []string, stdout io.Writer) error {
 
 	merged, err := loadAndMerge(homeDir, projectDir)
 	if err != nil {
-		merged = nil
+		return err
 	}
 
 	switch format {

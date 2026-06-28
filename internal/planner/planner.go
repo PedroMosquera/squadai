@@ -6,6 +6,7 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/components/agent_teams"
 	"github.com/PedroMosquera/squadai/internal/components/agents"
+	"github.com/PedroMosquera/squadai/internal/components/brand"
 	"github.com/PedroMosquera/squadai/internal/components/bundle"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
@@ -37,6 +38,7 @@ type Planner struct {
 	permissionsInstaller *permissions.Installer
 	agentTeamsInstaller  *agent_teams.Installer
 	hooksInstaller       *hooks.Installer
+	brandInstaller       *brand.Installer
 	copilotManager       *copilot.Manager
 	opts                 Options
 }
@@ -74,6 +76,7 @@ func (p *Planner) loadFromSet(s *bundle.Set) {
 	p.workflowsInstaller = s.Workflows
 	p.agentTeamsInstaller = s.AgentTeams
 	p.hooksInstaller = s.Hooks
+	p.brandInstaller = s.Brand
 	p.copilotManager = s.Copilot
 }
 
@@ -208,6 +211,18 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 			}
 			actions = append(actions, hooksActions...)
 		}
+
+		// Brand component (ASCII banner injection). Runs for any adapter that
+		// supports it. The installer's Plan no-ops for unsupported adapters.
+		if p.brandInstaller != nil {
+			if brandCfg, ok := cfg.Components[string(domain.ComponentBrand)]; ok && brandCfg.Enabled {
+				brandActions, err := p.brandInstaller.Plan(adapter, homeDir, projectDir)
+				if err != nil {
+					return nil, fmt.Errorf("brand plan for %s: %w", adapter.ID(), err)
+				}
+				actions = append(actions, brandActions...)
+			}
+		}
 	}
 
 	// Copilot instructions (project-level, not adapter-specific).
@@ -337,6 +352,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	}
 	if p.hooksInstaller != nil {
 		installers[domain.ComponentHooks] = p.hooksInstaller
+	}
+	if p.brandInstaller != nil {
+		installers[domain.ComponentBrand] = p.brandInstaller
 	}
 	return installers
 }
