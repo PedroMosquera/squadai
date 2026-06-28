@@ -43,10 +43,32 @@ func TestDefaultUserConfig_HasClaudeCodeDisabled(t *testing.T) {
 	}
 }
 
-func TestDefaultUserConfig_HasTwoAdapters(t *testing.T) {
+func TestDefaultUserConfig_HasThreeAdapters(t *testing.T) {
 	cfg := DefaultUserConfig()
-	if len(cfg.Adapters) != 2 {
-		t.Errorf("Adapters count = %d, want 2 (opencode, claude-code)", len(cfg.Adapters))
+	if len(cfg.Adapters) != 3 {
+		t.Errorf("Adapters count = %d, want 3 (opencode, claude-code, pi)", len(cfg.Adapters))
+	}
+}
+
+func TestDefaultUserConfig_HasPiDisabled(t *testing.T) {
+	cfg := DefaultUserConfig()
+	ac, ok := cfg.Adapters[string(AgentPi)]
+	if !ok {
+		t.Fatal("pi adapter not found in defaults")
+	}
+	if ac.Enabled {
+		t.Error("pi should be disabled by default")
+	}
+}
+
+func TestDefaultUserConfig_HasBrandEnabled(t *testing.T) {
+	cfg := DefaultUserConfig()
+	cc, ok := cfg.Components[string(ComponentBrand)]
+	if !ok {
+		t.Fatal("brand component not found in defaults")
+	}
+	if !cc.Enabled {
+		t.Error("brand should be enabled by default")
 	}
 }
 
@@ -551,14 +573,15 @@ func TestAgentIDs_AllV2Defined(t *testing.T) {
 		AgentVSCodeCopilot,
 		AgentCursor,
 		AgentWindsurf,
+		AgentPi,
 	}
 	for _, id := range ids {
 		if id == "" {
 			t.Error("AgentID should not be empty")
 		}
 	}
-	if len(ids) != 5 {
-		t.Errorf("expected 5 agent IDs, got %d", len(ids))
+	if len(ids) != 6 {
+		t.Errorf("expected 6 agent IDs, got %d", len(ids))
 	}
 }
 

@@ -32,6 +32,10 @@ func balancedModels(agentID domain.AgentID) ModelConfig {
 		return ModelConfig{
 			Settings: map[string]interface{}{"model": "anthropic/claude-sonnet-4-20250514"},
 		}
+	case domain.AgentPi:
+		return ModelConfig{
+			Settings: map[string]interface{}{"defaultModel": "anthropic/claude-sonnet-4-20250514"},
+		}
 	case domain.AgentClaudeCode:
 		return ModelConfig{
 			Settings: map[string]interface{}{"model": "claude-sonnet-4-20250514"},
@@ -62,6 +66,10 @@ func performanceModels(agentID domain.AgentID) ModelConfig {
 		return ModelConfig{
 			Settings: map[string]interface{}{"model": "anthropic/claude-sonnet-4-5"},
 		}
+	case domain.AgentPi:
+		return ModelConfig{
+			Settings: map[string]interface{}{"defaultModel": "anthropic/claude-sonnet-4-5"},
+		}
 	case domain.AgentClaudeCode:
 		return ModelConfig{
 			Settings: map[string]interface{}{"model": "claude-sonnet-4-5"},
@@ -91,6 +99,10 @@ func starterModels(agentID domain.AgentID) ModelConfig {
 	case domain.AgentOpenCode:
 		return ModelConfig{
 			Settings: map[string]interface{}{"model": "anthropic/claude-haiku-3-5"},
+		}
+	case domain.AgentPi:
+		return ModelConfig{
+			Settings: map[string]interface{}{"defaultModel": "anthropic/claude-haiku-3-5"},
 		}
 	case domain.AgentClaudeCode:
 		return ModelConfig{
