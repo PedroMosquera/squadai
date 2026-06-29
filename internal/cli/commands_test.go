@@ -86,6 +86,13 @@ func TestRunInitApplyVerifyDiff_OpenCodePiSharedAgentsFileClean(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Chdir(project)
 
+	// Pi is a personal-lane adapter: apply only configures it when it is
+	// detected. Create its config dir so detection is deterministic and does
+	// not depend on an ambient `pi` binary on the host's PATH.
+	if err := os.MkdirAll(filepath.Join(home, ".pi", "agent"), 0o755); err != nil {
+		t.Fatalf("create pi config dir: %v", err)
+	}
+
 	var initOut bytes.Buffer
 	if err := RunInit([]string{"--preset=solo-power", "--agents=opencode,pi", "--json"}, &initOut); err != nil {
 		t.Fatalf("RunInit: %v\n%s", err, initOut.String())
