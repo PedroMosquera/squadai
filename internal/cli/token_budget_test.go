@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -142,6 +143,12 @@ func TestRunTokenBudget_PlannedDoesNotMultiCountSharedFiles(t *testing.T) {
 	project := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Chdir(project)
+
+	// Make Pi detectable (personal-lane adapters are detection-gated) so the
+	// shared AGENTS.md actually carries both OpenCode and Pi sections.
+	if err := os.MkdirAll(filepath.Join(home, ".pi", "agent"), 0o755); err != nil {
+		t.Fatalf("create pi config dir: %v", err)
+	}
 
 	var initOut bytes.Buffer
 	if err := RunInit([]string{"--preset=solo-power", "--agents=opencode,pi", "--json"}, &initOut); err != nil {
