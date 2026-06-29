@@ -63,6 +63,9 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	if !adapter.SupportsComponent(domain.ComponentPermissions) {
 		return nil, nil
 	}
+	if overlayForAgent(adapter.ID()) == nil {
+		return nil, nil
+	}
 
 	targetPath := settingsPath(adapter, projectDir)
 	if targetPath == "" {
@@ -117,6 +120,9 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	if err != nil {
 		return err
 	}
+	if content == nil {
+		return nil
+	}
 
 	dir := filepath.Dir(action.TargetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -145,6 +151,9 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 // Verify checks that the permissions overlay is present in the settings file.
 func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) ([]domain.VerifyResult, error) {
 	if !adapter.SupportsComponent(domain.ComponentPermissions) {
+		return nil, nil
+	}
+	if overlayForAgent(adapter.ID()) == nil {
 		return nil, nil
 	}
 

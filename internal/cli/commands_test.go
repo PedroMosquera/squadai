@@ -44,6 +44,92 @@ func TestRunPlan_HelpText(t *testing.T) {
 	}
 }
 
+func TestRunInstallHooks_PostApplyHooksUseSupportedFlags(t *testing.T) {
+	dir := t.TempDir()
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatalf("mkdir hooks: %v", err)
+	}
+
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInstallHooks(nil, &buf); err != nil {
+		t.Fatalf("RunInstallHooks: %v", err)
+	}
+
+	for _, hook := range []string{"post-merge", "post-checkout"} {
+		data, err := os.ReadFile(filepath.Join(hooksDir, hook))
+		if err != nil {
+			t.Fatalf("read %s: %v", hook, err)
+		}
+		body := string(data)
+		if strings.Contains(body, "--quiet") {
+			t.Fatalf("%s hook should not use unsupported --quiet flag:\n%s", hook, body)
+		}
+		if !strings.Contains(body, "squadai apply --no-review --json >/dev/null") {
+			t.Fatalf("%s hook should use supported non-interactive apply flags, got:\n%s", hook, body)
+		}
+	}
+}
+
+func TestRunInitApplyVerifyDiff_OpenCodePiSharedAgentsFileClean(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Chdir(project)
+
+	var initOut bytes.Buffer
+	if err := RunInit([]string{"--preset=solo-power", "--agents=opencode,pi", "--json"}, &initOut); err != nil {
+		t.Fatalf("RunInit: %v\n%s", err, initOut.String())
+	}
+
+	var applyOut bytes.Buffer
+	if err := RunApply([]string{"--no-review", "--json"}, &applyOut); err != nil {
+		t.Fatalf("RunApply: %v\n%s", err, applyOut.String())
+	}
+
+	var verifyOut bytes.Buffer
+	if err := RunVerify(nil, &verifyOut); err != nil {
+		t.Fatalf("RunVerify: %v\n%s", err, verifyOut.String())
+	}
+	if strings.Contains(verifyOut.String(), "[FAIL]") {
+		t.Fatalf("verify should not have failures after apply:\n%s", verifyOut.String())
+	}
+
+	var diffOut bytes.Buffer
+	if err := RunDiff([]string{"--json"}, &diffOut); err != nil {
+		t.Fatalf("RunDiff: %v\n%s", err, diffOut.String())
+	}
+	if strings.TrimSpace(diffOut.String()) != "[]" {
+		t.Fatalf("diff should be clean after apply, got:\n%s", diffOut.String())
+	}
+
+	agentsPath := filepath.Join(project, "AGENTS.md")
+	content, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	body := string(content)
+	for _, section := range []string{
+		"squadai:memory:opencode",
+		"squadai:memory:pi",
+		"squadai:brand:opencode",
+		"squadai:brand:pi",
+	} {
+		if !strings.Contains(body, section) {
+			t.Fatalf("AGENTS.md missing scoped section %q:\n%s", section, body)
+		}
+	}
+}
+
 func TestRunApply_HelpText(t *testing.T) {
 	var buf bytes.Buffer
 	if err := RunApply([]string{"--help"}, &buf); err != nil {

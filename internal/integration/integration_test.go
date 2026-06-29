@@ -304,7 +304,7 @@ func TestUserContent_Preserved(t *testing.T) {
 	if !strings.Contains(promptStr, "Do not touch this.") {
 		t.Error("user content in AGENTS.md was clobbered")
 	}
-	if !marker.HasSection(promptStr, "memory") {
+	if !marker.HasSection(promptStr, memory.SectionIDForAgentID(domain.AgentOpenCode)) {
 		t.Error("memory section should be injected into AGENTS.md")
 	}
 
@@ -403,7 +403,7 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read prompt: %v", err)
 	}
-	extracted := marker.ExtractSection(string(data), "memory")
+	extracted := marker.ExtractSection(string(data), memory.SectionIDForAgentID(domain.AgentOpenCode))
 	if extracted != memory.TemplateForAgentID(domain.AgentOpenCode) {
 		t.Error("memory content should match current OpenCode protocol template")
 	}

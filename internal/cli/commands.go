@@ -40,6 +40,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/planner/budget"
 	"github.com/PedroMosquera/squadai/internal/squadrefine"
 	"github.com/PedroMosquera/squadai/internal/state"
+	"github.com/PedroMosquera/squadai/internal/tokenprofile/tokenizer"
 	"github.com/PedroMosquera/squadai/internal/verify"
 )
 
@@ -1206,6 +1207,40 @@ func RunApplyWithProgress(args []string, stdout io.Writer, sink pipeline.EventSi
 	return runApplyImpl(args, stdout, sink)
 }
 
+func desiredComponentTokens(p *planner.Planner, actions []domain.PlannedAction, homeDir, projectDir, modelName string) (map[domain.ComponentID]int, error) {
+	counter := tokenizer.ForModel(modelName)
+	// Each RenderAction returns the FULL rendered target document. When several
+	// actions of the same component target one file (e.g. the OpenCode and Pi
+	// memory sections both live in a shared AGENTS.md), summing per action would
+	// count that document once per action and overstate the component, which can
+	// make the budget fitter drop a component that actually fits. Keep the
+	// largest render per (component, path) instead.
+	type compPath struct {
+		component domain.ComponentID
+		path      string
+	}
+	tokensByPath := make(map[compPath]int)
+	for _, action := range actions {
+		if action.Action == domain.ActionDelete || action.TargetPath == "" {
+			continue
+		}
+		_, desired, err := p.RenderAction(action, homeDir, projectDir)
+		if err != nil {
+			return nil, fmt.Errorf("render %s: %w", action.ID, err)
+		}
+		tokens := counter.Count(string(desired))
+		key := compPath{component: action.Component, path: action.TargetPath}
+		if tokens > tokensByPath[key] {
+			tokensByPath[key] = tokens
+		}
+	}
+	tokensByComponent := make(map[domain.ComponentID]int)
+	for key, tokens := range tokensByPath {
+		tokensByComponent[key.component] += tokens
+	}
+	return tokensByComponent, nil
+}
+
 // runApplyImpl is the shared implementation for RunApply and RunApplyWithProgress.
 // externalSink is used when non-nil; the --verbose flag creates its own internal sink.
 func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSink) error {
@@ -1365,9 +1400,14 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	}
 
 	if maxTokens > 0 {
+		componentTokens, tokenErr := desiredComponentTokens(p, actions, homeDir, projectDir, fitModel)
+		if tokenErr != nil {
+			return fmt.Errorf("budget token estimate: %w", tokenErr)
+		}
 		fitResult, fitErr := budget.Fit(actions, budget.Options{
-			MaxTokens: maxTokens,
-			Model:     fitModel,
+			MaxTokens:       maxTokens,
+			Model:           fitModel,
+			ComponentTokens: componentTokens,
 		})
 		if fitErr != nil {
 			return fmt.Errorf("budget fit: %w", fitErr)
@@ -2465,6 +2505,9 @@ func printDailyStatus(stdout io.Writer, projectDir, language, methodology, mode,
 		}
 		if failing == 0 {
 			fmt.Fprintf(stdout, "Health: OK (%d checks)\n", len(verifyReport.Results))
+		} else if lastManifest == nil {
+			fmt.Fprintf(stdout, "Health: setup pending (%d missing or stale check(s) of %d)\n", failing, len(verifyReport.Results))
+			fmt.Fprintln(stdout, "Next: run squadai apply --no-review")
 		} else {
 			fmt.Fprintf(stdout, "Health: %d failing check(s) of %d\n", failing, len(verifyReport.Results))
 		}
@@ -3985,8 +4028,8 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Install Git hooks for squadai:")
 			fmt.Fprintln(stdout, "  pre-commit    → squadai verify --strict")
-			fmt.Fprintln(stdout, "  post-merge    → squadai apply --quiet (when .squadai/ changed)")
-			fmt.Fprintln(stdout, "  post-checkout → squadai apply --quiet (when .squadai/ changed)")
+			fmt.Fprintln(stdout, "  post-merge    → squadai apply --no-review --json (when .squadai/ changed)")
+			fmt.Fprintln(stdout, "  post-checkout → squadai apply --no-review --json (when .squadai/ changed)")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Idempotent: calling twice does not duplicate hooks.")
 			fmt.Fprintln(stdout, "User-added lines outside the squadai block are preserved.")
@@ -4019,7 +4062,7 @@ func RunInstallHooks(args []string, stdout io.Writer) error {
 
 	// post-merge hook — runs squadai apply when .squadai/ changed
 	postMergeBody := `if git diff --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '^\.squadai/'; then
-  squadai apply --quiet
+  squadai apply --no-review --json >/dev/null
 fi`
 	if err := installHookWithBody(hooksDir, "post-merge", postMergeBody); err != nil {
 		return fmt.Errorf("write post-merge hook: %w", err)
@@ -4028,7 +4071,7 @@ fi`
 
 	// post-checkout hook — runs squadai apply when .squadai/ changed
 	postCheckoutBody := `if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q '^\.squadai/'; then
-  squadai apply --quiet
+  squadai apply --no-review --json >/dev/null
 fi`
 	if err := installHookWithBody(hooksDir, "post-checkout", postCheckoutBody); err != nil {
 		return fmt.Errorf("write post-checkout hook: %w", err)
@@ -4872,35 +4915,39 @@ wrapped in marker blocks for idempotent updates:
 SquadAI's token budget system helps you understand and control the per-session
 token cost of your agent configuration.
 
-## Current: static estimation
+## Static estimation
 
   squadai token-budget          # human-readable per-component breakdown
   squadai token-budget --json   # machine-readable
+  squadai token-budget --model=claude-sonnet-4
 
-This reads the installed agent files and estimates tokens using a chars/4
-heuristic. The brand component appears as its own row.
+This reads the installed agent files and estimates tokens. Without --model it
+uses a chars/4 heuristic; with --model it uses the model-aware tokenizer when
+available. The brand component appears as its own row.
 
-## Planned: active fitting (--fit)
+## Active fitting
 
-A future release will add active budget fitting to 'squadai apply':
+  squadai apply --max-tokens=60000 --fit-model=claude-sonnet-4
 
-  squadai apply --max-tokens 60000 --model claude-sonnet-4
-
-This will order components by priority and truncate/omit lowest-priority ones
-to fit within the target model's context window:
+This renders the planned output, estimates desired tokens, then orders
+components by priority and omits lowest-priority content to fit within the
+target model's context window:
 
   Priority (drop lowest first):
     plugins → commands → skills → memory → rules → orchestrator
 
-  Truncation modes: full, summary, omit
+  Modes: full, summary, omit
 
-The chosen layout will be persisted to .squadai/.applied-budget.json so that
+Summary mode is recorded for future summary rendering, but currently skips
+writing that component rather than writing full content over budget.
+
+The chosen layout is persisted to .squadai/.applied-budget.json so that
 'doctor' and 'diff' can detect budget drift (e.g. after swapping agents).
 
-## Planned: per-session telemetry
+## Per-session telemetry
 
   squadai token-usage --since 7d   # aggregate real session token usage
-  squadai token-usage --watch      # live tail of current session
+  squadai token-usage --watch      # not yet implemented
 
 This will parse agent session transcripts and compute real system+completion
 tokens with per-model pricing.`, true

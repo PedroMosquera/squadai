@@ -46,8 +46,9 @@ type FitResult struct {
 
 // Options controls the budget fitting process.
 type Options struct {
-	MaxTokens int    // token cap; 0 means no cap (return all full)
-	Model     string // model name for tokenizer selection
+	MaxTokens       int                        // token cap; 0 means no cap (return all full)
+	Model           string                     // model name for tokenizer selection
+	ComponentTokens map[domain.ComponentID]int // optional precomputed desired-token counts
 }
 
 // componentPriority lists content components ordered from lowest to highest
@@ -99,7 +100,12 @@ func priorityRank(c domain.ComponentID) int {
 // componentTokens sums the approximate token count of all non-delete,
 // non-empty-target actions for a component. Missing files count as 0 tokens
 // and are not an error; other read errors propagate.
-func componentTokens(actions []domain.PlannedAction) (int, error) {
+func componentTokens(component domain.ComponentID, actions []domain.PlannedAction, overrides map[domain.ComponentID]int) (int, error) {
+	if overrides != nil {
+		if n, ok := overrides[component]; ok {
+			return n, nil
+		}
+	}
 	total := 0
 	for _, a := range actions {
 		if a.Action == domain.ActionDelete || a.TargetPath == "" {
@@ -137,7 +143,7 @@ func Fit(actions []domain.PlannedAction, opts Options) (*FitResult, error) {
 	// Compute per-component full token counts.
 	tokensByComp := make(map[domain.ComponentID]int, len(order))
 	for _, c := range order {
-		t, err := componentTokens(groups[c])
+		t, err := componentTokens(c, groups[c], opts.ComponentTokens)
 		if err != nil {
 			return nil, err
 		}
@@ -210,10 +216,12 @@ func Fit(actions []domain.PlannedAction, opts Options) (*FitResult, error) {
 		}
 	}
 
-	// Build the filtered action list (omit ModeOmit components' actions).
+	// Build the filtered action list. Summary-mode rendering is not implemented
+	// yet, so summary decisions deliberately skip full-content writes. The
+	// persisted decision records where a future renderer can install summaries.
 	finalActions := make([]domain.PlannedAction, 0, len(actions))
 	for _, a := range actions {
-		if modeByComp[a.Component] == ModeOmit {
+		if modeByComp[a.Component] == ModeOmit || modeByComp[a.Component] == ModeSummary {
 			continue
 		}
 		finalActions = append(finalActions, a)

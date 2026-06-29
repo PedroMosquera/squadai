@@ -55,7 +55,37 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	desiredContent := templateForAdapter(adapter)
 
-	// Check if the section already matches.
+	sectionID := SectionIDForAgentID(adapter.ID())
+
+	// Check if the adapter-scoped section already matches.
+	if marker.HasSection(string(existing), sectionID) {
+		current := marker.ExtractSection(string(existing), sectionID)
+		if current == desiredContent {
+			return []domain.PlannedAction{
+				{
+					ID:          fmt.Sprintf("%s-%s-memory", adapter.ID(), "prompt"),
+					Agent:       adapter.ID(),
+					Component:   domain.ComponentMemory,
+					Action:      domain.ActionSkip,
+					TargetPath:  promptPath,
+					Description: "memory section already up to date",
+				},
+			}, nil
+		}
+		return []domain.PlannedAction{
+			{
+				ID:          fmt.Sprintf("%s-%s-memory", adapter.ID(), "prompt"),
+				Agent:       adapter.ID(),
+				Component:   domain.ComponentMemory,
+				Action:      domain.ActionUpdate,
+				TargetPath:  promptPath,
+				Description: "update memory protocol in system prompt",
+			},
+		}, nil
+	}
+
+	// Backward compatibility: single-adapter installs may still have the
+	// legacy unscoped marker. Treat a matching legacy section as current.
 	if marker.HasSection(string(existing), SectionID) {
 		current := marker.ExtractSection(string(existing), SectionID)
 		if current == desiredContent {
@@ -111,7 +141,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	}
 
 	content := templateForAgentID(action.Agent)
-	updated := marker.InjectSection(string(existing), SectionID, content)
+	updated := InjectContent(string(existing), action.Agent, content)
 
 	_, err = fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644)
 	if err != nil {
@@ -151,7 +181,8 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, fmt.Errorf("read prompt: %w", err)
 	}
 
-	if !marker.HasSection(string(content), SectionID) {
+	sectionID := SectionIDForAgentID(adapter.ID())
+	if !marker.HasSection(string(content), sectionID) && !marker.HasSection(string(content), SectionID) {
 		results = append(results, domain.VerifyResult{
 			Check:   "memory-markers-present",
 			Passed:  false,
@@ -165,7 +196,10 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	})
 
 	// Check content matches expected.
-	current := marker.ExtractSection(string(content), SectionID)
+	current := marker.ExtractSection(string(content), sectionID)
+	if current == "" {
+		current = marker.ExtractSection(string(content), SectionID)
+	}
 	expected := templateForAdapter(adapter)
 	if current != expected {
 		results = append(results, domain.VerifyResult{
@@ -212,6 +246,26 @@ func ProtocolTemplate() string {
 // Use this to get the expected content for a specific agent in tests and callers.
 func TemplateForAgentID(agentID domain.AgentID) string {
 	return templateForAgentID(agentID)
+}
+
+// SectionIDForAgentID returns the adapter-scoped marker section used in shared
+// files such as AGENTS.md. Scoped markers prevent different adapters from
+// overwriting each other's memory content when they target the same file.
+func SectionIDForAgentID(agentID domain.AgentID) string {
+	if agentID == "" {
+		return SectionID
+	}
+	return SectionID + ":" + string(agentID)
+}
+
+// InjectContent writes the canonical adapter-scoped memory section and removes
+// the legacy unscoped section when present so migrated files do not keep stale
+// duplicate memory blocks.
+func InjectContent(document string, agentID domain.AgentID, content string) string {
+	if marker.HasSection(document, SectionID) {
+		document = marker.InjectSection(document, SectionID, "")
+	}
+	return marker.InjectSection(document, SectionIDForAgentID(agentID), content)
 }
 
 func openCodeMemoryTemplate() string {
