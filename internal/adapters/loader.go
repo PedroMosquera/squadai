@@ -26,9 +26,8 @@ type OverrideSpec struct {
 
 // OverrideAdapter wraps a built-in adapter and overrides selected path methods.
 type OverrideAdapter struct {
-	base    domain.Adapter
-	spec    OverrideSpec
-	homeDir string // cached for path expansion
+	base domain.Adapter
+	spec OverrideSpec
 }
 
 // expandPath replaces a leading ~ with homeDir.

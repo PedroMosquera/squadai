@@ -57,7 +57,37 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	desiredContent := fence(templateForAdapter(adapter))
 
-	// Check if the section already matches.
+	sectionID := SectionIDForAgentID(adapter.ID())
+
+	// Check if the adapter-scoped section already matches.
+	if marker.HasSection(string(existing), sectionID) {
+		current := marker.ExtractSection(string(existing), sectionID)
+		if current == desiredContent {
+			return []domain.PlannedAction{
+				{
+					ID:          fmt.Sprintf("%s-%s-brand", adapter.ID(), "banner"),
+					Agent:       adapter.ID(),
+					Component:   domain.ComponentBrand,
+					Action:      domain.ActionSkip,
+					TargetPath:  promptPath,
+					Description: "brand banner already up to date",
+				},
+			}, nil
+		}
+		return []domain.PlannedAction{
+			{
+				ID:          fmt.Sprintf("%s-%s-brand", adapter.ID(), "banner"),
+				Agent:       adapter.ID(),
+				Component:   domain.ComponentBrand,
+				Action:      domain.ActionUpdate,
+				TargetPath:  promptPath,
+				Description: "update brand banner in target file",
+			},
+		}, nil
+	}
+
+	// Backward compatibility: accept a matching legacy unscoped section for
+	// single-adapter installs, but new writes migrate to scoped markers.
 	if marker.HasSection(string(existing), SectionID) {
 		current := marker.ExtractSection(string(existing), SectionID)
 		if current == desiredContent {
@@ -116,7 +146,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	// The banner asset does not include a markdown fence; wrap it so the
 	// ASCII art renders verbatim inside agent rules/prompt files.
 	fenced := "```text\n" + banner + "\n```\n"
-	updated := marker.InjectSection(string(existing), SectionID, fenced)
+	updated := InjectContent(string(existing), action.Agent, fenced)
 
 	_, err = fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644)
 	if err != nil {
@@ -156,7 +186,8 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, fmt.Errorf("read target: %w", err)
 	}
 
-	if !marker.HasSection(string(content), SectionID) {
+	sectionID := SectionIDForAgentID(adapter.ID())
+	if !marker.HasSection(string(content), sectionID) && !marker.HasSection(string(content), SectionID) {
 		results = append(results, domain.VerifyResult{
 			Check:   "brand-markers-present",
 			Passed:  false,
@@ -170,7 +201,10 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	})
 
 	// Check content matches expected.
-	current := marker.ExtractSection(string(content), SectionID)
+	current := marker.ExtractSection(string(content), sectionID)
+	if current == "" {
+		current = marker.ExtractSection(string(content), SectionID)
+	}
 	expected := fence(templateForAdapter(adapter))
 	if current != expected {
 		results = append(results, domain.VerifyResult{
@@ -222,4 +256,22 @@ func ProtocolTemplate() string {
 // Use this to get the expected banner for a specific agent in tests and callers.
 func TemplateForAgentID(agentID domain.AgentID) string {
 	return templateForAgentID(agentID)
+}
+
+// SectionIDForAgentID returns the adapter-scoped brand marker section. OpenCode
+// and Pi both target AGENTS.md, so brand sections must not share one marker.
+func SectionIDForAgentID(agentID domain.AgentID) string {
+	if agentID == "" {
+		return SectionID
+	}
+	return SectionID + ":" + string(agentID)
+}
+
+// InjectContent writes the canonical adapter-scoped brand section and removes
+// any legacy unscoped section during migration.
+func InjectContent(document string, agentID domain.AgentID, content string) string {
+	if marker.HasSection(document, SectionID) {
+		document = marker.InjectSection(document, SectionID, "")
+	}
+	return marker.InjectSection(document, SectionIDForAgentID(agentID), content)
 }

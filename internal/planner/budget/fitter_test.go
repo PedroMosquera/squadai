@@ -108,7 +108,8 @@ func TestFit_OmitLowestPriority(t *testing.T) {
 	// Full total = 600. cap = 100:
 	//   pass 1 summarizes all → 300 > 100.
 	//   pass 2 omits plugins → 200 > 100; omits commands → 100 ≤ 100.
-	// So plugins and commands are omitted (lowest priority first), skills stays summary.
+	// So plugins and commands are omitted (lowest priority first), skills is
+	// marked summary and skipped until real summary rendering exists.
 	res, err := Fit(actions, Options{MaxTokens: 100})
 	if err != nil {
 		t.Fatalf("Fit: %v", err)
@@ -126,7 +127,7 @@ func TestFit_OmitLowestPriority(t *testing.T) {
 	if m[domain.ComponentSkills] == ModeOmit {
 		t.Errorf("skills: %s, should not be omitted before commands", m[domain.ComponentSkills])
 	}
-	// Plugins actions must be filtered out; skills actions kept.
+	// Omitted and summary actions must be filtered out.
 	seen := make(map[domain.ComponentID]bool)
 	for _, a := range res.Actions {
 		seen[a.Component] = true
@@ -134,8 +135,8 @@ func TestFit_OmitLowestPriority(t *testing.T) {
 	if seen[domain.ComponentPlugins] || seen[domain.ComponentCommands] {
 		t.Errorf("omitted components should not appear in actions: %+v", seen)
 	}
-	if !seen[domain.ComponentSkills] {
-		t.Error("skills action should be kept")
+	if seen[domain.ComponentSkills] {
+		t.Error("summary component action should be skipped until summary rendering exists")
 	}
 }
 
@@ -171,8 +172,37 @@ func TestFit_SummaryBeforeOmit(t *testing.T) {
 	if res.TotalTokens != 300 {
 		t.Errorf("TotalTokens = %d, want 300 (summary 100 + full 200)", res.TotalTokens)
 	}
-	if len(res.Actions) != 2 {
-		t.Errorf("expected both actions kept, got %d", len(res.Actions))
+	if len(res.Actions) != 1 {
+		t.Errorf("expected only full action kept, got %d", len(res.Actions))
+	}
+	if res.Actions[0].Component != domain.ComponentCommands {
+		t.Errorf("kept component = %s, want commands", res.Actions[0].Component)
+	}
+}
+
+func TestFit_UsesComponentTokenOverrides(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "planned-new-file.md")
+	actions := []domain.PlannedAction{
+		contentAction(domain.ComponentAgents, missing),
+	}
+	res, err := Fit(actions, Options{
+		MaxTokens: 100,
+		ComponentTokens: map[domain.ComponentID]int{
+			domain.ComponentAgents: 200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Fit: %v", err)
+	}
+	if res.Decisions[0].Tokens != 200 {
+		t.Errorf("Tokens = %d, want override value 200", res.Decisions[0].Tokens)
+	}
+	if res.Decisions[0].Mode != ModeSummary {
+		t.Errorf("Mode = %s, want summary", res.Decisions[0].Mode)
+	}
+	if len(res.Actions) != 0 {
+		t.Errorf("summary action should be skipped, got %d action(s)", len(res.Actions))
 	}
 }
 

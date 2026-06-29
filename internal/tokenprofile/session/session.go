@@ -70,7 +70,7 @@ func Aggregate(homeDir string, opts AggregateOptions) (*Aggregation, error) {
 	}
 
 	for _, rel := range sessionDirs {
-		walkSessions(filepath.Join(homeDir, rel), cutoff, opts.ProjectDir, agg)
+		walkSessions(filepath.Join(homeDir, rel), cutoff, agg)
 	}
 
 	for model, u := range agg.ByModel {
@@ -91,7 +91,7 @@ func Aggregate(homeDir string, opts AggregateOptions) (*Aggregation, error) {
 // walkSessions walks dir recursively, accumulating any parseable
 // session files into agg. Errors are swallowed so that a missing or
 // unreadable directory never aborts aggregation.
-func walkSessions(dir string, cutoff time.Time, projectDir string, agg *Aggregation) {
+func walkSessions(dir string, cutoff time.Time, agg *Aggregation) {
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -106,9 +106,6 @@ func walkSessions(dir string, cutoff time.Time, projectDir string, agg *Aggregat
 			if info, err := d.Info(); err == nil && info.ModTime().Before(cutoff) {
 				return nil
 			}
-		}
-		if projectDir != "" && !strings.Contains(path, projectDir) {
-			return nil
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {

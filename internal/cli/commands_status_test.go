@@ -90,6 +90,7 @@ func TestRunStatus_RefinementSection_JSON(t *testing.T) {
 
 func TestRunStatus_DailyIncludesControlPlaneFields(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
 	orig, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -122,6 +123,8 @@ func TestRunStatus_DailyIncludesControlPlaneFields(t *testing.T) {
 		"profile=default",
 		"Memory: backend=native",
 		"Usage: enforcement=warn",
+		"Health: setup pending",
+		"Next: run squadai apply --no-review",
 		"Refinement: never-refined",
 	} {
 		if !strings.Contains(out, want) {
