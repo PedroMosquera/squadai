@@ -88,6 +88,23 @@ func TestAggregate_WithSessions(t *testing.T) {
 	}
 }
 
+func TestAggregate_ProjectDirDoesNotFilterSessionPath(t *testing.T) {
+	home := t.TempDir()
+	projectDir := filepath.Join(t.TempDir(), "repo")
+	writeSession(t, home, "s1.json", `{"model":"gpt-4o","usage":{"input_tokens":100,"output_tokens":50}}`)
+
+	agg, err := Aggregate(home, AggregateOptions{ProjectDir: projectDir})
+	if err != nil {
+		t.Fatalf("Aggregate: %v", err)
+	}
+	if agg.Total.SessionCount != 1 {
+		t.Fatalf("SessionCount = %d, want 1", agg.Total.SessionCount)
+	}
+	if agg.Total.InputTokens != 100 || agg.Total.OutputTokens != 50 {
+		t.Errorf("tokens = %d/%d, want 100/50", agg.Total.InputTokens, agg.Total.OutputTokens)
+	}
+}
+
 func TestAggregate_SinceFilter(t *testing.T) {
 	home := t.TempDir()
 	recent := writeSession(t, home, "recent.json", `{"model":"gpt-4o","usage":{"input_tokens":100,"output_tokens":50}}`)

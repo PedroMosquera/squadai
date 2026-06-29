@@ -103,9 +103,10 @@ func buildTFIDFIndex(projectDir string) (*tfidfIndex, error) {
 		}
 	}
 
-	// IDF: log(N / (1 + df)).
+	// IDF: smoothed log((N+1)/(df+1)) + 1. This keeps small corpora useful
+	// and avoids zero/negative weights for common terms.
 	for term, df := range idx.df {
-		idx.idf[term] = math.Log(float64(idx.totalDocs) / (1 + float64(df)))
+		idx.idf[term] = idfWeight(idx.totalDocs, df)
 	}
 
 	// TF-IDF vectors and L2 norms.
@@ -145,10 +146,7 @@ func searchTFIDF(idx *tfidfIndex, query string) []SearchResult {
 		}
 		idf, ok := idx.idf[w]
 		if !ok {
-			// Term absent from the corpus: df = 0, idf = log(N / 1).
-			if idx.totalDocs > 0 {
-				idf = math.Log(float64(idx.totalDocs))
-			}
+			idf = idfWeight(idx.totalDocs, 0)
 		}
 		weight := idf
 		queryVec[w] = weight
@@ -311,10 +309,17 @@ func loadTFIDFIndex(projectDir string) (*tfidfIndex, error) {
 		}
 	}
 	for term, df := range idx.df {
-		idx.idf[term] = math.Log(float64(idx.totalDocs) / (1 + float64(df)))
+		idx.idf[term] = idfWeight(idx.totalDocs, df)
 	}
 
 	return idx, nil
+}
+
+func idfWeight(totalDocs, df int) float64 {
+	if totalDocs <= 0 {
+		return 0
+	}
+	return math.Log((float64(totalDocs)+1)/(float64(df)+1)) + 1
 }
 
 // SearchTFIDF is the public TF-IDF search API. It loads the index (building it

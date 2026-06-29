@@ -379,6 +379,9 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 	if action.Action == domain.ActionDelete {
 		return oldContent, nil, nil
 	}
+	if action.Action == domain.ActionSkip {
+		return oldContent, oldContent, nil
+	}
 
 	// Copilot instructions are handled by the copilot manager.
 	if action.ID == "copilot-instructions" {
@@ -389,6 +392,9 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 	switch action.Component {
 	case domain.ComponentMemory:
 		return p.renderMemory(action, oldContent)
+
+	case domain.ComponentBrand:
+		return p.renderBrand(action, oldContent)
 
 	case domain.ComponentRules:
 		return p.renderRules(action, oldContent)
@@ -458,7 +464,17 @@ func (p *Planner) renderMemory(action domain.PlannedAction, existing []byte) ([]
 		return existing, []byte("[memory installer not initialized]"), nil
 	}
 	content := memory.TemplateForAgentID(action.Agent)
-	updated := injectSection(string(existing), memory.SectionID, content)
+	updated := memory.InjectContent(string(existing), action.Agent, content)
+	return existing, []byte(updated), nil
+}
+
+// renderBrand computes what the brand installer would write.
+func (p *Planner) renderBrand(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.brandInstaller == nil {
+		return existing, []byte("[brand installer not initialized]"), nil
+	}
+	banner := brand.TemplateForAgentID(action.Agent)
+	updated := brand.InjectContent(string(existing), action.Agent, "```text\n"+banner+"\n```\n")
 	return existing, []byte(updated), nil
 }
 
@@ -570,6 +586,9 @@ func (p *Planner) renderPermissions(action domain.PlannedAction, existing []byte
 	newContent, err := p.permissionsInstaller.RenderContent(action)
 	if err != nil {
 		return existing, []byte("[content preview not available for permissions: " + err.Error() + "]"), nil
+	}
+	if newContent == nil {
+		return existing, existing, nil
 	}
 	return existing, newContent, nil
 }

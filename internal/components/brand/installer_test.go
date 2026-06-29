@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/pi"
 	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/domain"
@@ -256,7 +257,7 @@ func TestApply_Create(t *testing.T) {
 	}
 
 	content, _ := os.ReadFile(actions[0].TargetPath)
-	if !marker.HasSection(string(content), SectionID) {
+	if !marker.HasSection(string(content), SectionIDForAgentID(adapter.ID())) {
 		t.Error("expected brand marker section in file after apply")
 	}
 	if !strings.Contains(string(content), "SquadAI") && !strings.Contains(string(content), "squadai") {
@@ -334,8 +335,57 @@ func TestApply_PreservesExistingContent(t *testing.T) {
 	if !strings.Contains(s, "Do not delete this.") {
 		t.Error("existing content should be preserved")
 	}
-	if !marker.HasSection(s, SectionID) {
+	if !marker.HasSection(s, SectionIDForAgentID(adapter.ID())) {
 		t.Error("brand section should be injected")
+	}
+}
+
+func TestApply_SharedAgentsFile_KeepsAdapterSectionsSeparate(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	openCode := opencode.New()
+	piAdapter := pi.New()
+	inst := New()
+
+	openActions, err := inst.Plan(openCode, home, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := inst.Apply(openActions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	piActions, err := inst.Plan(piAdapter, home, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := inst.Apply(piActions[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(project, "AGENTS.md")
+	content, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(content)
+	if !marker.HasSection(s, SectionIDForAgentID(openCode.ID())) {
+		t.Fatal("OpenCode brand section missing")
+	}
+	if !marker.HasSection(s, SectionIDForAgentID(piAdapter.ID())) {
+		t.Fatal("Pi brand section missing")
+	}
+
+	openActions, err = inst.Plan(openCode, home, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	piActions, err = inst.Plan(piAdapter, home, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if openActions[0].Action != domain.ActionSkip || piActions[0].Action != domain.ActionSkip {
+		t.Fatalf("both adapters should be current, got OpenCode=%s Pi=%s", openActions[0].Action, piActions[0].Action)
 	}
 }
 
@@ -489,30 +539,30 @@ func (a *unsupportedAdapter) Lane() domain.AdapterLane {
 func (a *unsupportedAdapter) Detect(_ context.Context, homeDir string) (bool, bool, error) {
 	return true, true, nil
 }
-func (a *unsupportedAdapter) GlobalConfigDir(homeDir string) string    { return "" }
-func (a *unsupportedAdapter) SystemPromptFile(homeDir string) string   { return "" }
-func (a *unsupportedAdapter) SkillsDir(homeDir string) string          { return "" }
-func (a *unsupportedAdapter) SettingsPath(homeDir string) string       { return "" }
+func (a *unsupportedAdapter) GlobalConfigDir(homeDir string) string       { return "" }
+func (a *unsupportedAdapter) SystemPromptFile(homeDir string) string      { return "" }
+func (a *unsupportedAdapter) SkillsDir(homeDir string) string             { return "" }
+func (a *unsupportedAdapter) SettingsPath(homeDir string) string          { return "" }
 func (a *unsupportedAdapter) SupportsComponent(c domain.ComponentID) bool { return false }
-func (a *unsupportedAdapter) ProjectConfigFile(projectDir string) string { return "" }
-func (a *unsupportedAdapter) ProjectRulesFile(projectDir string) string  { return "" }
-func (a *unsupportedAdapter) ProjectAgentsDir(projectDir string) string  { return "" }
-func (a *unsupportedAdapter) ProjectSkillsDir(projectDir string) string  { return "" }
+func (a *unsupportedAdapter) ProjectConfigFile(projectDir string) string  { return "" }
+func (a *unsupportedAdapter) ProjectRulesFile(projectDir string) string   { return "" }
+func (a *unsupportedAdapter) ProjectAgentsDir(projectDir string) string   { return "" }
+func (a *unsupportedAdapter) ProjectSkillsDir(projectDir string) string   { return "" }
 func (a *unsupportedAdapter) ProjectCommandsDir(projectDir string) string { return "" }
 func (a *unsupportedAdapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationSoloAgent
 }
-func (a *unsupportedAdapter) SupportsSubAgents() bool               { return false }
-func (a *unsupportedAdapter) SubAgentsDir(homeDir string) string    { return "" }
-func (a *unsupportedAdapter) SupportsWorkflows() bool               { return false }
-func (a *unsupportedAdapter) WorkflowsDir(projectDir string) string { return "" }
-func (a *unsupportedAdapter) MCPRootKey() string                    { return "mcpServers" }
-func (a *unsupportedAdapter) MCPURLKey() string                     { return "url" }
-func (a *unsupportedAdapter) MCPConfigPath(projectDir string) string { return "" }
-func (a *unsupportedAdapter) MCPCommandStyle() string               { return "split" }
-func (a *unsupportedAdapter) MCPEnvKey() string                     { return "env" }
+func (a *unsupportedAdapter) SupportsSubAgents() bool                   { return false }
+func (a *unsupportedAdapter) SubAgentsDir(homeDir string) string        { return "" }
+func (a *unsupportedAdapter) SupportsWorkflows() bool                   { return false }
+func (a *unsupportedAdapter) WorkflowsDir(projectDir string) string     { return "" }
+func (a *unsupportedAdapter) MCPRootKey() string                        { return "mcpServers" }
+func (a *unsupportedAdapter) MCPURLKey() string                         { return "url" }
+func (a *unsupportedAdapter) MCPConfigPath(projectDir string) string    { return "" }
+func (a *unsupportedAdapter) MCPCommandStyle() string                   { return "split" }
+func (a *unsupportedAdapter) MCPEnvKey() string                         { return "env" }
 func (a *unsupportedAdapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
-func (a *unsupportedAdapter) RulesFrontmatter() string              { return "" }
-func (a *unsupportedAdapter) RulesFileSizeCap() int                 { return 0 }
+func (a *unsupportedAdapter) RulesFrontmatter() string                  { return "" }
+func (a *unsupportedAdapter) RulesFileSizeCap() int                     { return 0 }
 
 var _ domain.Adapter = (*unsupportedAdapter)(nil)

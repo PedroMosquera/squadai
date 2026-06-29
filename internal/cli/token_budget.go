@@ -17,10 +17,13 @@ import (
 func RunTokenBudget(args []string, stdout io.Writer) error {
 	jsonOut := false
 	model := ""
+	planned := false
 	for _, arg := range args {
 		switch arg {
 		case "--json":
 			jsonOut = true
+		case "--planned":
+			planned = true
 		case "--model":
 			model = ""
 		default:
@@ -28,13 +31,14 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 				model = arg[8:]
 			}
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai token-budget [--json] [--model=<name>]")
+			fmt.Fprintln(stdout, "Usage: squadai token-budget [--json] [--planned] [--model=<name>]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Estimate the per-session token cost of the current squadai install.")
-			fmt.Fprintln(stdout, "Reads installed files on disk and groups by component.")
+			fmt.Fprintln(stdout, "By default reads installed files on disk and groups by component.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json         Output as JSON")
+			fmt.Fprintln(stdout, "  --planned      Estimate planned rendered content before apply")
 			fmt.Fprintln(stdout, "  --model=<name> Use model-aware tokenizer (e.g. claude-sonnet-4, gpt-4o)")
 			fmt.Fprintln(stdout, "                 Falls back to 4 chars/token heuristic when omitted.")
 			return nil
@@ -64,6 +68,16 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 		actions, planErr := p.Plan(merged, adapters, homeDir, projectDir)
 		if planErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: plan failed: %v\n", planErr)
+		} else if planned {
+			report, err := plannedTokenBudgetReport(p, actions, homeDir, projectDir, model)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printTokenBudgetJSON(stdout, report)
+			}
+			printTokenBudgetHuman(stdout, report)
+			return nil
 		} else {
 			for _, a := range actions {
 				if a.TargetPath == "" || a.Action == domain.ActionDelete {
@@ -110,10 +124,87 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func plannedTokenBudgetReport(p *planner.Planner, actions []domain.PlannedAction, homeDir, projectDir, model string) (*tokenprofile.Report, error) {
+	report := &tokenprofile.Report{
+		ByCategory: make(map[string]tokenprofile.CategorySummary),
+		Model:      model,
+	}
+	var counter tokenizer.Counter
+	if model != "" {
+		counter = tokenizer.ForModel(model)
+	}
+
+	// Multiple actions can target the same file — e.g. the OpenCode and Pi
+	// memory and brand sections all land in a shared AGENTS.md. Each
+	// RenderAction returns the FULL rendered document, so summing per action
+	// would multi-count the same file. Dedupe by target path, keeping the
+	// fullest render seen for that path (for an already-applied project every
+	// action is a Skip returning the identical complete document, so the
+	// planned total converges to the authoritative installed scan).
+	type pathEntry struct {
+		category string
+		desired  []byte
+	}
+	byPath := make(map[string]pathEntry)
+	for _, action := range actions {
+		// Delete and empty-target actions contribute nothing. Skip actions are
+		// included: their rendered "desired" content is the current on-disk
+		// content, which is still part of the planned token cost. Excluding
+		// them would make an already-applied project report a misleading 0.
+		if action.TargetPath == "" || action.Action == domain.ActionDelete {
+			continue
+		}
+		_, desired, err := p.RenderAction(action, homeDir, projectDir)
+		if err != nil {
+			return nil, fmt.Errorf("render planned %s: %w", action.ID, err)
+		}
+		if desired == nil {
+			continue
+		}
+		category := string(action.Component)
+		if category == "" {
+			category = "other"
+		}
+		if existing, ok := byPath[action.TargetPath]; ok && len(existing.desired) >= len(desired) {
+			continue
+		}
+		byPath[action.TargetPath] = pathEntry{category: category, desired: desired}
+	}
+
+	// Aggregate one entry per unique target path.
+	paths := make([]string, 0, len(byPath))
+	for path := range byPath {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		pe := byPath[path]
+		tokens := tokenprofile.ApproxTokens(pe.desired)
+		if counter != nil {
+			tokens = counter.Count(string(pe.desired))
+		}
+		report.Entries = append(report.Entries, tokenprofile.Entry{
+			Path:     path,
+			Category: pe.category,
+			Bytes:    len(pe.desired),
+			Tokens:   tokens,
+		})
+		sum := report.ByCategory[pe.category]
+		sum.Files++
+		sum.Bytes += len(pe.desired)
+		sum.Tokens += tokens
+		report.ByCategory[pe.category] = sum
+		report.TotalBytes += len(pe.desired)
+		report.TotalTokens += tokens
+	}
+	return report, nil
+}
+
 type tokenBudgetJSON struct {
 	TotalBytes  int                                     `json:"total_bytes"`
 	TotalTokens int                                     `json:"total_tokens"`
 	Missing     int                                     `json:"missing_files"`
+	Model       string                                  `json:"model,omitempty"`
 	ByCategory  map[string]tokenprofile.CategorySummary `json:"by_category"`
 }
 
@@ -122,6 +213,7 @@ func printTokenBudgetJSON(w io.Writer, r *tokenprofile.Report) error {
 		TotalBytes:  r.TotalBytes,
 		TotalTokens: r.TotalTokens,
 		Missing:     r.Missing,
+		Model:       r.Model,
 		ByCategory:  r.ByCategory,
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
