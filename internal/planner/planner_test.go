@@ -23,6 +23,7 @@ func TestPlan_MemoryAndCopilot_BothEnabled(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{
@@ -70,6 +71,7 @@ func TestPlan_DisabledAdapter_SkipsMemory(t *testing.T) {
 			"opencode": {Enabled: false},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -99,6 +101,7 @@ func TestPlan_DisabledMemory_SkipsMemory(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: false},
 		},
 	}
@@ -128,6 +131,7 @@ func TestPlan_NoCopilotTemplate_SkipsCopilot(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{}, // no template
@@ -155,7 +159,9 @@ func TestPlan_NoAdapters_OnlyCopilot(t *testing.T) {
 	cfg := &domain.MergedConfig{
 		Mode:       domain.ModeTeam,
 		Adapters:   map[string]domain.AdapterConfig{},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 		Copilot: domain.CopilotConfig{
 			InstructionsTemplate: "standard",
 		},
@@ -204,6 +210,7 @@ func TestPlan_UpToDate_AllSkip(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{
@@ -236,6 +243,7 @@ func TestPlan_Plugins_IncludedWhenEnabled(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"plugins": {Enabled: true},
 		},
 		Plugins: map[string]domain.PluginDef{
@@ -276,6 +284,7 @@ func TestPlan_Plugins_SkippedWhenDisabled(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"plugins": {Enabled: false},
 		},
 		Plugins: map[string]domain.PluginDef{
@@ -312,6 +321,7 @@ func TestPlan_Plugins_SkippedWhenNoPluginsDefined(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"plugins": {Enabled: true},
 		},
 		Plugins: nil, // no plugins configured
@@ -344,6 +354,7 @@ func TestPlan_Workflows_IncludedWhenEnabled(t *testing.T) {
 			"windsurf": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"workflows": {Enabled: true},
 		},
 		Methodology: domain.MethodologyTDD,
@@ -378,6 +389,7 @@ func TestPlan_Workflows_SkippedWhenDisabled(t *testing.T) {
 			"windsurf": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"workflows": {Enabled: false},
 		},
 		Methodology: domain.MethodologyTDD,
@@ -409,6 +421,7 @@ func TestPlan_Workflows_SkippedForAdapterWithoutWorkflowSupport(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"workflows": {Enabled: true},
 		},
 		Methodology: domain.MethodologyTDD,
@@ -439,6 +452,7 @@ func TestPlan_Workflows_SkippedWhenNoMethodology(t *testing.T) {
 			"windsurf": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"workflows": {Enabled: true},
 		},
 		Methodology: "", // no methodology
@@ -497,6 +511,7 @@ func TestPlan_DisabledAdapter_ProducesDeleteActions(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -534,6 +549,7 @@ func TestPlan_DisabledAdapter_ProducesDeleteActions(t *testing.T) {
 			"opencode": {Enabled: false},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -575,6 +591,7 @@ func TestPlan_DisabledAdapter_NoDeleteForNonexistent(t *testing.T) {
 			"opencode": {Enabled: false},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -606,6 +623,7 @@ func TestPlan_AllEnabled_NoDeleteActions(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -635,6 +653,7 @@ func TestComponentInstallers_AfterPlan_IncludesNewInstallers(t *testing.T) {
 			"windsurf": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"plugins":   {Enabled: true},
 			"workflows": {Enabled: true},
 		},
