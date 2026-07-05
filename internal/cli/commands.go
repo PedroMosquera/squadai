@@ -64,7 +64,8 @@ type initResult struct {
 // standards, and writes starter skill files.
 func RunInit(args []string, stdout io.Writer) error {
 	withPolicy := false
-	withMemory := true // memory scaffold is opt-out
+	withMemory := true     // memory scaffold is opt-out
+	memoryScaffold := true // --no-memory-scaffold: keep memory enabled but skip the docs/memory scaffold
 	force := false
 	merge := false
 	jsonOut := false
@@ -130,6 +131,8 @@ func RunInit(args []string, stdout io.Writer) error {
 			withMemory = true
 		case "--without-memory":
 			withMemory = false
+		case "--no-memory-scaffold":
+			memoryScaffold = false
 		case "--force":
 			force = true
 		case "--merge":
@@ -143,7 +146,7 @@ func RunInit(args []string, stdout io.Writer) error {
 		case "--no-permissions":
 			permissionsEnabled = false
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<solo-minimal|solo-power|team-standard|enterprise-locked|full-squad|lean|custom>] [--with-policy] [--without-memory] [--force] [--merge] [--json] [--global]")
+			fmt.Fprintln(stdout, "Usage: squadai init [--methodology=<tdd|sdd|conventional>] [--mcp=<csv>] [--plugins=<csv>] [--model-tier=<balanced|performance|starter|manual>] [--agents=<csv>] [--preset=<solo-minimal|solo-power|team-standard|enterprise-locked|full-squad|lean|custom>] [--with-policy] [--without-memory] [--no-memory-scaffold] [--force] [--merge] [--json] [--global]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Initialize .squadai/project.json in the current directory. Detects installed")
 			fmt.Fprintln(stdout, "agents (Claude Code, Cursor, VS Code Copilot, Windsurf, OpenCode), identifies the")
@@ -155,7 +158,7 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "                 (TDD: 6 roles, SDD: 8 roles, Conventional: 4 roles) and enables")
 			fmt.Fprintln(stdout, "                 the agents and commands components.")
 			fmt.Fprintln(stdout, "  --mcp=<csv>    Comma-separated list of MCP server IDs to enable (e.g. context7).")
-			fmt.Fprintln(stdout, "                 Omit to include all recommended servers.")
+			fmt.Fprintln(stdout, "                 Omit to include all recommended servers; pass --mcp=none to enable none.")
 			fmt.Fprintln(stdout, "  --plugins=<csv>")
 			fmt.Fprintln(stdout, "                 Comma-separated list of plugin IDs to enable (e.g. code-review).")
 			fmt.Fprintln(stdout, "                 Omit to skip plugin installation.")
@@ -169,16 +172,17 @@ func RunInit(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "                 OpenCode is always included. Omit to configure all detected agents.")
 			fmt.Fprintln(stdout, "  --preset=<solo-minimal|solo-power|team-standard|enterprise-locked|full-squad|lean|custom>")
 			fmt.Fprintln(stdout, "                 Apply a named setup preset:")
-			fmt.Fprintln(stdout, "                 solo-minimal: conventional workflow, starter models, low context budget")
+			fmt.Fprintln(stdout, "                 solo-minimal: conventional workflow, starter models")
 			fmt.Fprintln(stdout, "                 solo-power: TDD workflow, balanced models, daily-driver defaults")
-			fmt.Fprintln(stdout, "                 team-standard: TDD workflow, balanced models, shared governance")
-			fmt.Fprintln(stdout, "                 enterprise-locked: SDD workflow, performance models, strict profile")
+			fmt.Fprintln(stdout, "                 team-standard: TDD workflow, balanced models, team policy (policy.json)")
+			fmt.Fprintln(stdout, "                 enterprise-locked: SDD workflow, performance models, team policy (policy.json)")
 			fmt.Fprintln(stdout, "                 full-squad: SDD methodology, balanced models, all components")
 			fmt.Fprintln(stdout, "                 lean: conventional methodology, starter models, core only")
 			fmt.Fprintln(stdout, "                 custom: explicit flags or wizard defaults")
 			fmt.Fprintln(stdout, "  --global       Apply configuration globally (home directory) instead of the current project.")
 			fmt.Fprintln(stdout, "  --with-policy  Also create .squadai/policy.json with a starter template.")
 			fmt.Fprintln(stdout, "  --without-memory  Skip creating the docs/memory/ scaffold (memory is created by default).")
+			fmt.Fprintln(stdout, "  --no-memory-scaffold  Keep project memory enabled but do not scaffold docs/memory/.")
 			fmt.Fprintln(stdout, "  --force        Overwrite existing template and skill files (project.json is")
 			fmt.Fprintln(stdout, "                 always overwritten when it already exists with --force).")
 			fmt.Fprintln(stdout, "  --merge        Re-run init, merging new config on top of existing (preserves user customizations).")
@@ -227,6 +231,8 @@ func RunInit(args []string, stdout io.Writer) error {
 		if !modelTierExplicit {
 			modelTier = domain.ModelTierBalanced
 		}
+		// Team presets carry shared governance: generate policy.json.
+		withPolicy = true
 	case domain.PresetEnterpriseLock:
 		if !methodologyExplicit {
 			methodology = string(domain.MethodologySDD)
@@ -235,6 +241,8 @@ func RunInit(args []string, stdout io.Writer) error {
 		if !modelTierExplicit {
 			modelTier = domain.ModelTierPerformance
 		}
+		// Team presets carry shared governance: generate policy.json.
+		withPolicy = true
 	case domain.PresetFullSquad:
 		if !methodologyExplicit {
 			methodology = string(domain.MethodologySDD)
@@ -462,8 +470,8 @@ func RunInit(args []string, stdout io.Writer) error {
 `
 	writeInitFile(humanOut, projectDir, filepath.Join(agentManagerDir, ".gitignore-suggestion"), gitignoreSuggestion, force)
 
-	// Create memory scaffold unless --without-memory was passed.
-	if withMemory {
+	// Create memory scaffold unless --without-memory or --no-memory-scaffold was passed.
+	if withMemory && memoryScaffold {
 		if err := writeMemoryScaffold(humanOut, projectDir); err != nil {
 			fmt.Fprintf(humanOut, "  warning: memory scaffold: %v\n", err)
 		}
@@ -2391,6 +2399,9 @@ func RunStatus(args []string, stdout io.Writer) error {
 		mcpDisplay = strings.Join(mcpNames, ", ")
 	}
 	fmt.Fprintf(stdout, "MCP servers: %s\n", mcpDisplay)
+	if bothMemorySystemsEnabled(mergedCfg) {
+		fmt.Fprintln(stdout, memoryConflictNote)
+	}
 	fmt.Fprintln(stdout)
 
 	if lastManifest != nil {
@@ -2446,6 +2457,24 @@ func RunStatus(args []string, stdout io.Writer) error {
 	return nil
 }
 
+// memoryConflictNote is shown when both the community knowledge-graph MCP
+// server (config key "memory") and SquadAI Project Memory are enabled.
+const memoryConflictNote = "note: both memory systems enabled — they don't share data"
+
+// bothMemorySystemsEnabled reports whether the community knowledge-graph MCP
+// server and the SquadAI Project Memory component are enabled at the same time.
+func bothMemorySystemsEnabled(cfg *domain.MergedConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	mcpDef, ok := cfg.MCP["memory"]
+	if !ok || !mcpDef.Enabled {
+		return false
+	}
+	comp, ok := cfg.Components[string(domain.ComponentMemory)]
+	return ok && comp.Enabled
+}
+
 func printDailyStatus(stdout io.Writer, projectDir, language, methodology, mode, preset, contextProfile string, mergedCfg *domain.MergedConfig, adapters []domain.Adapter, mcpNames []string, lastManifest *backup.Manifest, verifyReport *domain.VerifyReport, refInfo *squadRefinementInfo) {
 	fmt.Fprintf(stdout, "Daily Status: %s\n", filepath.Base(projectDir))
 	fmt.Fprintf(stdout, "Project: %s (%s)\n", projectDir, language)
@@ -2467,6 +2496,9 @@ func printDailyStatus(stdout io.Writer, projectDir, language, methodology, mode,
 		mcpDisplay = strings.Join(mcpNames, ", ")
 	}
 	fmt.Fprintf(stdout, "MCP: %s\n", mcpDisplay)
+	if bothMemorySystemsEnabled(mergedCfg) {
+		fmt.Fprintln(stdout, memoryConflictNote)
+	}
 
 	memoryBackend := mergedCfg.Memory.Backend
 	if memoryBackend == "" {
