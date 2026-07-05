@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/marker"
@@ -48,6 +49,21 @@ func (i *Installer) ID() domain.ComponentID {
 
 // Content returns the resolved team standards content. Empty means no rules configured.
 func (i *Installer) Content() string {
+	return i.content
+}
+
+// SummaryContent returns the condensed team standards used when the budget
+// fitter selects summary mode for the rules component.
+func SummaryContent() string {
+	return assets.MustRead("standards/summary.md")
+}
+
+// ContentForMode returns the content Apply would inject for the given action
+// mode: the condensed summary for "summary", the full standards otherwise.
+func (i *Installer) ContentForMode(mode string) string {
+	if mode == "summary" {
+		return SummaryContent()
+	}
 	return i.content
 }
 
@@ -172,17 +188,18 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	}
 
 	var updated string
+	content := i.ContentForMode(action.Mode)
 
 	// Structured rules formats: Windsurf (.md with trigger frontmatter)
 	// and Cursor (.mdc with alwaysApply frontmatter) use full-file replacement
 	// with YAML frontmatter instead of marker-based injection.
 	if fm := i.agentFrontmatter[action.Agent]; fm != "" {
-		updated = fm + i.content
+		updated = fm + content
 		if !strings.HasSuffix(updated, "\n") {
 			updated += "\n"
 		}
 	} else {
-		updated = marker.InjectSection(string(existing), SectionID, i.content)
+		updated = marker.InjectSection(string(existing), SectionID, content)
 	}
 
 	_, err = fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644)
@@ -278,16 +295,26 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	})
 
 	current := marker.ExtractSection(doc, SectionID)
-	if current != i.content {
+	switch current {
+	case i.content:
+		results = append(results, domain.VerifyResult{
+			Check:  "rules-content-current",
+			Passed: true,
+		})
+	case SummaryContent():
+		// The budget fitter may have degraded the section to the condensed
+		// standards — a legitimate installed state, not drift.
+		results = append(results, domain.VerifyResult{
+			Check:    "rules-content-current",
+			Passed:   true,
+			Severity: domain.SeverityWarning,
+			Message:  "team standards installed in summary mode (token budget)",
+		})
+	default:
 		results = append(results, domain.VerifyResult{
 			Check:   "rules-content-current",
 			Passed:  false,
 			Message: "team standards content is outdated",
-		})
-	} else {
-		results = append(results, domain.VerifyResult{
-			Check:  "rules-content-current",
-			Passed: true,
 		})
 	}
 

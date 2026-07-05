@@ -40,6 +40,7 @@ type FitResult struct {
 	TotalTokens int                    `json:"total_tokens"`
 	Cap         int                    `json:"cap"`
 	Model       string                 `json:"model,omitempty"`
+	Profile     string                 `json:"profile,omitempty"`
 	FitAchieved bool                   `json:"fit_achieved"`
 	Actions     []domain.PlannedAction `json:"-"`
 }
@@ -48,7 +49,18 @@ type FitResult struct {
 type Options struct {
 	MaxTokens       int                        // token cap; 0 means no cap (return all full)
 	Model           string                     // model name for tokenizer selection
+	Profile         string                     // active context profile name, recorded for drift detection
 	ComponentTokens map[domain.ComponentID]int // optional precomputed desired-token counts
+	// SummaryTokens holds real token counts for each component's summary
+	// render, computed by the caller. Missing entries fall back to tokens/2.
+	SummaryTokens map[domain.ComponentID]int
+}
+
+// summarizableComponents can degrade to a condensed render (ModeSummary)
+// instead of being omitted outright. Other components go straight to omit.
+var summarizableComponents = map[domain.ComponentID]bool{
+	domain.ComponentMemory: true,
+	domain.ComponentRules:  true,
 }
 
 // componentPriority lists content components ordered from lowest to highest
@@ -62,6 +74,7 @@ var componentPriority = []domain.ComponentID{
 	domain.ComponentSettings,
 	domain.ComponentMCP,
 	domain.ComponentAgents,
+	domain.ComponentEfficiency,
 	domain.ComponentBrand,
 	domain.ComponentPermissions,
 }
@@ -162,6 +175,11 @@ func Fit(actions []domain.PlannedAction, opts Options) (*FitResult, error) {
 		case ModeOmit:
 			return 0
 		case ModeSummary:
+			if opts.SummaryTokens != nil {
+				if n, ok := opts.SummaryTokens[c]; ok {
+					return n
+				}
+			}
 			return tokensByComp[c] / 2
 		default:
 			return tokensByComp[c]
@@ -183,10 +201,14 @@ func Fit(actions []domain.PlannedAction, opts Options) (*FitResult, error) {
 		// Everything already fits as-is.
 	default:
 		fitAchieved = false
-		// Pass 1: summarize lowest-priority content components, accumulating
-		// until the cap is met.
+		// Pass 1: summarize lowest-priority summarizable content components,
+		// accumulating until the cap is met. Components without a summary
+		// render skip this pass and go straight to omit in pass 2.
 		for _, c := range componentPriority {
 			if _, ok := groups[c]; !ok {
+				continue
+			}
+			if !summarizableComponents[c] {
 				continue
 			}
 			if modeByComp[c] != ModeFull {
@@ -216,13 +238,20 @@ func Fit(actions []domain.PlannedAction, opts Options) (*FitResult, error) {
 		}
 	}
 
-	// Build the filtered action list. Summary-mode rendering is not implemented
-	// yet, so summary decisions deliberately skip full-content writes. The
-	// persisted decision records where a future renderer can install summaries.
+	// Build the filtered action list. Omitted components are dropped; summary
+	// components keep their actions tagged Mode="summary" so installers render
+	// the condensed variant. A summary action planned as Skip is upgraded to
+	// Update — the on-disk content is the full render, not the summary.
 	finalActions := make([]domain.PlannedAction, 0, len(actions))
 	for _, a := range actions {
-		if modeByComp[a.Component] == ModeOmit || modeByComp[a.Component] == ModeSummary {
+		switch modeByComp[a.Component] {
+		case ModeOmit:
 			continue
+		case ModeSummary:
+			a.Mode = string(ModeSummary)
+			if a.Action == domain.ActionSkip {
+				a.Action = domain.ActionUpdate
+			}
 		}
 		finalActions = append(finalActions, a)
 	}
@@ -232,6 +261,7 @@ func Fit(actions []domain.PlannedAction, opts Options) (*FitResult, error) {
 		TotalTokens: total(),
 		Cap:         opts.MaxTokens,
 		Model:       opts.Model,
+		Profile:     opts.Profile,
 		FitAchieved: fitAchieved,
 		Actions:     finalActions,
 	}, nil
@@ -305,6 +335,9 @@ func DetectDrift(projectDir string, currentActions []domain.PlannedAction, opts 
 		return false, nil
 	}
 	if opts.Model != "" && persisted.Model != "" && opts.Model != persisted.Model {
+		return true, nil
+	}
+	if opts.Profile != persisted.Profile {
 		return true, nil
 	}
 	if !sameSet(contentComponentSet(currentActions), contentComponentSetFromDecisions(persisted.Decisions)) {
