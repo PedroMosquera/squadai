@@ -468,6 +468,7 @@ func DefaultTeam(m Methodology) map[string]TeamRole {
 // the init wizard.
 type CuratedMCPServer struct {
 	Name        string   // unique key used in mcpSelections
+	DisplayName string   // optional human-facing name; empty means Name is shown
 	Description string   // human-readable description shown in TUI
 	Type        string   // "remote" or "local"
 	PreChecked  bool     // whether the item starts selected in the TUI
@@ -489,7 +490,10 @@ type CuratedMCPServer struct {
 }
 
 // DefaultMCPCatalog returns the 5 curated MCP servers offered during init.
-// Context7 is pre-checked; the others default to unselected.
+// Context7 is pre-checked; the others default to unselected. The community
+// knowledge-graph server (config key "memory", kept for compatibility) is
+// intentionally sorted last: it overlaps with SquadAI Project Memory and is
+// de-emphasized in the setup flows.
 func DefaultMCPCatalog() []CuratedMCPServer {
 	return []CuratedMCPServer{
 		{
@@ -514,14 +518,6 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			SetupHint:       "Create a personal access token with repo scope",
 		},
 		{
-			Name:        "memory",
-			Description: "Persistent knowledge graph across sessions",
-			Type:        "local",
-			PreChecked:  false,
-			Command:     "npx",
-			Args:        []string{"-y", "@modelcontextprotocol/server-memory"},
-		},
-		{
 			Name:            "sentry",
 			Description:     "Error monitoring and issue tracking",
 			Type:            "local",
@@ -542,7 +538,27 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Command:     "npx",
 			Args:        []string{"-y", "@modelcontextprotocol/server-sequential-thinking"},
 		},
+		{
+			// Config key stays "memory" for compatibility (--mcp=memory and
+			// existing project.json entries keep working); only the display
+			// name and description are de-emphasized.
+			Name:        "memory",
+			DisplayName: "knowledge-graph (community)",
+			Description: "Community knowledge-graph MCP server. Overlaps with SquadAI Project Memory — most people should use Project Memory instead.",
+			Type:        "local",
+			PreChecked:  false,
+			Command:     "npx",
+			Args:        []string{"-y", "@modelcontextprotocol/server-memory"},
+		},
 	}
+}
+
+// Display returns the human-facing name for a curated MCP server.
+func (s CuratedMCPServer) Display() string {
+	if s.DisplayName != "" {
+		return s.DisplayName
+	}
+	return s.Name
 }
 
 // DefaultPolicyConfig returns a team policy that locks the baseline.
