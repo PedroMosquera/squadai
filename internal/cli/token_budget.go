@@ -6,8 +6,14 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/components/brand"
+	"github.com/PedroMosquera/squadai/internal/components/efficiency"
+	"github.com/PedroMosquera/squadai/internal/components/memory"
+	"github.com/PedroMosquera/squadai/internal/components/rules"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/planner"
 	"github.com/PedroMosquera/squadai/internal/tokenprofile"
 	"github.com/PedroMosquera/squadai/internal/tokenprofile/tokenizer"
@@ -18,29 +24,33 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 	jsonOut := false
 	model := ""
 	planned := false
-	for _, arg := range args {
-		switch arg {
-		case "--json":
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--json":
 			jsonOut = true
-		case "--planned":
+		case arg == "--planned":
 			planned = true
-		case "--model":
-			model = ""
-		default:
-			if len(arg) > 8 && arg[:8] == "--model=" {
-				model = arg[8:]
+		case arg == "--model":
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+				return fmt.Errorf("--model requires a value (e.g. --model claude-sonnet-4-6)")
 			}
-		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai token-budget [--json] [--planned] [--model=<name>]")
+			i++
+			model = args[i]
+		case strings.HasPrefix(arg, "--model="):
+			model = arg[len("--model="):]
+		case arg == "-h" || arg == "--help":
+			fmt.Fprintln(stdout, "Usage: squadai token-budget [--json] [--planned] [--model <name>]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Estimate the per-session token cost of the current squadai install.")
 			fmt.Fprintln(stdout, "By default reads installed files on disk and groups by component.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --json         Output as JSON")
-			fmt.Fprintln(stdout, "  --planned      Estimate planned rendered content before apply")
-			fmt.Fprintln(stdout, "  --model=<name> Use model-aware tokenizer (e.g. claude-sonnet-4-6, gpt-5-mini)")
-			fmt.Fprintln(stdout, "                 Falls back to 4 chars/token heuristic when omitted.")
+			fmt.Fprintln(stdout, "  --json          Output as JSON")
+			fmt.Fprintln(stdout, "  --planned       Estimate planned rendered content before apply")
+			fmt.Fprintln(stdout, "  --model <name>  Use model-aware tokenizer (e.g. claude-sonnet-4-6, gpt-5-mini)")
+			fmt.Fprintln(stdout, "                  Accepts --model <name> or --model=<name>.")
+			fmt.Fprintln(stdout, "                  Falls back to 4 chars/token heuristic when omitted.")
 			return nil
 		}
 	}
@@ -59,6 +69,7 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 		// No config is not an error for token-budget; just report 0.
 		merged = nil
 	}
+	applyDefaultProfile(merged)
 
 	adapters := DetectAdapters(homeDir)
 
@@ -124,6 +135,42 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 	return nil
 }
 
+// sectionComponents are marker-injection components whose planned cost is the
+// content of their own marker section, not the whole shared document. Keying
+// them by section lets each appear as its own row even when several share one
+// rules file (e.g. memory + efficiency + brand in AGENTS.md).
+var sectionComponents = map[domain.ComponentID]func(domain.AgentID) []string{
+	domain.ComponentMemory: func(a domain.AgentID) []string {
+		return []string{memory.SectionIDForAgentID(a), memory.SectionID}
+	},
+	domain.ComponentEfficiency: func(a domain.AgentID) []string {
+		return []string{efficiency.SectionIDForAgentID(a), efficiency.SectionID}
+	},
+	domain.ComponentBrand: func(a domain.AgentID) []string {
+		return []string{brand.SectionIDForAgentID(a), brand.SectionID}
+	},
+	domain.ComponentRules: func(domain.AgentID) []string {
+		return []string{rules.SectionID}
+	},
+}
+
+// plannedSectionContent extracts the component's own marker section from a
+// full rendered document. Returns ok=false when the component is not
+// section-based or its section is absent from the render.
+func plannedSectionContent(action domain.PlannedAction, desired []byte) ([]byte, bool) {
+	sids, ok := sectionComponents[action.Component]
+	if !ok {
+		return nil, false
+	}
+	doc := string(desired)
+	for _, sid := range sids(action.Agent) {
+		if marker.HasSection(doc, sid) {
+			return []byte(marker.ExtractSection(doc, sid)), true
+		}
+	}
+	return nil, false
+}
+
 func plannedTokenBudgetReport(p *planner.Planner, actions []domain.PlannedAction, homeDir, projectDir, model string) (*tokenprofile.Report, error) {
 	report := &tokenprofile.Report{
 		ByCategory: make(map[string]tokenprofile.CategorySummary),
@@ -137,11 +184,12 @@ func plannedTokenBudgetReport(p *planner.Planner, actions []domain.PlannedAction
 	// Multiple actions can target the same file — e.g. the OpenCode and Pi
 	// memory and brand sections all land in a shared AGENTS.md. Each
 	// RenderAction returns the FULL rendered document, so summing per action
-	// would multi-count the same file. Dedupe by target path, keeping the
-	// fullest render seen for that path (for an already-applied project every
-	// action is a Skip returning the identical complete document, so the
-	// planned total converges to the authoritative installed scan).
+	// would multi-count the same file. Section-based components (memory,
+	// efficiency, brand, rules) are attributed by their own marker section so
+	// each keeps its own row; the remaining full-document renders dedupe by
+	// target path, keeping the fullest render seen for that path.
 	type pathEntry struct {
+		path     string
 		category string
 		desired  []byte
 	}
@@ -165,26 +213,31 @@ func plannedTokenBudgetReport(p *planner.Planner, actions []domain.PlannedAction
 		if category == "" {
 			category = "other"
 		}
-		if existing, ok := byPath[action.TargetPath]; ok && len(existing.desired) >= len(desired) {
+		key := action.TargetPath
+		if section, ok := plannedSectionContent(action, desired); ok {
+			desired = section
+			key = action.TargetPath + "\x00" + category + "\x00" + string(action.Agent)
+		}
+		if existing, ok := byPath[key]; ok && len(existing.desired) >= len(desired) {
 			continue
 		}
-		byPath[action.TargetPath] = pathEntry{category: category, desired: desired}
+		byPath[key] = pathEntry{path: action.TargetPath, category: category, desired: desired}
 	}
 
-	// Aggregate one entry per unique target path.
-	paths := make([]string, 0, len(byPath))
-	for path := range byPath {
-		paths = append(paths, path)
+	// Aggregate one entry per unique key (path, or path+section-component).
+	keys := make([]string, 0, len(byPath))
+	for key := range byPath {
+		keys = append(keys, key)
 	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		pe := byPath[path]
+	sort.Strings(keys)
+	for _, key := range keys {
+		pe := byPath[key]
 		tokens := tokenprofile.ApproxTokens(pe.desired)
 		if counter != nil {
 			tokens = counter.Count(string(pe.desired))
 		}
 		report.Entries = append(report.Entries, tokenprofile.Entry{
-			Path:     path,
+			Path:     pe.path,
 			Category: pe.category,
 			Bytes:    len(pe.desired),
 			Tokens:   tokens,

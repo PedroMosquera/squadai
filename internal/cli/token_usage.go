@@ -15,13 +15,20 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 	jsonOut := false
 	sinceStr := "7d"
 
-	for _, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		switch {
 		case arg == "--json":
 			jsonOut = true
 		case arg == "--watch":
 			fmt.Fprintln(stdout, "--watch is not yet implemented")
 			return nil
+		case arg == "--since":
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+				return fmt.Errorf("--since requires a value (e.g. --since 7d)")
+			}
+			i++
+			sinceStr = args[i]
 		case arg == "-h", arg == "--help":
 			fmt.Fprintln(stdout, "Usage: squadai token-usage [--since <dur>] [--json] [--watch]")
 			fmt.Fprintln(stdout)
