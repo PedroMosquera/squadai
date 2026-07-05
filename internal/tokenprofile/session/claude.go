@@ -109,6 +109,7 @@ func scanClaudeTranscript(path string, agg *Aggregation) {
 	scanner.Buffer(make([]byte, 64*1024), claudeScanBufferSize)
 
 	modelsSeen := map[string]bool{}
+	sessionTokens := 0
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -141,5 +142,9 @@ func scanClaudeTranscript(path string, agg *Aggregation) {
 			acc.SessionCount++
 		}
 		agg.ByModel[model] = acc
+		sessionTokens += u.InputTokens + u.OutputTokens
+	}
+	if sessionTokens > agg.MaxSessionTokens {
+		agg.MaxSessionTokens = sessionTokens
 	}
 }

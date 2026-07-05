@@ -27,6 +27,7 @@ func (d *Doctor) runProjectConfig(ctx context.Context) []CheckResult {
 		d.checkSquadRefined(ctx),
 		d.checkModelsCatalogFreshness(),
 		d.checkModelsKnown(),
+		d.checkTokenBudgetUsage(),
 	}
 }
 
