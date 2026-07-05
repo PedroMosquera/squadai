@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/pi"
 	"github.com/PedroMosquera/squadai/internal/assets"
@@ -42,8 +44,8 @@ func TestTemplateForAgentID(t *testing.T) {
 	}{
 		{"opencode", domain.AgentOpenCode, "brand/banner-opencode.txt"},
 		{"pi", domain.AgentPi, "brand/banner-pi.txt"},
-		{"claude", domain.AgentClaudeCode, "brand/banner-squadai.txt"},
-		{"cursor", domain.AgentCursor, "brand/banner-squadai.txt"},
+		{"claude", domain.AgentClaudeCode, "brand/banner-claude-code.txt"},
+		{"cursor", domain.AgentCursor, "brand/banner-cursor.txt"},
 		{"windsurf", domain.AgentWindsurf, "brand/banner-squadai.txt"},
 		{"vscode", domain.AgentVSCodeCopilot, "brand/banner-squadai.txt"},
 	}
@@ -55,7 +57,8 @@ func TestTemplateForAgentID(t *testing.T) {
 				t.Errorf("templateForAgentID(%q) does not match %q", tc.agentID, tc.asset)
 			}
 			// Co-branded banners must differ from the standalone banner.
-			if tc.agentID == domain.AgentOpenCode || tc.agentID == domain.AgentPi {
+			if tc.agentID == domain.AgentOpenCode || tc.agentID == domain.AgentPi ||
+				tc.agentID == domain.AgentClaudeCode || tc.agentID == domain.AgentCursor {
 				if got == standalone {
 					t.Errorf("templateForAgentID(%q) should be co-branded, not the standalone banner", tc.agentID)
 				}
@@ -154,8 +157,8 @@ func TestPlan_CreateNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions for Pi (project + global), got %d", len(actions))
 	}
 	if actions[0].Action != domain.ActionCreate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
@@ -163,6 +166,14 @@ func TestPlan_CreateNew(t *testing.T) {
 	expected := filepath.Join(project, "AGENTS.md")
 	if actions[0].TargetPath != expected {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
+	}
+	// Pi extra presence: the second action targets the global AGENTS.md.
+	expectedGlobal := adapter.SystemPromptFile(home)
+	if actions[1].TargetPath != expectedGlobal {
+		t.Errorf("global TargetPath = %q, want %q", actions[1].TargetPath, expectedGlobal)
+	}
+	if actions[1].Action != domain.ActionCreate {
+		t.Errorf("global Action = %q, want %q", actions[1].Action, domain.ActionCreate)
 	}
 }
 
@@ -181,8 +192,8 @@ func TestPlan_UpdateExisting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions for Pi (project + global), got %d", len(actions))
 	}
 	if actions[0].Action != domain.ActionUpdate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionUpdate)
@@ -207,8 +218,8 @@ func TestPlan_SkipWhenCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions for Pi (project + global), got %d", len(actions))
 	}
 	if actions[0].Action != domain.ActionSkip {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionSkip)
@@ -231,8 +242,8 @@ func TestPlan_UpdateWhenStale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions for Pi (project + global), got %d", len(actions))
 	}
 	if actions[0].Action != domain.ActionUpdate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionUpdate)
@@ -422,8 +433,10 @@ func TestVerify_AllPass(t *testing.T) {
 	inst := New()
 
 	actions, _ := inst.Plan(adapter, home, project)
-	if err := inst.Apply(actions[0]); err != nil {
-		t.Fatal(err)
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	results, err := inst.Verify(adapter, home, project)
@@ -566,3 +579,98 @@ func (a *unsupportedAdapter) RulesFrontmatter() string                  { return
 func (a *unsupportedAdapter) RulesFileSizeCap() int                     { return 0 }
 
 var _ domain.Adapter = (*unsupportedAdapter)(nil)
+
+// ─── Co-brand round trips ─────────────────────────────────────────────────────
+
+// TestPlanApplyVerify_CoBrandedAgents runs the full plan→apply→verify round
+// trip for every co-branded adapter and asserts the co-brand tag lands in the
+// target file.
+func TestPlanApplyVerify_CoBrandedAgents(t *testing.T) {
+	tests := []struct {
+		name    string
+		adapter domain.Adapter
+		tag     string
+	}{
+		{"claude", claude.New(), "x Claude Code"},
+		{"cursor", cursor.New(), "x Cursor"},
+		{"opencode", opencode.New(), ""},
+		{"pi", pi.New(), "x Pi"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			project := t.TempDir()
+			inst := New()
+
+			actions, err := inst.Plan(tc.adapter, home, project)
+			if err != nil {
+				t.Fatalf("Plan: %v", err)
+			}
+			if len(actions) == 0 {
+				t.Fatal("expected planned actions")
+			}
+			for _, a := range actions {
+				if err := inst.Apply(a); err != nil {
+					t.Fatalf("Apply(%s): %v", a.ID, err)
+				}
+			}
+
+			results, err := inst.Verify(tc.adapter, home, project)
+			if err != nil {
+				t.Fatalf("Verify: %v", err)
+			}
+			for _, r := range results {
+				if !r.Passed {
+					t.Errorf("check %q failed: %s", r.Check, r.Message)
+				}
+			}
+
+			if tc.tag != "" {
+				content, readErr := os.ReadFile(actions[0].TargetPath)
+				if readErr != nil {
+					t.Fatalf("read target: %v", readErr)
+				}
+				if !strings.Contains(string(content), tc.tag) {
+					t.Errorf("target file missing co-brand tag %q", tc.tag)
+				}
+			}
+		})
+	}
+}
+
+// TestPiBrand_LandsInProjectAndGlobalAgentsFiles is the explicit Pi extra
+// presence check: the banner must land in the project AGENTS.md AND the
+// global ~/.pi/agent/AGENTS.md.
+func TestPiBrand_LandsInProjectAndGlobalAgentsFiles(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	adapter := pi.New()
+	inst := New()
+
+	actions, err := inst.Plan(adapter, home, project)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("Apply(%s): %v", a.ID, err)
+		}
+	}
+
+	banner := assets.MustRead("brand/banner-pi.txt")
+	for _, path := range []string{
+		filepath.Join(project, "AGENTS.md"),
+		filepath.Join(home, ".pi", "agent", "AGENTS.md"),
+	} {
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("banner target missing: %v", readErr)
+		}
+		if !strings.Contains(string(content), banner) {
+			t.Errorf("%s missing the Pi co-brand banner", path)
+		}
+		if !marker.HasSection(string(content), SectionIDForAgentID(domain.AgentPi)) {
+			t.Errorf("%s missing the scoped brand marker section", path)
+		}
+	}
+}
