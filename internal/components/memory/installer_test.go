@@ -30,20 +30,20 @@ func TestInstaller_ID(t *testing.T) {
 
 func TestTemplateForAdapter_OpenCode(t *testing.T) {
 	adapter := opencode.New()
-	content := templateForAdapter(adapter)
-	if !strings.Contains(content, "AGENTS.md") {
-		t.Error("OpenCode template should reference AGENTS.md")
+	content := templateForAgentID(adapter.ID())
+	if !strings.Contains(content, "docs/memory/") {
+		t.Error("OpenCode template should reference the docs/memory store")
 	}
-	if !strings.Contains(content, ".squadai/") {
-		t.Error("OpenCode template should reference .squadai/")
+	if !strings.Contains(content, "/memory-search") {
+		t.Error("OpenCode template should reference /memory-search")
 	}
 }
 
 func TestTemplateForAdapter_Claude(t *testing.T) {
 	adapter := claude.New()
-	content := templateForAdapter(adapter)
-	if !strings.Contains(content, "CLAUDE.md") {
-		t.Error("Claude template should reference CLAUDE.md")
+	content := templateForAgentID(adapter.ID())
+	if !strings.Contains(content, "docs/memory/") {
+		t.Error("Claude template should reference the docs/memory store")
 	}
 }
 
@@ -52,14 +52,14 @@ func TestTemplateForAgentID_Unknown(t *testing.T) {
 	if !strings.Contains(content, "Memory Protocol") {
 		t.Error("unknown agent should get generic template")
 	}
-	if !strings.Contains(content, "persistent memory tools") {
-		t.Error("generic template should mention persistent memory tools")
+	if !strings.Contains(content, "squadai memory search") {
+		t.Error("generic template should mention the squadai memory CLI")
 	}
 }
 
 func TestTemplateForAgentID_Exported(t *testing.T) {
 	content := TemplateForAgentID(domain.AgentOpenCode)
-	if !strings.Contains(content, "AGENTS.md") {
+	if content != templateForAgentID(domain.AgentOpenCode) {
 		t.Error("exported TemplateForAgentID should match internal for OpenCode")
 	}
 }
@@ -158,7 +158,7 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 
 	// Create file with correct OpenCode memory section.
 	targetPath := filepath.Join(project, "AGENTS.md")
-	content := marker.InjectSection("", SectionID, openCodeMemoryTemplate())
+	content := marker.InjectSection("", SectionID, templateForAgentID(domain.AgentOpenCode))
 	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -221,8 +221,8 @@ func TestApply_OpenCode_CreatesFileWithMemorySection(t *testing.T) {
 	if !marker.HasSection(string(content), SectionIDForAgentID(adapter.ID())) {
 		t.Error("expected memory marker section in file after apply")
 	}
-	if !strings.Contains(string(content), "AGENTS.md") {
-		t.Error("OpenCode memory content should reference AGENTS.md")
+	if !strings.Contains(string(content), "docs/memory/") {
+		t.Error("OpenCode memory content should reference docs/memory")
 	}
 }
 
@@ -246,8 +246,8 @@ func TestApply_Claude_CreatesProjectLevelFile(t *testing.T) {
 	if !marker.HasSection(string(content), SectionIDForAgentID(adapter.ID())) {
 		t.Error("expected memory marker section in file after apply")
 	}
-	if !strings.Contains(string(content), "CLAUDE.md") {
-		t.Error("Claude memory content should reference CLAUDE.md")
+	if !strings.Contains(string(content), "docs/memory/") {
+		t.Error("Claude memory content should reference docs/memory")
 	}
 }
 

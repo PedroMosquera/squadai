@@ -50,10 +50,14 @@ type ContextConfig struct {
 }
 
 // ContextProfile controls which local context is assembled for an agent run.
+//
+// MCPServers and SkillScopes deliberately have no omitempty: nil means "no
+// filter" while a present-but-empty list is a strict filter that admits
+// nothing, and that distinction must survive project.json round trips.
 type ContextProfile struct {
 	MemoryScope      string                 `json:"memory_scope,omitempty"`
-	MCPServers       []string               `json:"mcp_servers,omitempty"`
-	SkillScopes      []string               `json:"skill_scopes,omitempty"`
+	MCPServers       []string               `json:"mcp_servers"`
+	SkillScopes      []string               `json:"skill_scopes"`
 	MaxApproxTokens  int                    `json:"max_approx_tokens,omitempty"`
 	Include          []string               `json:"include,omitempty"`
 	Exclude          []string               `json:"exclude,omitempty"`
@@ -315,6 +319,14 @@ type MergedConfig struct {
 	// Violations is populated during merge when user/project values conflicted
 	// with locked policy fields. These are informational — the policy value wins.
 	Violations []string `json:"violations,omitempty"`
+
+	// ActiveContextProfile is the resolved context profile applied for this run.
+	// Runtime-only: set by the CLI after profile resolution so component
+	// installers (memory, agents, skills, mcp) can adjust their output. Never
+	// serialized — the canonical source is Context.Profiles.
+	ActiveContextProfile *ContextProfile `json:"-"`
+	// ActiveProfileName is the name of ActiveContextProfile. Runtime-only.
+	ActiveProfileName string `json:"-"`
 }
 
 // DefaultUserConfig returns a sensible default for first-time users.
@@ -331,6 +343,7 @@ func DefaultUserConfig() *UserConfig {
 			string(ComponentMemory):      {Enabled: true},
 			string(ComponentPermissions): {Enabled: true},
 			string(ComponentBrand):       {Enabled: true},
+			string(ComponentEfficiency):  {Enabled: true},
 		},
 		Paths: PathsConfig{
 			BackupDir: "~/.squadai/backups",
@@ -344,8 +357,9 @@ func DefaultProjectConfig() *ProjectConfig {
 		Version: 1,
 		Preset:  PresetSoloMinimal,
 		Components: map[string]ComponentConfig{
-			string(ComponentMemory): {Enabled: true},
-			string(ComponentBrand):  {Enabled: true},
+			string(ComponentMemory):     {Enabled: true},
+			string(ComponentBrand):      {Enabled: true},
+			string(ComponentEfficiency): {Enabled: true},
 		},
 		Copilot: CopilotConfig{
 			InstructionsTemplate: "standard",
@@ -368,11 +382,16 @@ func DefaultMemoryConfig() MemoryConfig {
 }
 
 // DefaultContextConfig returns the built-in context profiles.
+//
+// The "default" profile is deliberately non-restrictive (no MCP filter, no
+// skill scoping, no token cap): profiles are ACTIVE now, and the baseline
+// profile must reproduce plain-apply behavior exactly. Restrictive setups are
+// an explicit switch away (`squadai profile cheap`, `apply --profile=review`).
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
 		DefaultProfile: "default",
 		Profiles: map[string]ContextProfile{
-			"default":  {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 12000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"default":  {MemoryScope: "project", Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 			"debug":    {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 16000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 			"feature":  {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd", "sdd"}, MaxApproxTokens: 20000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 			"review":   {MemoryScope: "project", MCPServers: []string{}, SkillScopes: []string{"shared/code-review"}, MaxApproxTokens: 10000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
