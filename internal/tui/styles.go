@@ -14,6 +14,12 @@ var (
 				BorderForeground(lipgloss.Color("33")).
 				Padding(0, 2)
 
+	// bannerStyle renders the full ASCII brand banner on the quick setup
+	// welcome screen (only shown when the panel is wide enough).
+	bannerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("33")).
+			Bold(true)
+
 	// logoStyle renders the small ASCII monogram on the left of the header.
 	logoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("33")).
