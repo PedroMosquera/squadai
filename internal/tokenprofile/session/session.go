@@ -26,11 +26,13 @@ type Usage struct {
 }
 
 // Aggregation is the result of Aggregate, broken down per model plus a
-// grand total.
+// grand total. MaxSessionTokens is the largest single-session token count
+// (input+output) seen in the window, used for session-budget checks.
 type Aggregation struct {
-	ByModel map[string]Usage `json:"by_model"`
-	Total   Usage            `json:"total"`
-	Period  string           `json:"period"`
+	ByModel          map[string]Usage `json:"by_model"`
+	Total            Usage            `json:"total"`
+	MaxSessionTokens int              `json:"max_session_tokens,omitempty"`
+	Period           string           `json:"period"`
 }
 
 // AggregateOptions controls filtering of session files.
@@ -131,6 +133,9 @@ func walkSessions(dir string, cutoff time.Time, agg *Aggregation) {
 		u.OutputTokens += output
 		u.SessionCount++
 		agg.ByModel[model] = u
+		if input+output > agg.MaxSessionTokens {
+			agg.MaxSessionTokens = input + output
+		}
 		return nil
 	})
 }
