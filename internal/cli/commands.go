@@ -2267,6 +2267,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			LastBackup     *backupInfo         `json:"last_backup,omitempty"`
 			Health         *healthSummary      `json:"health,omitempty"`
 			Refinement     *refinementJSON     `json:"refinement,omitempty"`
+			Context        *contextHealth      `json:"context,omitempty"`
 		}
 
 		adapterList := make([]adapterStatus, 0, len(adapters))
@@ -2333,6 +2334,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			LastBackup:     lastBackupJSON,
 			Health:         health,
 			Refinement:     refJSON,
+			Context:        collectContextHealth(homeDir, projectDir, mergedCfg, false),
 		}
 		data, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
@@ -2366,6 +2368,9 @@ func RunStatus(args []string, stdout io.Writer) error {
 
 	if daily {
 		printDailyStatus(stdout, projectDir, language, methodology, mode, preset, contextProfile, &cfgBeforeProfile, adapters, mcpNames, lastManifest, verifyReport, refInfo)
+		// Session aggregation can be slow, so real usage only appears in the
+		// daily dashboard, not the fast default status.
+		printContextSection(stdout, collectContextHealth(homeDir, projectDir, mergedCfg, true))
 		return nil
 	}
 
@@ -2447,6 +2452,9 @@ func RunStatus(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Refinement: never-refined")
 		}
 	}
+
+	// Context health section (installed token cost vs profile cap).
+	printContextSection(stdout, collectContextHealth(homeDir, projectDir, mergedCfg, false))
 
 	return nil
 }
