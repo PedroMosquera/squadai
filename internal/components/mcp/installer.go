@@ -68,6 +68,19 @@ type Installer struct {
 	// policy carries user decisions from the review screen (per-key overwrite
 	// consent, OverwriteAll). Zero value = no overrides, match legacy behavior.
 	policy domain.ApplyPolicy
+
+	// opts carries construction-time options (e.g. profile-driven pruning).
+	opts Options
+}
+
+// Options controls optional MCP installer behavior.
+type Options struct {
+	// PruneWhenEmpty plans and applies actions even when the desired server
+	// set is empty, so previously managed servers are removed from adapter
+	// configs. Set when an active context profile declares an MCP filter —
+	// without it an empty desired set is treated as "MCP not configured" and
+	// stale managed servers would survive a profile switch.
+	PruneWhenEmpty bool
 }
 
 // SetApplyPolicy implements domain.PolicyAware. The pipeline executor calls
@@ -79,14 +92,18 @@ func (i *Installer) SetApplyPolicy(p domain.ApplyPolicy) {
 
 // New returns an MCP installer configured from the merged MCP config.
 // Only enabled servers are included.
-func New(mcpConfig map[string]domain.MCPServerDef) *Installer {
+func New(mcpConfig map[string]domain.MCPServerDef, opts ...Options) *Installer {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	servers := make(map[string]domain.MCPServerDef)
 	for name, def := range mcpConfig {
 		if def.Enabled {
 			servers[name] = def
 		}
 	}
-	return &Installer{servers: servers, agentConfigs: make(map[domain.AgentID]agentMCPConfig)}
+	return &Installer{servers: servers, agentConfigs: make(map[domain.AgentID]agentMCPConfig), opts: o}
 }
 
 // ID returns the component identifier.
@@ -105,7 +122,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, nil
 	}
 
-	if len(i.servers) == 0 {
+	if len(i.servers) == 0 && !i.opts.PruneWhenEmpty {
 		return nil, nil
 	}
 
@@ -138,6 +155,11 @@ func (i *Installer) planMergedConfig(adapter domain.Adapter, projectDir string) 
 	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
+	}
+
+	// Nothing to install and nothing on disk to prune.
+	if len(i.servers) == 0 && (existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
 	}
 
 	if existing == nil {
@@ -185,7 +207,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return nil
 	}
 
-	if len(i.servers) == 0 {
+	if len(i.servers) == 0 && !i.opts.PruneWhenEmpty {
 		return nil
 	}
 
@@ -223,6 +245,11 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, targetPath string)
 	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read MCP config file: %w", err)
+	}
+
+	// Nothing to install and nothing on disk to prune.
+	if len(i.servers) == 0 && (existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
 	}
 
 	if existing == nil {
@@ -375,6 +402,10 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 	var results []domain.VerifyResult
 
 	existing, err := fileutil.ReadJSONFile(targetPath)
+	// A pruned-to-empty profile with nothing on disk is a clean state.
+	if len(i.servers) == 0 && (err != nil || existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
+	}
 	if err != nil || existing == nil {
 		results = append(results, domain.VerifyResult{
 			Check:     "mcp-configfile-exists",
@@ -441,7 +472,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	if len(i.servers) == 0 {
+	if len(i.servers) == 0 && !i.opts.PruneWhenEmpty {
 		return nil, nil
 	}
 
@@ -464,6 +495,10 @@ func (i *Installer) verifyMergedConfig(adapter domain.Adapter, projectDir string
 	var results []domain.VerifyResult
 
 	existing, err := fileutil.ReadJSONFile(targetPath)
+	// A pruned-to-empty profile with nothing on disk is a clean state.
+	if len(i.servers) == 0 && (err != nil || existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
+	}
 	if err != nil || existing == nil {
 		results = append(results, domain.VerifyResult{
 			Check:   "mcp-file-exists",
