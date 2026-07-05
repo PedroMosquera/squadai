@@ -1,0 +1,20 @@
+{
+  "_squadai_permissions": "managed",
+  "permission": {
+    "bash": {
+      "dd if=*": "ask",
+      "git push --force*": "ask",
+      "git push -f*": "ask",
+      "git rebase*": "ask",
+      "rm -rf /*": "ask",
+      "rm -rf ~*": "ask",
+      "sudo rm*": "ask"
+    },
+    "read": {
+      "**/.aws/credentials": "deny",
+      "**/.ssh/id_*": "deny",
+      "**/secrets/**": "deny",
+      "./.env*": "deny"
+    }
+  }
+}

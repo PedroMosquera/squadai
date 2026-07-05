@@ -1,0 +1,18 @@
+# Files to add to your .gitignore for SquadAI
+# ================================================
+
+# Always ignore backups (contain file snapshots, can be large)
+.squadai/backups/
+
+# Ignore user-specific config (each developer has their own)
+.squadai/user.json
+
+# ------------------------------------------------
+# Files to COMMIT (team-shared configuration)
+# ------------------------------------------------
+# .squadai/project.json    — project-level agent config
+# .squadai/policy.json     — team policy enforcement
+# AGENTS.md                      — agent system prompt
+# CLAUDE.md                      — Claude Code system prompt
+# .cursorrules                   — Cursor rules
+# .instructions.md               — VS Code Copilot instructions

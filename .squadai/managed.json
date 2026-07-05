@@ -1,0 +1,22 @@
+{
+  "managed_files": {
+    ".claude/settings.json": {
+      "managed_keys": [
+        "_squadai_permissions",
+        "permissions"
+      ]
+    },
+    "opencode.json": {
+      "managed_keys": [
+        "_squadai_permissions",
+        "permission"
+      ]
+    }
+  },
+  "created_files": [
+    ".claude/settings.json",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "opencode.json"
+  ]
+}
