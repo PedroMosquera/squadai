@@ -30,15 +30,20 @@ const (
 
 // Model holds the metadata for a single model row.
 type Model struct {
-	Provider      string   `json:"provider"`
-	Display       string   `json:"display,omitempty"`
-	InputPerMTok  float64  `json:"input_per_mtok"`
-	OutputPerMTok float64  `json:"output_per_mtok"`
-	ContextWindow int      `json:"context_window,omitempty"`
-	MaxOutput     int      `json:"max_output,omitempty"`
-	Encoding      string   `json:"encoding,omitempty"`
-	Aliases       []string `json:"aliases,omitempty"`
-	Legacy        bool     `json:"legacy,omitempty"`
+	Provider      string  `json:"provider"`
+	Display       string  `json:"display,omitempty"`
+	InputPerMTok  float64 `json:"input_per_mtok"`
+	OutputPerMTok float64 `json:"output_per_mtok"`
+	// CacheReadMultiplier and CacheWriteMultiplier express prompt-cache
+	// pricing as a fraction of the input rate. Zero means "use the
+	// provider-typical defaults" (0.1 for reads, 1.25 for writes).
+	CacheReadMultiplier  float64  `json:"cache_read_multiplier,omitempty"`
+	CacheWriteMultiplier float64  `json:"cache_write_multiplier,omitempty"`
+	ContextWindow        int      `json:"context_window,omitempty"`
+	MaxOutput            int      `json:"max_output,omitempty"`
+	Encoding             string   `json:"encoding,omitempty"`
+	Aliases              []string `json:"aliases,omitempty"`
+	Legacy               bool     `json:"legacy,omitempty"`
 }
 
 // EncodingPrefix maps a model-name prefix to a tokenizer encoding name.
@@ -99,6 +104,9 @@ func Validate(f *File) error {
 		}
 		if m.InputPerMTok < 0 || m.OutputPerMTok < 0 {
 			return fmt.Errorf("models catalog: model %q has negative pricing", id)
+		}
+		if m.CacheReadMultiplier < 0 || m.CacheWriteMultiplier < 0 {
+			return fmt.Errorf("models catalog: model %q has negative cache multiplier", id)
 		}
 		if m.ContextWindow < 0 || m.MaxOutput < 0 {
 			return fmt.Errorf("models catalog: model %q has negative context/output window", id)

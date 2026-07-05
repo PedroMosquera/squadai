@@ -2,10 +2,21 @@ package modelcatalog
 
 import "strings"
 
-// Price holds per-model USD pricing per million tokens.
+// Default prompt-cache pricing multipliers, expressed as fractions of the
+// input rate. Providers commonly charge ~10% of the input rate for cache
+// reads and ~125% for cache writes; catalog rows can override per model.
+const (
+	DefaultCacheReadMultiplier  = 0.1
+	DefaultCacheWriteMultiplier = 1.25
+)
+
+// Price holds per-model USD pricing per million tokens. The cache
+// multipliers are always populated (catalog value or defaults).
 type Price struct {
-	InputPerMTok  float64
-	OutputPerMTok float64
+	InputPerMTok         float64
+	OutputPerMTok        float64
+	CacheReadMultiplier  float64
+	CacheWriteMultiplier float64
 }
 
 // Normalize strips a provider prefix from a model reference so that
@@ -63,12 +74,25 @@ func (c *Catalog) Known(model string) bool {
 }
 
 // Pricing returns the pricing for model. Unknown models return ok=false.
+// Cache multipliers absent from the catalog row fall back to the defaults.
 func (c *Catalog) Pricing(model string) (Price, bool) {
 	_, m, ok := c.Resolve(model)
 	if !ok {
 		return Price{}, false
 	}
-	return Price{InputPerMTok: m.InputPerMTok, OutputPerMTok: m.OutputPerMTok}, true
+	p := Price{
+		InputPerMTok:         m.InputPerMTok,
+		OutputPerMTok:        m.OutputPerMTok,
+		CacheReadMultiplier:  m.CacheReadMultiplier,
+		CacheWriteMultiplier: m.CacheWriteMultiplier,
+	}
+	if p.CacheReadMultiplier == 0 {
+		p.CacheReadMultiplier = DefaultCacheReadMultiplier
+	}
+	if p.CacheWriteMultiplier == 0 {
+		p.CacheWriteMultiplier = DefaultCacheWriteMultiplier
+	}
+	return p, true
 }
 
 // ContextWindow returns the context window size for model (0 when unknown).
