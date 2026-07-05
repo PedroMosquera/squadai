@@ -10,6 +10,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/bundle"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/efficiency"
 	"github.com/PedroMosquera/squadai/internal/components/hooks"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
@@ -39,6 +40,7 @@ type Planner struct {
 	agentTeamsInstaller  *agent_teams.Installer
 	hooksInstaller       *hooks.Installer
 	brandInstaller       *brand.Installer
+	efficiencyInstaller  *efficiency.Installer
 	copilotManager       *copilot.Manager
 	opts                 Options
 }
@@ -77,6 +79,7 @@ func (p *Planner) loadFromSet(s *bundle.Set) {
 	p.agentTeamsInstaller = s.AgentTeams
 	p.hooksInstaller = s.Hooks
 	p.brandInstaller = s.Brand
+	p.efficiencyInstaller = s.Efficiency
 	p.copilotManager = s.Copilot
 }
 
@@ -223,6 +226,16 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 				actions = append(actions, brandActions...)
 			}
 		}
+
+		// Efficiency component (session-efficiency protocol). Defaults to ON
+		// when the config key is absent so pre-existing projects gain it.
+		if p.efficiencyInstaller != nil && bundle.EfficiencyEnabled(cfg) {
+			effActions, err := p.efficiencyInstaller.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan efficiency for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, effActions...)
+		}
 	}
 
 	// Copilot instructions (project-level, not adapter-specific).
@@ -356,6 +369,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	if p.brandInstaller != nil {
 		installers[domain.ComponentBrand] = p.brandInstaller
 	}
+	if p.efficiencyInstaller != nil {
+		installers[domain.ComponentEfficiency] = p.efficiencyInstaller
+	}
 	return installers
 }
 
@@ -429,6 +445,9 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 	case domain.ComponentHooks:
 		return p.renderHooks(action, oldContent)
 
+	case domain.ComponentEfficiency:
+		return p.renderEfficiency(action, oldContent)
+
 	default:
 		return oldContent, []byte("[content preview not available for " + string(action.Component) + "]"), nil
 	}
@@ -458,13 +477,27 @@ func (p *Planner) renderHooks(action domain.PlannedAction, existing []byte) ([]b
 	return existing, rendered, nil
 }
 
-// renderMemory computes what the memory installer would write.
+// renderMemory computes what the memory installer would write, honoring the
+// action's render mode (summary vs full) and the active memory scope.
 func (p *Planner) renderMemory(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
 	if p.memoryInstaller == nil {
 		return existing, []byte("[memory installer not initialized]"), nil
 	}
-	content := memory.TemplateForAgentID(action.Agent)
+	content := p.memoryInstaller.ContentForAgentID(action.Agent, action.Mode)
 	updated := memory.InjectContent(string(existing), action.Agent, content)
+	return existing, []byte(updated), nil
+}
+
+// renderEfficiency computes what the efficiency installer would write.
+func (p *Planner) renderEfficiency(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
+	if p.efficiencyInstaller == nil {
+		return existing, []byte("[efficiency installer not initialized]"), nil
+	}
+	content, err := p.efficiencyInstaller.ContentForAgentID(action.Agent)
+	if err != nil {
+		return existing, nil, err
+	}
+	updated := efficiency.InjectContent(string(existing), action.Agent, content)
 	return existing, []byte(updated), nil
 }
 
@@ -478,12 +511,13 @@ func (p *Planner) renderBrand(action domain.PlannedAction, existing []byte) ([]b
 	return existing, []byte(updated), nil
 }
 
-// renderRules computes what the rules installer would write.
+// renderRules computes what the rules installer would write, honoring the
+// action's render mode (summary vs full standards).
 func (p *Planner) renderRules(action domain.PlannedAction, existing []byte) ([]byte, []byte, error) {
 	if p.rulesInstaller == nil {
 		return existing, []byte("[rules installer not initialized]"), nil
 	}
-	content := p.rulesInstaller.Content()
+	content := p.rulesInstaller.ContentForMode(action.Mode)
 	if content == "" {
 		return existing, existing, nil
 	}

@@ -1637,7 +1637,9 @@ func TestRunDiff_NothingToChange(t *testing.T) {
 		Adapters: map[string]domain.AdapterConfig{
 			"opencode": {Enabled: true},
 		},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			"efficiency": {Enabled: false}, // default-on component; off so nothing changes
+		},
 	}
 	projectPath := filepath.Join(projectDir, config.ProjectConfigDir, "project.json")
 	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
@@ -1670,7 +1672,9 @@ func TestRunDiff_NothingToChange_JSON(t *testing.T) {
 		Adapters: map[string]domain.AdapterConfig{
 			"opencode": {Enabled: true},
 		},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			"efficiency": {Enabled: false}, // default-on component; off so nothing changes
+		},
 	}
 	projectPath := filepath.Join(projectDir, config.ProjectConfigDir, "project.json")
 	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
