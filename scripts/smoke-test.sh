@@ -303,7 +303,7 @@ HELP_OUT=$("$BIN" help 2>&1) || true
 assert_output_contains "$HELP_OUT" "init" "help lists init command"
 assert_output_contains "$HELP_OUT" "apply" "help lists apply command"
 assert_output_contains "$HELP_OUT" "verify" "help lists verify command"
-assert_output_contains "$HELP_OUT" "models list" "help lists models list command"
+assert_output_contains "$HELP_OUT" "models <subcommand>" "help lists models command"
 
 # -- models catalog (offline) --
 log "  Testing squadai models list"
