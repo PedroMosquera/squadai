@@ -1,42 +1,19 @@
-## Memory Protocol
+## Project Memory Protocol
 
-This protocol defines how you manage persistent context across sessions using CLAUDE.md
-as the primary memory store.
+`docs/memory/` is this project's persistent, indexed memory store for
+decisions, learnings, and incidents. It survives across sessions — use it.
 
-### Session Start
+**Search first.** Before starting significant work, run `/memory-search <query>`
+(or `squadai memory search <query>` in the terminal) and pass any findings into
+your plan. Never skip memory-search before architecture or API decisions.
 
-1. Review `CLAUDE.md` for project context, prior decisions, and accumulated conventions.
-2. Check the most recent session summary for continuity with prior work.
-3. Search for any notes relevant to the current task before beginning.
-4. If `.squadai/project.json` exists, review it for project configuration.
+**Capture as you go.** After a decision, fix, or discovery, run
+`/memory-add <note>` (or `squadai memory add "<note>"`). Notes land in
+`docs/memory/_inbox/` as drafts until promoted.
 
-### Save Triggers
+**Housekeeping.** Run `/memory-promote` periodically to graduate inbox drafts
+into permanent topic folders, and `/memory-reindex` after manual edits under
+`docs/memory/` to keep the search index current.
 
-Update CLAUDE.md after any of these events:
-
-- **Architecture decisions** — record the decision, alternatives considered, and rationale.
-- **Bug discoveries and fixes** — document the root cause, symptoms, and the fix applied.
-- **New conventions or patterns** — note the pattern, where it applies, and examples.
-- **Configuration changes** — record what changed, why, and any migration steps.
-- **Dependency additions or removals** — note the package, version, and reason.
-- **Environment setup notes** — document any local setup steps or environment requirements.
-- **Project-specific constraints** — record limitations, quirks, or known issues.
-
-### Search Protocol
-
-- At session start, search CLAUDE.md for context relevant to the current task.
-- Before making architectural decisions, check for prior decisions on the same topic.
-- Before modifying shared infrastructure, check for documented conventions.
-- When encountering unfamiliar code, search for related notes or explanations.
-
-### Session End
-
-Append a session summary to the relevant section of CLAUDE.md including:
-
-- **Goal**: what was the objective for this session
-- **Accomplished**: what was completed
-- **Decisions**: any architectural or design decisions made
-- **Discoveries**: what was learned about the codebase or problem domain
-- **Next Steps**: what remains to be done
-
-Keep summaries concise (5-10 lines). Remove stale summaries when they are no longer relevant.
+For deeper multi-query research, ask the `@librarian` agent with a
+plain-language question; it returns ranked excerpts from the memory index.
