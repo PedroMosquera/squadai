@@ -23,6 +23,37 @@ func TestForModel_UnknownModel(t *testing.T) {
 	}
 }
 
+func TestForModel_CatalogResolvedModels(t *testing.T) {
+	// Current-generation models resolve encodings through the model catalog
+	// (per-model encodings + encoding_prefixes).
+	models := []string{
+		"claude-fable-5",
+		"claude-sonnet-4-6",
+		"gpt-5.2",
+		"gpt-5-mini",
+		"o4",
+		"gemini-3-pro",
+		"gemini-3-flash",
+		"gemini-3-something-new", // prefix match, no exact row
+		"anthropic/claude-fable-5",
+	}
+	for _, m := range models {
+		c := ForModel(m)
+		if _, ok := c.(FallbackCounter); ok {
+			t.Errorf("ForModel(%q) = FallbackCounter, want a real tokenizer", m)
+		}
+	}
+}
+
+func TestForModel_JunkFallsBack(t *testing.T) {
+	for _, m := range []string{"", "totally-made-up", "acme/quantum-brain-7"} {
+		c := ForModel(m)
+		if _, ok := c.(FallbackCounter); !ok {
+			t.Errorf("ForModel(%q) = %T, want FallbackCounter", m, c)
+		}
+	}
+}
+
 func TestFallbackCounter(t *testing.T) {
 	c := FallbackCounter{}
 	if got := c.Count(""); got != 0 {

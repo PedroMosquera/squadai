@@ -397,6 +397,12 @@ func validateUsageConfig(usage domain.UsageConfig) []string {
 			issues = append(issues, fmt.Sprintf("usage.enforcement has unknown value %q (expected: off, warn, ask, block)", usage.Enforcement))
 		}
 	}
+	switch usage.PriceCatalogSource {
+	case "", "embedded":
+		// valid
+	default:
+		issues = append(issues, fmt.Sprintf("usage.price_catalog_source has unknown value %q (expected: embedded)", usage.PriceCatalogSource))
+	}
 	return issues
 }
 
@@ -408,6 +414,14 @@ func validateModelsConfig(models domain.ModelsConfig) []string {
 			// valid
 		default:
 			issues = append(issues, fmt.Sprintf("models profile %q has unknown tier %q (expected: cheap, balanced, premium)", name, profile.Tier))
+		}
+		for adapterName, concreteModel := range profile.Adapters {
+			if !isKnownAdapter(adapterName) {
+				issues = append(issues, fmt.Sprintf("models profile %q has unknown adapter %q in adapters override", name, adapterName))
+			}
+			if strings.TrimSpace(concreteModel) == "" {
+				issues = append(issues, fmt.Sprintf("models profile %q adapter %q override must be a non-empty model id", name, adapterName))
+			}
 		}
 	}
 	return issues

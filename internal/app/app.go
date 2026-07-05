@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/PedroMosquera/squadai/internal/cli"
@@ -159,6 +160,22 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("unknown plugins subcommand %q", args[1])
 		}
 
+	case "models":
+		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" || args[1] == "help" {
+			printModelsUsage(stdout)
+			return nil
+		}
+		switch args[1] {
+		case "list":
+			return cli.RunModelsList(args[2:], stdout)
+		case "check":
+			return cli.RunModelsCheck(args[2:], stdout)
+		case "update":
+			return cli.RunModelsUpdate(args[2:], stdout, os.Stdin)
+		default:
+			return fmt.Errorf("unknown models subcommand %q", args[1])
+		}
+
 	case "_hook":
 		return cli.RunHookCommand(args[1:])
 
@@ -233,6 +250,21 @@ Subcommands:
   add-git <url>    Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/
   remove <name>    Remove an installed plugin's files; updates project.json
 
+`)
+}
+
+func printModelsUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: squadai models <subcommand> [flags]
+
+Subcommands:
+  list        List the effective model catalog (offline; --json, --adapter=<id>)
+  check       Fetch the published catalog and report staleness/differences
+  update      Fetch, show the diff, confirm, then write ~/.squadai/models.json
+              (--yes to skip the prompt, --project for .squadai/models.json)
+
+The catalog drives model pricing, tokenizer encodings, and per-adapter tier
+defaults. Updates never happen silently: 'update' always shows the diff and
+asks for confirmation unless --yes is passed.
 `)
 }
 
@@ -378,7 +410,7 @@ func buildCommandRegistry() helpOutput {
 					{Name: "--verbose", Type: "bool", Description: "Stream step events as they execute"},
 					{Name: "--no-brand", Type: "bool", Description: "Skip brand banner component for this apply"},
 					{Name: "--max-tokens", Type: "int", Description: "Budget cap: fit components within N tokens"},
-					{Name: "--fit-model", Type: "string", Description: "Model name for budget fitting (e.g. claude-sonnet-4)"},
+					{Name: "--fit-model", Type: "string", Description: "Model name for budget fitting (e.g. claude-sonnet-4-6)"},
 				},
 			},
 			{
@@ -452,6 +484,23 @@ func buildCommandRegistry() helpOutput {
 				},
 			},
 			{
+				Name:        "models",
+				Description: "Inspect and refresh the unified model catalog (pricing, encodings, tier defaults).",
+				Subcommands: []cmdEntry{
+					{Name: "list", Description: "List the effective model catalog (offline).", Flags: []cmdFlag{
+						{Name: "--json", Type: "bool", Description: "Output list as JSON"},
+						{Name: "--adapter", Type: "string", Description: "Show tier mapping and models for one adapter"},
+					}},
+					{Name: "check", Description: "Fetch the published catalog and report staleness/differences.", Flags: []cmdFlag{
+						{Name: "--json", Type: "bool", Description: "Output report as JSON"},
+					}},
+					{Name: "update", Description: "Fetch the published catalog, show the diff, and write the override after confirmation.", Flags: []cmdFlag{
+						{Name: "--yes", Type: "bool", Description: "Skip the confirmation prompt"},
+						{Name: "--project", Type: "bool", Description: "Write .squadai/models.json instead of ~/.squadai/models.json"},
+					}},
+				},
+			},
+			{
 				Name:        "restore",
 				Description: "Restore managed files from a backup snapshot.",
 				Flags: []cmdFlag{
@@ -492,7 +541,7 @@ func buildCommandRegistry() helpOutput {
 				Description: "Estimate per-session token cost of the current squadai install.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output as JSON"},
-					{Name: "--model", Type: "string", Description: "Model name for tokenizer (e.g. claude-sonnet-4, gpt-4o)"},
+					{Name: "--model", Type: "string", Description: "Model name for tokenizer (e.g. claude-sonnet-4-6, gpt-5-mini)"},
 				},
 			},
 			{
@@ -566,6 +615,9 @@ Commands:
   backup list        List available backups
   backup delete <id> Delete a backup snapshot
   backup prune       Remove old backups (keep N most recent)
+  models list        List the effective model catalog (offline; --json, --adapter=<id>)
+  models check       Fetch the published catalog and report staleness/differences
+  models update      Refresh ~/.squadai/models.json after showing a diff and confirming
   restore <id>       Restore from a backup
   remove             Remove all managed files (use --force to confirm)
   schema export      Export JSON Schema for project.json / policy.json (VS Code validation)
