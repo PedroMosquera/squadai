@@ -349,11 +349,23 @@ type cmdFlag struct {
 
 // cmdEntry describes a single command or subcommand.
 type cmdEntry struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Flags       []cmdFlag   `json:"flags,omitempty"`
-	Subcommands []cmdEntry  `json:"subcommands,omitempty"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Group       string     `json:"group,omitempty"` // Daily, Setup, Advanced, or Internal
+	Flags       []cmdFlag  `json:"flags,omitempty"`
+	Subcommands []cmdEntry `json:"subcommands,omitempty"`
 }
+
+// Command groups used to render the help text in sections.
+const (
+	groupDaily    = "Daily"
+	groupSetup    = "Setup"
+	groupAdvanced = "Advanced"
+	groupInternal = "Internal"
+)
+
+// groupOrder is the section order in `squadai help`.
+var groupOrder = []string{groupDaily, groupSetup, groupAdvanced, groupInternal}
 
 // helpOutput is the top-level envelope for `squadai help --json`.
 type helpOutput struct {
@@ -367,6 +379,7 @@ func buildCommandRegistry() helpOutput {
 		Commands: []cmdEntry{
 			{
 				Name:        "init",
+				Group:       groupSetup,
 				Description: "Initialize project config (.squadai/project.json) and optional policy template.",
 				Flags: []cmdFlag{
 					{Name: "--methodology", Type: "string", Description: "Set development methodology (tdd, sdd, conventional)"},
@@ -374,8 +387,10 @@ func buildCommandRegistry() helpOutput {
 					{Name: "--plugins", Type: "csv", Description: "Comma-separated plugin IDs to install"},
 					{Name: "--model-tier", Type: "string", Description: "Model tier (balanced, performance, starter, manual)", Default: "balanced"},
 					{Name: "--agents", Type: "csv", Description: "Comma-separated adapter IDs to enable"},
-					{Name: "--preset", Type: "string", Description: "Setup preset (full-squad, lean, custom)"},
+					{Name: "--preset", Type: "string", Description: "Setup preset (solo-minimal, solo-power, team-standard, enterprise-locked, full-squad, lean, custom)"},
 					{Name: "--with-policy", Type: "bool", Description: "Also generate a policy.json template"},
+					{Name: "--without-memory", Type: "bool", Description: "Skip creating the docs/memory scaffold"},
+					{Name: "--no-memory-scaffold", Type: "bool", Description: "Keep project memory enabled but do not scaffold docs/memory"},
 					{Name: "--force", Type: "bool", Description: "Overwrite existing config without merging"},
 					{Name: "--merge", Type: "bool", Description: "Merge with existing config instead of replacing"},
 					{Name: "--global", Type: "bool", Description: "Write to home directory instead of current project"},
@@ -384,6 +399,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "validate-policy",
+				Group:       groupAdvanced,
 				Description: "Validate policy.json schema, lock/required consistency.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output validation result as JSON"},
@@ -391,6 +407,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "plan",
+				Group:       groupDaily,
 				Description: "Compute the action plan without writing any files.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output plan as JSON"},
@@ -398,10 +415,12 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "diff",
+				Group:       groupDaily,
 				Description: "Show what apply would change as unified diffs.",
 			},
 			{
 				Name:        "apply",
+				Group:       groupDaily,
 				Description: "Execute plan with automatic backup and rollback safety.",
 				Flags: []cmdFlag{
 					{Name: "--dry-run", Type: "bool", Description: "Preview changes without writing files"},
@@ -415,6 +434,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "verify",
+				Group:       groupDaily,
 				Description: "Print compliance and health report.",
 				Flags: []cmdFlag{
 					{Name: "--strict", Type: "bool", Description: "Also fail on drift since last apply"},
@@ -423,6 +443,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "status",
+				Group:       groupDaily,
 				Description: "Show project configuration summary.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output status as JSON"},
@@ -430,6 +451,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "doctor",
+				Group:       groupSetup,
 				Description: "Run pre-flight diagnostics (environment, agents, config, MCP, filesystem, drift).",
 				Flags: []cmdFlag{
 					{Name: "--fix", Type: "bool", Description: "Attempt to auto-fix detected issues"},
@@ -438,6 +460,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "watch",
+				Group:       groupAdvanced,
 				Description: "Monitor managed files for drift and stream events to stdout.",
 				Flags: []cmdFlag{
 					{Name: "--daemon", Type: "bool", Description: "Run in background (detached mode)"},
@@ -445,6 +468,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "audit",
+				Group:       groupAdvanced,
 				Description: "Render the governance audit log (.squadai/audit.log).",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output audit events as JSON"},
@@ -454,13 +478,44 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "install-hooks",
+				Group:       groupAdvanced,
 				Description: "Install Git hooks (pre-commit, post-merge, post-checkout) for squadai.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
 				},
 			},
 			{
+				Name:        "install-commands",
+				Group:       groupAdvanced,
+				Description: "Install SquadAI slash commands + squadai-manager agent to .claude/.",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
+				},
+			},
+			{
+				Name:        "explain",
+				Group:       groupAdvanced,
+				Description: "Explain a SquadAI concept (config, policy, adapters, error-codes, ...).",
+			},
+			{
+				Name:        "memory",
+				Group:       groupAdvanced,
+				Description: "Manage project memory notes (docs/memory).",
+				Subcommands: []cmdEntry{
+					{Name: "add", Description: "Save a note to docs/memory/_inbox/."},
+					{Name: "search", Description: "Search indexed memory notes.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output results as JSON"}}},
+					{Name: "promote", Description: "Move an inbox note to categorized memory with frontmatter."},
+					{Name: "reindex", Description: "Rebuild the search index from docs/memory/."},
+					{Name: "gc", Description: "Archive stale unreferenced notes.", Flags: []cmdFlag{
+						{Name: "--older-than", Type: "duration", Description: "Age threshold (default 180d)"},
+						{Name: "--dry-run", Type: "bool", Description: "Preview without archiving"},
+					}},
+					{Name: "status", Description: "Show inbox, total, and indexed counts."},
+				},
+			},
+			{
 				Name:        "plugins",
+				Group:       groupAdvanced,
 				Description: "Manage plugins from the community marketplace.",
 				Subcommands: []cmdEntry{
 					{Name: "sync", Description: "Fetch the plugin registry from github.com/wshobson/agents.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
@@ -472,6 +527,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "backup",
+				Group:       groupAdvanced,
 				Description: "Manage backup snapshots of managed files.",
 				Subcommands: []cmdEntry{
 					{Name: "create", Description: "Snapshot all managed files.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output backup manifest as JSON"}}},
@@ -485,6 +541,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "models",
+				Group:       groupSetup,
 				Description: "Inspect and refresh the unified model catalog (pricing, encodings, tier defaults).",
 				Subcommands: []cmdEntry{
 					{Name: "list", Description: "List the effective model catalog (offline).", Flags: []cmdFlag{
@@ -502,6 +559,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "restore",
+				Group:       groupAdvanced,
 				Description: "Restore managed files from a backup snapshot.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
@@ -509,6 +567,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "remove",
+				Group:       groupAdvanced,
 				Description: "Remove all managed files from the project.",
 				Flags: []cmdFlag{
 					{Name: "--force", Type: "bool", Description: "Confirm removal without interactive prompt"},
@@ -516,6 +575,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "schema",
+				Group:       groupInternal,
 				Description: "Export JSON Schema for SquadAI config files.",
 				Subcommands: []cmdEntry{
 					{Name: "export", Description: "Write JSON Schema files for project.json and policy.json to stdout or a directory.", Flags: []cmdFlag{
@@ -526,6 +586,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "context",
+				Group:       groupInternal,
 				Description: "Dump SquadAI configuration as LLM-ready context.",
 				Flags: []cmdFlag{
 					{Name: "--format", Type: "string", Description: "Output format: prompt, json, or mcp (default: prompt)"},
@@ -534,10 +595,12 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "mcp-server",
+				Group:       groupInternal,
 				Description: "Start SquadAI as an MCP stdio server. Exposes plan, apply, verify, status, context, init, doctor, plugins, and more as MCP tools callable by Claude Code.",
 			},
 			{
 				Name:        "token-budget",
+				Group:       groupDaily,
 				Description: "Estimate per-session token cost of the current squadai install.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output as JSON"},
@@ -546,6 +609,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "token-usage",
+				Group:       groupDaily,
 				Description: "Aggregate real token usage from agent session transcripts.",
 				Flags: []cmdFlag{
 					{Name: "--since", Type: "string", Description: "Time window: 7d, 30d, or all (default: 7d)"},
@@ -554,6 +618,7 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "update",
+				Group:       groupSetup,
 				Description: "Check for a newer version of SquadAI and optionally download it.",
 				Flags: []cmdFlag{
 					{Name: "--check", Type: "bool", Description: "Only check, do not download"},
@@ -561,10 +626,12 @@ func buildCommandRegistry() helpOutput {
 			},
 			{
 				Name:        "version",
+				Group:       groupInternal,
 				Description: "Print the SquadAI version string.",
 			},
 			{
 				Name:        "help",
+				Group:       groupInternal,
 				Description: "Show the help text for all commands.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output machine-readable command registry as JSON"},
@@ -584,53 +651,49 @@ func printUsageJSON(w io.Writer) error {
 	return nil
 }
 
+// printUsage renders the grouped top-level help text from the command
+// registry, so the sections stay in sync with `squadai help --json`.
 func printUsage(w io.Writer) {
+	reg := buildCommandRegistry()
+
 	fmt.Fprintf(w, `SquadAI %s — Team-consistent AI setup with safe local customization.
 
 Usage:
   squadai <command> [flags]
 
-Commands:
-  init               Initialize project config and optional policy template
-  validate-policy    Validate policy schema and lock/required consistency
-  plan               Compute action plan (use --dry-run to preview)
-  diff               Show what apply would change as unified diffs
-  apply              Execute plan with backup and rollback safety
-  verify             Print compliance and health report (--strict adds drift check)
-  status             Show project configuration summary
-  doctor             Run pre-flight diagnostics (environment, agents, config, MCP, filesystem, drift)
-  token-budget       Estimate per-session token cost of the current install (--model for BPE, --json for JSON)
-  token-usage        Aggregate real token usage from agent session transcripts (--since=7d, --json)
-  watch              Monitor managed files for drift, stream events to stdout
-  audit              Render the governance audit log (.squadai/audit.log)
-  install-hooks      Install Git hooks (pre-commit, post-merge, post-checkout) for squadai
-  install-commands   Install SquadAI slash commands + squadai-manager agent to .claude/
-  explain <topic>    Explain a SquadAI concept (config, policy, adapters, error-codes, ...)
-  plugins sync          Fetch plugin registry from github.com/wshobson/agents
-  plugins list          List available plugins (✓ = installed in this project)
-  plugins add <name>    Download and install a marketplace plugin
-  plugins add-git <url> Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/
-  plugins remove <name> Remove an installed plugin's files
-  backup create      Snapshot managed files
-  backup list        List available backups
-  backup delete <id> Delete a backup snapshot
-  backup prune       Remove old backups (keep N most recent)
-  models list        List the effective model catalog (offline; --json, --adapter=<id>)
-  models check       Fetch the published catalog and report staleness/differences
-  models update      Refresh ~/.squadai/models.json after showing a diff and confirming
-  restore <id>       Restore from a backup
-  remove             Remove all managed files (use --force to confirm)
-  schema export      Export JSON Schema for project.json / policy.json (VS Code validation)
-  context            Dump config as LLM-ready context (--format prompt|json|mcp)
-  mcp-server         Start SquadAI as an MCP stdio server (for Claude Code integration)
-  update             Check for updates and download (see 'squadai update --help')
-  version            Print version
+`, Version)
 
-Flags:
-  --dry-run          Preview changes without applying (plan, apply)
-  --json             Machine-readable JSON output (all commands)
-  --json (help)      Output machine-readable command registry
+	byGroup := make(map[string][]cmdEntry, len(groupOrder))
+	for _, c := range reg.Commands {
+		g := c.Group
+		if g == "" {
+			g = groupAdvanced
+		}
+		byGroup[g] = append(byGroup[g], c)
+	}
+
+	for _, g := range groupOrder {
+		entries := byGroup[g]
+		if len(entries) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "%s:\n", g)
+		for _, c := range entries {
+			name := c.Name
+			if len(c.Subcommands) > 0 {
+				name += " <subcommand>"
+			}
+			fmt.Fprintf(w, "  %-20s %s\n", name, c.Description)
+		}
+		fmt.Fprintln(w)
+	}
+
+	fmt.Fprint(w, `Flags:
+  --json             Machine-readable JSON output (most commands)
   -h, --help         Show this help
 
-`, Version)
+Run 'squadai <command> --help' for detailed usage, or 'squadai help --json'
+for the machine-readable command registry.
+
+`)
 }
