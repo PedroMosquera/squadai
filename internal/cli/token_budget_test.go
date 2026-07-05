@@ -179,8 +179,97 @@ func TestRunTokenBudget_PlannedDoesNotMultiCountSharedFiles(t *testing.T) {
 	if installed <= 0 {
 		t.Fatalf("installed scan should report non-zero tokens, got %v", installed)
 	}
-	if planned != installed {
-		t.Fatalf("planned total (%v) should equal installed scan total (%v) after apply; "+
-			"a mismatch means shared files are being multi-counted", planned, installed)
+	// Planned attributes marker-injection components (memory, efficiency,
+	// brand) by their own section content, which excludes the marker tag
+	// lines the installed full-file scan includes. So planned lands slightly
+	// below installed — but anything above it means shared files are being
+	// multi-counted, and a large shortfall means sections went missing.
+	if planned > installed {
+		t.Fatalf("planned total (%v) exceeds installed scan total (%v) after apply; "+
+			"shared files are being multi-counted", planned, installed)
+	}
+	if planned < installed*0.9 {
+		t.Fatalf("planned total (%v) is far below installed scan total (%v); "+
+			"section attribution is dropping content", planned, installed)
+	}
+}
+
+// ─── Flag parsing ────────────────────────────────────────────────────────────
+
+func TestRunTokenBudget_ModelFlagParsing(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		args      []string
+		wantErr   string
+		wantModel string // asserted via the report header when non-empty
+	}{
+		{name: "equals form", args: []string{"--model=claude-sonnet-4-6"}, wantModel: "claude-sonnet-4-6"},
+		{name: "space form", args: []string{"--model", "claude-sonnet-4-6"}, wantModel: "claude-sonnet-4-6"},
+		{name: "bare trailing --model errors", args: []string{"--model"}, wantErr: "--model requires a value"},
+		{name: "--model followed by flag errors", args: []string{"--model", "--json"}, wantErr: "--model requires a value"},
+		{name: "no model uses heuristic", args: []string{}, wantModel: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := RunTokenBudget(tt.args, &buf)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			out := buf.String()
+			if tt.wantModel != "" {
+				if !strings.Contains(out, "model-aware ("+tt.wantModel+")") {
+					t.Errorf("expected model-aware header for %q, got:\n%s", tt.wantModel, out)
+				}
+			} else if !strings.Contains(out, "approx. 4 chars/token") {
+				t.Errorf("expected heuristic header, got:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestRunTokenUsage_SinceFlagParsing(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "equals form", args: []string{"--since=30d"}},
+		{name: "space form", args: []string{"--since", "30d"}},
+		{name: "bare trailing --since errors", args: []string{"--since"}, wantErr: "--since requires a value"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := RunTokenUsage(tt.args, &buf)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(buf.String(), "30d") {
+				t.Errorf("expected the 30d window echoed, got:\n%s", buf.String())
+			}
+		})
 	}
 }

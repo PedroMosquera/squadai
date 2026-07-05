@@ -182,6 +182,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "memory":
 		return cli.RunMemoryCommand(args[1:])
 
+	case "profile":
+		return cli.RunProfile(args[1:], stdout)
+
 	case "token-budget":
 		return cli.RunTokenBudget(args[1:], stdout)
 
@@ -597,6 +600,14 @@ func buildCommandRegistry() helpOutput {
 				Name:        "mcp-server",
 				Group:       groupInternal,
 				Description: "Start SquadAI as an MCP stdio server. Exposes plan, apply, verify, status, context, init, doctor, plugins, and more as MCP tools callable by Claude Code.",
+			},
+			{
+				Name:        "profile",
+				Group:       groupDaily,
+				Description: "Show or switch the active context profile (memory scope, MCP filter, skills, token cap).",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output profiles as JSON"},
+				},
 			},
 			{
 				Name:        "token-budget",
