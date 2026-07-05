@@ -15,8 +15,8 @@ func TestModelsForTier_Balanced_OpenCode(t *testing.T) {
 	if !ok {
 		t.Fatal("balanced/opencode should have 'model' in Settings")
 	}
-	if model != "anthropic/claude-sonnet-4-20250514" {
-		t.Errorf("Settings[model] = %q, want %q", model, "anthropic/claude-sonnet-4-20250514")
+	if model != "anthropic/claude-sonnet-4-6" {
+		t.Errorf("Settings[model] = %q, want %q", model, "anthropic/claude-sonnet-4-6")
 	}
 }
 
@@ -27,8 +27,8 @@ func TestModelsForTier_Performance_OpenCode(t *testing.T) {
 	if !ok {
 		t.Fatal("performance/opencode should have 'model' in Settings")
 	}
-	if model != "anthropic/claude-sonnet-4-5" {
-		t.Errorf("Settings[model] = %q, want %q", model, "anthropic/claude-sonnet-4-5")
+	if model != "anthropic/claude-fable-5" {
+		t.Errorf("Settings[model] = %q, want %q", model, "anthropic/claude-fable-5")
 	}
 }
 
@@ -39,8 +39,8 @@ func TestModelsForTier_Starter_OpenCode(t *testing.T) {
 	if !ok {
 		t.Fatal("starter/opencode should have 'model' in Settings")
 	}
-	if model != "anthropic/claude-haiku-3-5" {
-		t.Errorf("Settings[model] = %q, want %q", model, "anthropic/claude-haiku-3-5")
+	if model != "anthropic/claude-haiku-4-5" {
+		t.Errorf("Settings[model] = %q, want %q", model, "anthropic/claude-haiku-4-5")
 	}
 }
 
@@ -71,8 +71,8 @@ func TestModelsForTier_Performance_Claude(t *testing.T) {
 		t.Fatal("performance/claude-code should have 'model' in Settings")
 	}
 	// Must be bare (no "anthropic/" prefix) for Claude Code.
-	if model != "claude-sonnet-4-5" {
-		t.Errorf("Settings[model] = %q, want %q", model, "claude-sonnet-4-5")
+	if model != "claude-fable-5" {
+		t.Errorf("Settings[model] = %q, want %q", model, "claude-fable-5")
 	}
 }
 
@@ -83,8 +83,8 @@ func TestModelsForTier_Starter_Claude(t *testing.T) {
 	if !ok {
 		t.Fatal("starter/claude-code should have 'model' in Settings")
 	}
-	if model != "claude-haiku-3-5" {
-		t.Errorf("Settings[model] = %q, want %q", model, "claude-haiku-3-5")
+	if model != "claude-haiku-4-5" {
+		t.Errorf("Settings[model] = %q, want %q", model, "claude-haiku-4-5")
 	}
 }
 
