@@ -39,7 +39,7 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json         Output as JSON")
 			fmt.Fprintln(stdout, "  --planned      Estimate planned rendered content before apply")
-			fmt.Fprintln(stdout, "  --model=<name> Use model-aware tokenizer (e.g. claude-sonnet-4, gpt-4o)")
+			fmt.Fprintln(stdout, "  --model=<name> Use model-aware tokenizer (e.g. claude-sonnet-4-6, gpt-5-mini)")
 			fmt.Fprintln(stdout, "                 Falls back to 4 chars/token heuristic when omitted.")
 			return nil
 		}

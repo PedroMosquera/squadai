@@ -13,6 +13,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/model"
+	"github.com/PedroMosquera/squadai/internal/modelcatalog"
 )
 
 const teamSectionID = "team"
@@ -42,6 +43,30 @@ type Installer struct {
 	projectDir string
 	adapters   map[domain.AgentID]domain.Adapter // adapters registered during Plan, used in Apply
 	opts       Options
+	catalog    *modelcatalog.Catalog // lazily loaded model catalog for role→model resolution
+}
+
+// modelCatalog returns the model catalog for role→model resolution, loading
+// it once per installer from explicit homeDir/projectDir override layers.
+// Load errors return nil, which makes ResolveRoleModelFor fall back to the
+// process-default catalog.
+func (i *Installer) modelCatalog(homeDir, projectDir string) *modelcatalog.Catalog {
+	if i.catalog != nil {
+		return i.catalog
+	}
+	c, err := modelcatalog.Load(homeDir, projectDir)
+	if err != nil {
+		return nil
+	}
+	i.catalog = c
+	return i.catalog
+}
+
+// modelCatalogForApply resolves the catalog during Apply/render, where only
+// the stored projectDir is available.
+func (i *Installer) modelCatalogForApply() *modelcatalog.Catalog {
+	homeDir, _ := os.UserHomeDir()
+	return i.modelCatalog(homeDir, i.projectDir)
 }
 
 // New returns an agents installer configured from the merged agent definitions.
@@ -190,7 +215,8 @@ func (i *Installer) planNativeAgents(adapter domain.Adapter, homeDir, projectDir
 	// Inject resolved model for orchestrator role.
 	if role, ok := i.config.Team["orchestrator"]; ok {
 		orchestratorContent = injectModelIntoFrontmatter(orchestratorContent,
-			model.ResolveRoleModel(role.Model, adapter.ID()))
+			model.ResolveRoleModelFor(i.config, methodology, "orchestrator", role.Model,
+				adapter.ID(), i.modelCatalog(homeDir, projectDir)))
 	}
 
 	a, err := i.planNativeAgentFile(adapter, agentsDir, "orchestrator", orchestratorContent)
@@ -241,7 +267,8 @@ func (i *Installer) planNativeAgents(adapter domain.Adapter, homeDir, projectDir
 		// Inject resolved model for this role.
 		if role, ok := i.config.Team[roleName]; ok {
 			rendered = injectModelIntoFrontmatter(rendered,
-				model.ResolveRoleModel(role.Model, adapter.ID()))
+				model.ResolveRoleModelFor(i.config, methodology, roleName, role.Model,
+					adapter.ID(), i.modelCatalog(homeDir, projectDir)))
 		}
 
 		a, err := i.planNativeAgentFile(adapter, agentsDir, roleName, rendered)
@@ -476,7 +503,8 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 	// Inject resolved model for this role.
 	if role, ok := i.config.Team[roleName]; ok {
 		rendered = injectModelIntoFrontmatter(rendered,
-			model.ResolveRoleModel(role.Model, action.Agent))
+			model.ResolveRoleModelFor(i.config, methodology, roleName, role.Model,
+				action.Agent, i.modelCatalogForApply()))
 	}
 
 	// Translate frontmatter to Claude-native format when applicable.
@@ -674,7 +702,8 @@ func (i *Installer) verifyTeamAgents(adapter domain.Adapter, homeDir, projectDir
 		// Inject model for orchestrator.
 		if role, ok := i.config.Team["orchestrator"]; ok {
 			orchestratorRendered = injectModelIntoFrontmatter(orchestratorRendered,
-				model.ResolveRoleModel(role.Model, adapter.ID()))
+				model.ResolveRoleModelFor(i.config, methodology, "orchestrator", role.Model,
+					adapter.ID(), i.modelCatalog(homeDir, projectDir)))
 		}
 		orchestratorContent, err := i.maybeTranslateContent(adapter.ID(), "orchestrator", orchestratorRendered)
 		if err != nil {
@@ -700,7 +729,8 @@ func (i *Installer) verifyTeamAgents(adapter domain.Adapter, homeDir, projectDir
 			// Inject model for this role.
 			if role, ok := i.config.Team[roleName]; ok {
 				rendered = injectModelIntoFrontmatter(rendered,
-					model.ResolveRoleModel(role.Model, adapter.ID()))
+					model.ResolveRoleModelFor(i.config, methodology, roleName, role.Model,
+						adapter.ID(), i.modelCatalog(homeDir, projectDir)))
 			}
 			translated, transErr := i.maybeTranslateContent(adapter.ID(), roleName, rendered)
 			if transErr != nil {
@@ -850,7 +880,8 @@ func (i *Installer) renderNativeAgentContent(action domain.PlannedAction) (strin
 	// Inject resolved model for this role.
 	if role, ok := i.config.Team[roleName]; ok {
 		rendered = injectModelIntoFrontmatter(rendered,
-			model.ResolveRoleModel(role.Model, action.Agent))
+			model.ResolveRoleModelFor(i.config, methodology, roleName, role.Model,
+				action.Agent, i.modelCatalogForApply()))
 	}
 	return i.maybeTranslateContent(action.Agent, roleName, rendered)
 }

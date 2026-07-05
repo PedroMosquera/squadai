@@ -1319,7 +1319,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			fmt.Fprintln(stdout, "  --no-review         Skip the pre-apply review screen (non-interactive / CI).")
 			fmt.Fprintln(stdout, "  --no-brand          Skip the brand banner component for this apply (useful in CI).")
 			fmt.Fprintln(stdout, "  --max-tokens=N      Budget cap: fit components within N tokens (drops lowest priority first).")
-			fmt.Fprintln(stdout, "  --fit-model=<name>  Model to use for budget fitting (e.g. claude-sonnet-4, gpt-4o).")
+			fmt.Fprintln(stdout, "  --fit-model=<name>  Model to use for budget fitting (e.g. claude-sonnet-4-6, gpt-5-mini).")
 			fmt.Fprintln(stdout, "  --overwrite-unmanaged  Grant blanket consent to overwrite any user-owned key")
 			fmt.Fprintln(stdout, "                         SquadAI would write. Complements --no-review / CI flows;")
 			fmt.Fprintln(stdout, "                         without this flag non-TTY applies halt on merge conflicts.")
@@ -4919,7 +4919,7 @@ token cost of your agent configuration.
 
   squadai token-budget          # human-readable per-component breakdown
   squadai token-budget --json   # machine-readable
-  squadai token-budget --model=claude-sonnet-4
+  squadai token-budget --model=claude-sonnet-4-6
 
 This reads the installed agent files and estimates tokens. Without --model it
 uses a chars/4 heuristic; with --model it uses the model-aware tokenizer when
@@ -4927,7 +4927,7 @@ available. The brand component appears as its own row.
 
 ## Active fitting
 
-  squadai apply --max-tokens=60000 --fit-model=claude-sonnet-4
+  squadai apply --max-tokens=60000 --fit-model=claude-sonnet-4-6
 
 This renders the planned output, estimates desired tokens, then orders
 components by priority and omits lowest-priority content to fit within the

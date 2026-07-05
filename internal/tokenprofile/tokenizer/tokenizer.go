@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/PedroMosquera/squadai/internal/modelcatalog"
 	"github.com/pkoukk/tiktoken-go"
 )
 
@@ -37,26 +38,11 @@ func ApproxCount(text string) int {
 // encoderCache caches loaded tiktoken encoders keyed by encoding name.
 var encoderCache sync.Map // map[string]*tiktoken.Tiktoken
 
-// customPrefixEncodings maps model prefixes not known to tiktoken to
-// tiktoken encoding names. It is consulted after tiktoken's own model
-// maps. Longer/more-specific prefixes are listed first.
-var customPrefixEncodings = []struct {
-	prefix   string
-	encoding string
-}{
-	{"gpt-4.1", tiktoken.MODEL_O200K_BASE},
-	{"gpt-4o", tiktoken.MODEL_O200K_BASE},
-	{"gpt-4", tiktoken.MODEL_CL100K_BASE},
-	{"gpt-3.5", tiktoken.MODEL_CL100K_BASE},
-	{"claude-", tiktoken.MODEL_O200K_BASE},
-	{"o1-", tiktoken.MODEL_O200K_BASE},
-	{"o3-", tiktoken.MODEL_O200K_BASE},
-}
-
 // resolveEncodingName maps a model name to a tiktoken encoding name. It
-// consults tiktoken's own model and prefix maps first, then a set of
-// known prefixes (claude-, o1-, o3-, ...). It returns "" when no
-// encoding is known, in which case callers should use FallbackCounter.
+// consults tiktoken's own model and prefix maps first, then the unified
+// model catalog (per-model encodings and encoding_prefixes, which cover
+// claude-, gpt-5, o4, gemini-, ...). It returns "" when no encoding is
+// known, in which case callers should use FallbackCounter.
 func resolveEncodingName(model string) string {
 	if name, ok := tiktoken.MODEL_TO_ENCODING[model]; ok {
 		return name
@@ -66,12 +52,7 @@ func resolveEncodingName(model string) string {
 			return name
 		}
 	}
-	for _, m := range customPrefixEncodings {
-		if strings.HasPrefix(model, m.prefix) {
-			return m.encoding
-		}
-	}
-	return ""
+	return modelcatalog.Default().Encoding(model)
 }
 
 // getEncoder returns a cached tiktoken encoder for the given encoding

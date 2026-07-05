@@ -1,6 +1,10 @@
 package model
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/PedroMosquera/squadai/internal/domain"
+)
 
 func TestParseTier_ValidValues(t *testing.T) {
 	cases := []struct {
@@ -50,5 +54,43 @@ func TestTierString(t *testing.T) {
 func TestDefaultTier(t *testing.T) {
 	if DefaultTier() != TierStandard {
 		t.Errorf("DefaultTier() = %q, want %q", DefaultTier(), TierStandard)
+	}
+}
+
+func TestTierFromModelTier(t *testing.T) {
+	cases := []struct {
+		input domain.ModelTier
+		want  Tier
+	}{
+		{domain.ModelTierBalanced, TierStandard},
+		{domain.ModelTierPerformance, TierPremium},
+		{domain.ModelTierStarter, TierCheap},
+		{domain.ModelTierManual, TierStandard},
+		{domain.ModelTier(""), TierStandard},
+		{domain.ModelTier("bogus"), TierStandard},
+	}
+	for _, tc := range cases {
+		if got := TierFromModelTier(tc.input); got != tc.want {
+			t.Errorf("TierFromModelTier(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestTierFromProfile(t *testing.T) {
+	cases := []struct {
+		input string
+		want  Tier
+	}{
+		{"cheap", TierCheap},
+		{"balanced", TierStandard},
+		{"premium", TierPremium},
+		{"PREMIUM", TierPremium},
+		{"", TierStandard},
+		{"bogus", TierStandard},
+	}
+	for _, tc := range cases {
+		if got := TierFromProfile(tc.input); got != tc.want {
+			t.Errorf("TierFromProfile(%q) = %q, want %q", tc.input, got, tc.want)
+		}
 	}
 }
