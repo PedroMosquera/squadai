@@ -135,6 +135,16 @@ func (v *Verifier) VerifyWithSet(set *bundle.Set, cfg *domain.MergedConfig, adap
 			tagResults(results, "workflows")
 			collectResults(report, results)
 		}
+
+		// Efficiency component (default ON when the config key is absent).
+		if set.Efficiency != nil && bundle.EfficiencyEnabled(cfg) {
+			results, err := set.Efficiency.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			tagResults(results, "efficiency")
+			collectResults(report, results)
+		}
 	}
 
 	// Verify copilot instructions.
