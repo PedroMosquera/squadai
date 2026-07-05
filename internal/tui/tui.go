@@ -26,15 +26,23 @@ import (
 // Ensure badgeDisabledStyle is used (it renders unchecked checkboxes).
 var _ = badgeDisabledStyle
 
+// allCanonicalAgents lists every supported agent in fixed display order.
+var allCanonicalAgents = []domain.AgentID{
+	domain.AgentOpenCode,
+	domain.AgentClaudeCode,
+	domain.AgentVSCodeCopilot,
+	domain.AgentCursor,
+	domain.AgentWindsurf,
+	domain.AgentPi,
+}
+
 // screen tracks which screen is active.
 type screen int
 
 const (
-	screenIntro screen = iota
-	screenMenu
+	screenMenu screen = iota
 	screenRunning
 	screenResult
-	screenInitScope // first screen in init wizard: repo vs global
 	screenInitMethodology
 	screenTeamStatus
 	screenInitMCP
@@ -53,30 +61,12 @@ const (
 	screenDoctor              // pre-flight diagnostics screen
 	screenWatch               // live drift monitor
 	screenAudit               // governance audit log
+	screenQuickAgents         // quick track Q1: which AI tools do you use
+	screenQuickStyle          // quick track Q2: how do you like to work
+	screenQuickExtras         // quick track Q3: optional extras
+	screenQuickSummary        // quick track Q4: ready to set up
+	screenQuickDone           // quick track: post-apply success screen
 )
-
-// menuItem is a selectable action.
-type menuItem struct {
-	label       string
-	command     string // CLI command name
-	description string // shown when item is highlighted
-}
-
-var menuItems = []menuItem{
-	{label: "Init / Setup", command: "init", description: "Configure agents, MCP servers, and team methodology for this project"},
-	{label: "Plan (dry-run)", command: "plan", description: "Preview what files would be created or updated without making changes"},
-	{label: "Apply", command: "apply", description: "Write all planned config files to disk (agents, MCP, rules, etc.)"},
-	{label: "Team Status", command: "team-status", description: "Show which agents are configured and their team role assignments"},
-	{label: "Doctor", command: "doctor", description: "Run pre-flight diagnostics: environment, agents, config, MCP, filesystem"},
-	{label: "Browse Skills", command: "skills", description: "Explore and install community skills (code review, testing, etc.)"},
-	{label: "Verify", command: "verify", description: "Check that all generated files match the expected configuration"},
-	{label: "Restore Backup", command: "restore", description: "Restore files from a backup created before apply or remove"},
-	{label: "Remove SquadAI Config", command: "remove", description: "Delete all SquadAI-managed files and the .squadai directory"},
-	{label: "Watch (drift monitor)", command: "watch", description: "Monitor managed files for drift in real time"},
-	{label: "Audit Log", command: "audit", description: "View the governance audit log (.squadai/audit.log)"},
-	{label: "CLI Commands", command: "cli-help", description: "Show available CLI commands for scripting and CI/CD pipelines"},
-	{label: "Quit", command: "quit", description: "Exit SquadAI"},
-}
 
 // skillEntry is a single skill in the curated catalog.
 type skillEntry struct {
@@ -196,20 +186,40 @@ type Model struct {
 	auditEvents []governance.Event
 	auditErr    error
 	auditScroll int
+
+	// Quick-track state.
+	quickExtras map[string]bool // extras selection keyed by quickExtraOptions key
+	quickMerge  bool            // re-run from menu: pass --merge to init
+	quickFlow   bool            // apply currently chained from quick setup
 }
 
 // NewModel creates a TUI model with the given state.
 func NewModel(version string, mode domain.OperationalMode, adapters []domain.Adapter, homeDir string) Model {
 	return Model{
-		version:             version,
-		mode:                mode,
-		adapters:            adapters,
-		homeDir:             homeDir,
-		screen:              screenIntro,
-		modelTier:           domain.ModelTierBalanced,
-		permissionsEnabled:  true, // security overlay is on by default
-		projectMemoryEnabled: true, // memory scaffold is on by default
+		version:               version,
+		mode:                  mode,
+		adapters:              adapters,
+		homeDir:               homeDir,
+		screen:                screenMenu,
+		cursor:                firstSelectableMenuRow(),
+		modelTier:             domain.ModelTierBalanced,
+		permissionsEnabled:    true, // security overlay is on by default
+		projectMemoryEnabled:  true, // memory scaffold is on by default
+		projectMemoryScaffold: true, // scaffold docs/memory unless the user declines
 	}
+}
+
+// initialScreen decides which screen the TUI starts on. First run (no
+// .squadai/project.json in the working directory) starts the quick setup
+// track; an initialized project lands on the grouped menu.
+func initialScreen(cwd string) screen {
+	if cwd == "" {
+		return screenQuickAgents
+	}
+	if _, err := os.Stat(filepath.Join(cwd, ".squadai", "project.json")); err == nil {
+		return screenMenu
+	}
+	return screenQuickAgents
 }
 
 // commandResult carries the output of a CLI command execution.
@@ -259,6 +269,9 @@ type auditLoadedMsg struct {
 // check so the badge is always fresh when the user lands on the menu.
 func (m Model) toMenu() (Model, tea.Cmd) {
 	m.screen = screenMenu
+	if rows := menuRows(); m.cursor < 0 || m.cursor >= len(rows) || !rows[m.cursor].selectable() {
+		m.cursor = firstSelectableMenuRow()
+	}
 	m.driftBadgeReady = false
 	return m, m.runDriftBadgeCmd()
 }
@@ -275,8 +288,12 @@ func listenForPipelineEvent(ch <-chan pipeline.Event) tea.Cmd {
 	}
 }
 
-// Init is the bubbletea init function.
+// Init is the bubbletea init function. When starting directly on the menu
+// (initialized project) it fires the background drift check for the badge.
 func (m Model) Init() tea.Cmd {
+	if m.screen == screenMenu {
+		return m.runDriftBadgeCmd()
+	}
 	return nil
 }
 
@@ -292,6 +309,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commandResult:
 		m.output = msg.output
 		m.err = msg.err
+		if m.quickFlow {
+			// Apply finished as part of the quick setup chain.
+			m.quickFlow = false
+			if msg.err == nil {
+				m.screen = screenQuickDone
+			} else {
+				m.screen = screenResult
+			}
+			return m, nil
+		}
 		if m.initJustCompleted && msg.err == nil {
 			// Init succeeded — offer the apply-now prompt.
 			m.initOutput = msg.output
@@ -302,6 +329,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = screenResult
 		}
 		return m, nil
+	case quickInitDoneMsg:
+		if msg.err != nil {
+			m.quickFlow = false
+			m.output = msg.output
+			m.err = msg.err
+			m.screen = screenResult
+			return m, nil
+		}
+		// Init succeeded — chain apply with live progress.
+		m.initOutput = msg.output
+		m.screen = screenRunning
+		cmd := m.runApplyWithProgress()
+		return m, cmd
 	case doctorCheckResult:
 		m.doctorResults = msg.results
 		// Stay on screenDoctor (was already set when cmd was launched).
@@ -358,87 +398,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.screen {
-	case screenIntro:
-		// Any key advances to menu.
-		return m.toMenu()
-
 	case screenMenu:
-		switch key {
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down", "j":
-			if m.cursor < len(menuItems)-1 {
-				m.cursor++
-			}
-		case "enter":
-			selected := menuItems[m.cursor].command
-			switch selected {
-			case "init":
-				m.screen = screenInitScope
-				m.initCursor = 0
-				return m, nil
-			case "team-status":
-				m.screen = screenTeamStatus
-				return m, nil
-			case "doctor":
-				m.doctorResults = nil
-				m.doctorFixMsg = ""
-				m.screen = screenDoctor
-				return m, m.runDoctorCmd()
-			case "skills":
-				cat, err := loadSkillCatalog()
-				m.skillCat = cat
-				m.skillCatErr = err
-				m.skillCatCursor = 0
-				m.skillScrollIndex = 0
-				m.screen = screenSkillBrowser
-				return m, nil
-			case "quit":
-				m.quitting = true
-				return m, tea.Quit
-			case "restore":
-				// Restore requires an ID — show prompt in output.
-				m.output = "Use CLI: squadai restore <backup-id>\n\nRestore requires a backup ID argument.\nRun 'squadai backup list' to see available backups."
-				m.err = nil
-				m.screen = screenResult
-				return m, nil
-			case "remove":
-				// Build a dry-run preview to show on the confirmation screen.
-				m.removePreview = buildRemovePreview(m.homeDir)
-				m.screen = screenRemoveConfirm
-				return m, nil
-			case "watch":
-				m.watchResults = nil
-				m.watchChecking = true
-				m.watchLastAt = time.Time{}
-				m.screen = screenWatch
-				return m, m.runWatchDriftCmd()
-			case "audit":
-				m.auditEvents = nil
-				m.auditErr = nil
-				m.auditScroll = 0
-				m.screen = screenAudit
-				return m, m.loadAuditCmd()
-			case "cli-help":
-				m.output = cliHelpText()
-				m.err = nil
-				m.screen = screenResult
-				return m, nil
-			default:
-				m.screen = screenRunning
-				m.output = ""
-				m.err = nil
-				if selected == "apply" {
-					return m, m.runApplyWithProgress()
-				}
-				return m, m.runCommand(selected)
-			}
-		case "q":
-			m.quitting = true
-			return m, tea.Quit
-		}
+		return m.handleMenuKey(key)
+
+	case screenQuickAgents:
+		return m.handleQuickAgentsKey(key)
+
+	case screenQuickStyle:
+		return m.handleQuickStyleKey(key)
+
+	case screenQuickExtras:
+		return m.handleQuickExtrasKey(key)
+
+	case screenQuickSummary:
+		return m.handleQuickSummaryKey(key)
+
+	case screenQuickDone:
+		// Any key returns to the menu.
+		return m.toMenu()
 
 	case screenResult:
 		// Any key returns to menu.
@@ -448,24 +425,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case screenRunning:
 		// Ignore input while running.
-
-	case screenInitScope:
-		switch key {
-		case "up", "k":
-			if m.initCursor > 0 {
-				m.initCursor--
-			}
-		case "down", "j":
-			if m.initCursor < 1 {
-				m.initCursor++
-			}
-		case "enter":
-			m.initCursor = 0
-			m.screen = screenInitPreset
-			return m, nil
-		case "esc":
-			return m.toMenu()
-		}
 
 	case screenInitMethodology:
 		methodologies := []domain.Methodology{
@@ -675,15 +634,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case screenInitAdapters:
-		// All canonical agents in fixed order.
-		allAgents := []domain.AgentID{
-			domain.AgentOpenCode,
-			domain.AgentClaudeCode,
-			domain.AgentVSCodeCopilot,
-			domain.AgentCursor,
-			domain.AgentWindsurf,
-			domain.AgentPi,
-		}
+		allAgents := allCanonicalAgents
 		switch key {
 		case "up", "k":
 			if m.initCursor > 0 {
@@ -757,8 +708,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "esc":
 			m.initCursor = 0
-			m.screen = screenInitScope
-			return m, nil
+			return m.toMenu()
 		}
 
 	case screenInitInstallSummary:
@@ -780,80 +730,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.output = ""
 			m.err = nil
 			m.initJustCompleted = true
-			args := []string{"--methodology=" + string(m.methodology)}
-			// Add model tier.
-			args = append(args, "--model-tier="+string(m.modelTier))
-			// Add MCP selections.
-			var mcpKeys []string
-			for k, selected := range m.mcpSelections {
-				if selected {
-					mcpKeys = append(mcpKeys, k)
-				}
-			}
-			if len(mcpKeys) > 0 {
-				sort.Strings(mcpKeys)
-				args = append(args, "--mcp="+strings.Join(mcpKeys, ","))
-			}
-			// Add plugin selections.
-			var pluginKeys []string
-			for k, selected := range m.pluginSelections {
-				if selected {
-					pluginKeys = append(pluginKeys, k)
-				}
-			}
-			if len(pluginKeys) > 0 {
-				sort.Strings(pluginKeys)
-				args = append(args, "--plugins="+strings.Join(pluginKeys, ","))
-			}
-			// Add preset (when not custom).
-			if m.setupPreset != "" && m.setupPreset != domain.PresetCustom {
-				args = append(args, "--preset="+string(m.setupPreset))
-			}
-			// Add agent filter only when user deselected at least one agent.
-			if m.agentSelections != nil {
-				var selectedIDs []string
-				for id, sel := range m.agentSelections {
-					if sel {
-						selectedIDs = append(selectedIDs, id)
-					}
-				}
-				// Check if all canonical agents are selected; if not, pass --agents=.
-				allCanonical := []string{
-					string(domain.AgentOpenCode),
-					string(domain.AgentClaudeCode),
-					string(domain.AgentVSCodeCopilot),
-					string(domain.AgentCursor),
-					string(domain.AgentWindsurf),
-					string(domain.AgentPi),
-				}
-				selectedSet := make(map[string]bool, len(selectedIDs))
-				for _, id := range selectedIDs {
-					selectedSet[id] = true
-				}
-				allSelected := true
-				for _, id := range allCanonical {
-					if !selectedSet[id] {
-						allSelected = false
-						break
-					}
-				}
-				if !allSelected && len(selectedIDs) > 0 {
-					sort.Strings(selectedIDs)
-					args = append(args, "--agents="+strings.Join(selectedIDs, ","))
-				}
-			}
-			// Pass claude default agent flag when opted in.
-			if m.setClaudeDefaultAgent {
-				args = append(args, "--set-claude-default-agent")
-			}
-			// Pass permissions flag.
-			if !m.permissionsEnabled {
-				args = append(args, "--no-permissions")
-			}
-			// Pass memory flag.
-			if !m.projectMemoryEnabled {
-				args = append(args, "--without-memory")
-			}
+			args := m.buildInitArgs()
 			return m, func() tea.Msg {
 				var buf bytes.Buffer
 				err := cli.RunInit(args, &buf)
@@ -995,6 +872,93 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// buildInitArgs assembles the `squadai init` argument list from the model's
+// wizard state. Shared by the advanced install summary and the quick track.
+func (m Model) buildInitArgs() []string {
+	var args []string
+	if m.methodology != "" {
+		args = append(args, "--methodology="+string(m.methodology))
+	}
+	if m.modelTier != "" {
+		args = append(args, "--model-tier="+string(m.modelTier))
+	}
+	// Add MCP selections. A non-nil selection map with nothing checked means
+	// the user explicitly wants no MCP servers (--mcp=none); omitting the flag
+	// would enable all recommended servers.
+	if m.mcpSelections != nil {
+		var mcpKeys []string
+		for k, selected := range m.mcpSelections {
+			if selected {
+				mcpKeys = append(mcpKeys, k)
+			}
+		}
+		if len(mcpKeys) > 0 {
+			sort.Strings(mcpKeys)
+			args = append(args, "--mcp="+strings.Join(mcpKeys, ","))
+		} else {
+			args = append(args, "--mcp=none")
+		}
+	}
+	// Add plugin selections.
+	var pluginKeys []string
+	for k, selected := range m.pluginSelections {
+		if selected {
+			pluginKeys = append(pluginKeys, k)
+		}
+	}
+	if len(pluginKeys) > 0 {
+		sort.Strings(pluginKeys)
+		args = append(args, "--plugins="+strings.Join(pluginKeys, ","))
+	}
+	// Add preset (when not custom).
+	if m.setupPreset != "" && m.setupPreset != domain.PresetCustom {
+		args = append(args, "--preset="+string(m.setupPreset))
+	}
+	// Add agent filter only when user deselected at least one agent.
+	if m.agentSelections != nil {
+		var selectedIDs []string
+		for id, sel := range m.agentSelections {
+			if sel {
+				selectedIDs = append(selectedIDs, id)
+			}
+		}
+		// Check if all canonical agents are selected; if not, pass --agents=.
+		selectedSet := make(map[string]bool, len(selectedIDs))
+		for _, id := range selectedIDs {
+			selectedSet[id] = true
+		}
+		allSelected := true
+		for _, id := range allCanonicalAgents {
+			if !selectedSet[string(id)] {
+				allSelected = false
+				break
+			}
+		}
+		if !allSelected && len(selectedIDs) > 0 {
+			sort.Strings(selectedIDs)
+			args = append(args, "--agents="+strings.Join(selectedIDs, ","))
+		}
+	}
+	// Pass claude default agent flag when opted in.
+	if m.setClaudeDefaultAgent {
+		args = append(args, "--set-claude-default-agent")
+	}
+	// Pass permissions flag.
+	if !m.permissionsEnabled {
+		args = append(args, "--no-permissions")
+	}
+	// Pass memory flags: disabled entirely, or enabled without the scaffold.
+	if !m.projectMemoryEnabled {
+		args = append(args, "--without-memory")
+	} else if !m.projectMemoryScaffold {
+		args = append(args, "--no-memory-scaffold")
+	}
+	if m.quickMerge {
+		args = append(args, "--merge")
+	}
+	return args
+}
+
 func (m Model) runCommand(command string) tea.Cmd {
 	return func() tea.Msg {
 		var buf bytes.Buffer
@@ -1105,8 +1069,6 @@ func (m Model) View() string {
 // viewBody dispatches to the screen-specific view function.
 func (m Model) viewBody() string {
 	switch m.screen {
-	case screenIntro:
-		return m.viewIntro()
 	case screenMenu:
 		return m.viewMenu()
 	case screenRunning:
@@ -1115,8 +1077,16 @@ func (m Model) viewBody() string {
 		return m.viewResult()
 	case screenInitMethodology:
 		return m.viewInitMethodology()
-	case screenInitScope:
-		return m.viewInitScope()
+	case screenQuickAgents:
+		return m.viewQuickAgents()
+	case screenQuickStyle:
+		return m.viewQuickStyle()
+	case screenQuickExtras:
+		return m.viewQuickExtras()
+	case screenQuickSummary:
+		return m.viewQuickSummary()
+	case screenQuickDone:
+		return m.viewQuickDone()
 	case screenTeamStatus:
 		return m.viewTeamStatus()
 	case screenInitMCP:
@@ -1153,68 +1123,6 @@ func (m Model) viewBody() string {
 		return m.viewAudit()
 	}
 	return ""
-}
-
-func (m Model) viewIntro() string {
-	var b strings.Builder
-
-	// Adapter list panel
-	b.WriteString(headingStyle.Render("Detected Agents"))
-	b.WriteString("\n")
-	var adapterContent strings.Builder
-	if len(m.adapters) == 0 {
-		adapterContent.WriteString("  (none detected)")
-	} else {
-		for _, a := range m.adapters {
-			name := agentDisplayName(a.ID())
-			adapterContent.WriteString(fmt.Sprintf("  %s\n", name))
-		}
-	}
-	b.WriteString(m.renderPanel(strings.TrimRight(adapterContent.String(), "\n")))
-	b.WriteString("\n\n")
-
-	b.WriteString(mutedStyle.Render("Press any key to continue."))
-	return b.String()
-}
-
-func (m Model) viewMenu() string {
-	var menuContent strings.Builder
-	menuContent.WriteString(headingStyle.Render("Main Menu") + "\n\n")
-
-	for i, item := range menuItems {
-		if i == m.cursor {
-			menuContent.WriteString(activeStyle.Render("> "+item.label) + "\n")
-		} else {
-			menuContent.WriteString("  " + item.label + "\n")
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString(m.renderPanel(strings.TrimRight(menuContent.String(), "\n")))
-	b.WriteString("\n\n")
-
-	// Show description of highlighted item.
-	if m.cursor >= 0 && m.cursor < len(menuItems) {
-		b.WriteString(mutedStyle.Render(menuItems[m.cursor].description))
-		b.WriteString("\n")
-	}
-
-	// Drift badge.
-	b.WriteString(m.renderDriftBadge())
-	b.WriteString("\n")
-
-	b.WriteString(mutedStyle.Render("↑/↓: navigate  enter: select  q: quit"))
-	return b.String()
-}
-
-func (m Model) renderDriftBadge() string {
-	if !m.driftBadgeReady {
-		return mutedStyle.Render("  drift: checking…")
-	}
-	if m.driftBadgeCount == 0 {
-		return successStyle.Render("  ✓ no drift")
-	}
-	return authBadgeStyle.Render(fmt.Sprintf("  ⚠ %d file(s) drifted — run verify --strict or doctor", m.driftBadgeCount))
 }
 
 func (m Model) viewRunning() string {
@@ -1307,35 +1215,6 @@ func (m Model) viewResult() string {
 	b.WriteString(m.renderPanel(strings.TrimRight(resultContent.String(), "\n")))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render("Press any key to return to menu."))
-	return b.String()
-}
-
-// viewInitScope renders the scope selection screen (This Repo vs Global).
-func (m Model) viewInitScope() string {
-	scopes := []struct {
-		label string
-		desc  string
-	}{
-		{"This Repo", "Configure agents for the current project only"},
-		{"Global", "Configure agents globally for all projects"},
-	}
-
-	var content strings.Builder
-	content.WriteString(headingStyle.Render("Setup Scope") + "\n\n")
-	content.WriteString("Where do you want to apply the configuration?\n\n")
-
-	for i, s := range scopes {
-		if i == m.initCursor {
-			content.WriteString(activeStyle.Render("> "+s.label) + "  " + activeStyle.Render(s.desc) + "\n")
-		} else {
-			content.WriteString("  " + s.label + "  " + s.desc + "\n")
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString(m.renderPanel(strings.TrimRight(content.String(), "\n")))
-	b.WriteString("\n\n")
-	b.WriteString(mutedStyle.Render("↑/↓: navigate   enter: select   esc: back"))
 	return b.String()
 }
 
@@ -1543,9 +1422,9 @@ func (m Model) viewInitMCP() string {
 
 		var nameStr string
 		if i == m.initCursor {
-			nameStr = activeStyle.Render(server.Name)
+			nameStr = activeStyle.Render(server.Display())
 		} else {
-			nameStr = server.Name
+			nameStr = server.Display()
 		}
 
 		content.WriteString(fmt.Sprintf("  %s %s\n", checked, nameStr))
@@ -1555,6 +1434,12 @@ func (m Model) viewInitMCP() string {
 		}
 		content.WriteString(mutedStyle.Render("      "+desc) + "\n")
 		content.WriteString("\n")
+	}
+
+	// Conflict note: the community knowledge-graph server overlaps with
+	// SquadAI Project Memory. Warn when both would end up enabled.
+	if m.mcpSelections != nil && m.mcpSelections["memory"] && m.projectMemoryEnabled {
+		content.WriteString(authBadgeStyle.Render("note: both memory systems enabled — they don't share data") + "\n")
 	}
 
 	var b strings.Builder
@@ -1671,15 +1556,7 @@ func (m Model) viewInitModelTier() string {
 
 // viewInitAdapters renders the agent selection checkbox screen.
 func (m Model) viewInitAdapters() string {
-	// All canonical agents in fixed order.
-	allAgents := []domain.AgentID{
-		domain.AgentOpenCode,
-		domain.AgentClaudeCode,
-		domain.AgentVSCodeCopilot,
-		domain.AgentCursor,
-		domain.AgentWindsurf,
-		domain.AgentPi,
-	}
+	allAgents := allCanonicalAgents
 
 	// Build a set of detected agent IDs for quick lookup.
 	detectedSet := make(map[string]bool, len(m.adapters))
@@ -1824,14 +1701,7 @@ func (m Model) viewInitInstallSummary() string {
 	content.WriteString(headingStyle.Render("Agents") + "\n")
 
 	// List all canonical agents; show only selected ones.
-	allAgents := []domain.AgentID{
-		domain.AgentOpenCode,
-		domain.AgentClaudeCode,
-		domain.AgentVSCodeCopilot,
-		domain.AgentCursor,
-		domain.AgentWindsurf,
-		domain.AgentPi,
-	}
+	allAgents := allCanonicalAgents
 
 	hasAny := false
 	for _, agentID := range allAgents {
@@ -2000,6 +1870,14 @@ func Run(version string) error {
 	adapters := cli.DetectAdapters(homeDir)
 
 	model := NewModel(version, merged.Mode, adapters, homeDir)
+
+	// First run (no project config in cwd) starts on the quick setup track;
+	// an initialized project lands on the grouped menu.
+	cwd, _ := os.Getwd()
+	if initialScreen(cwd) == screenQuickAgents {
+		model = model.startQuickSetup(false)
+	}
+
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = p.Run()
 	return err

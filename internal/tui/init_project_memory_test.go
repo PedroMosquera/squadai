@@ -281,7 +281,7 @@ func TestNewModel_ProjectMemoryEnabledByDefault(t *testing.T) {
 	if !m.projectMemoryEnabled {
 		t.Error("projectMemoryEnabled should be true by default")
 	}
-	if m.projectMemoryScaffold {
-		t.Error("projectMemoryScaffold should be false by default")
+	if !m.projectMemoryScaffold {
+		t.Error("projectMemoryScaffold should be true by default (scaffold unless declined)")
 	}
 }
