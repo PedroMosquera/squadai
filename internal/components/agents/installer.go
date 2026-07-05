@@ -307,7 +307,13 @@ func (i *Installer) planNativeAgentFile(adapter domain.Adapter, agentsDir, roleN
 	stripped = marker.InjectSection(stripped, memorySectionID, "")
 	existingWithoutRefinement := strings.TrimRight(stripped, "\n")
 
-	if existingWithoutRefinement == strings.TrimRight(content, "\n") {
+	// The memory-protocol block is compared separately: when the protocol asset
+	// or the profile memory scope changes, the file needs a rewrite even though
+	// the body is unchanged.
+	memoryCurrent := marker.ExtractSection(string(existing), memorySectionID) ==
+		i.desiredNativeMemoryContent(adapter.ID(), roleName)
+
+	if existingWithoutRefinement == strings.TrimRight(content, "\n") && memoryCurrent {
 		return domain.PlannedAction{
 			ID:          actionID,
 			Agent:       adapter.ID(),
@@ -355,8 +361,10 @@ func (i *Installer) planPromptDelegation(adapter domain.Adapter, homeDir, projec
 		return nil, fmt.Errorf("read rules file: %w", err)
 	}
 
-	// Use marker.InjectSection to compute the desired file content.
+	// Use marker.InjectSection to compute the desired file content, including
+	// the memory-protocol section (cleared when the memory component owns it).
 	desired := marker.InjectSection(string(existing), teamSectionID, rendered)
+	desired = i.injectRulesMemoryProtocol(desired, adapter.ID())
 
 	if string(existing) == desired {
 		return []domain.PlannedAction{{
@@ -407,6 +415,7 @@ func (i *Installer) planSoloAgent(adapter domain.Adapter, homeDir, projectDir st
 	}
 
 	desired := marker.InjectSection(string(existing), teamSectionID, rendered)
+	desired = i.injectRulesMemoryProtocol(desired, adapter.ID())
 
 	if string(existing) == desired {
 		return []domain.PlannedAction{{
@@ -527,12 +536,9 @@ func (i *Installer) applyNativeAgent(action domain.PlannedAction) error {
 	}
 	translated = marker.InjectSection(translated, refinementSectionID, refinementContent)
 
-	// Inject memory protocol: full block for orchestrator, short stub for subagents.
-	if roleName == "orchestrator" {
-		translated = injectMemoryProtocol(translated, action.Agent)
-	} else {
-		translated = injectMemoryProtocolStub(translated, action.Agent)
-	}
+	// Inject memory protocol: full block for orchestrator, short stub for
+	// subagents; the active context profile's memory scope can downgrade both.
+	translated = i.injectNativeMemoryProtocol(translated, action.Agent, roleName)
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(translated), 0644); err != nil {
 		return fmt.Errorf("write team agent %s: %w", roleName, err)
@@ -583,8 +589,10 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 	}
 	updated = marker.InjectSection(updated, refinementSectionID, refinementContent)
 
-	// Inject the per-adapter memory-protocol block (idempotent).
-	updated = injectMemoryProtocol(updated, action.Agent)
+	// Inject or clear the per-adapter memory-protocol block (idempotent).
+	// When the memory component is enabled it owns the rules-file protocol,
+	// so the duplicate legacy section is removed instead.
+	updated = i.injectRulesMemoryProtocol(updated, action.Agent)
 
 	if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644); err != nil {
 		return fmt.Errorf("write rules file: %w", err)
@@ -908,6 +916,7 @@ func (i *Installer) renderMarkerInjectionContent(action domain.PlannedAction, va
 	}
 
 	updated := marker.InjectSection(string(existing), teamSectionID, rendered)
+	updated = i.injectRulesMemoryProtocol(updated, action.Agent)
 	return updated, nil
 }
 
@@ -1077,14 +1086,68 @@ func injectMemoryProtocol(content string, agentID domain.AgentID) string {
 	return marker.InjectSection(content, memorySectionID, proto)
 }
 
-// injectMemoryProtocolStub injects the short subagent memory-protocol stub.
-// Only injects for adapters that have a full-protocol asset — if an adapter has
-// no memory feature at all, we skip the stub too.
-func injectMemoryProtocolStub(content string, agentID domain.AgentID) string {
-	if memoryProtocolAsset(agentID) == "" {
-		return content
+// profileMemoryScope returns the active context profile's memory scope, or ""
+// when no profile is active.
+func (i *Installer) profileMemoryScope() string {
+	if i.config == nil || i.config.ActiveContextProfile == nil {
+		return ""
 	}
-	return marker.InjectSection(content, memorySectionID, memoryProtocolSubagentStub)
+	return i.config.ActiveContextProfile.MemoryScope
+}
+
+// memoryComponentEnabled reports whether the merged config enables the memory
+// component.
+func (i *Installer) memoryComponentEnabled() bool {
+	if i.config == nil {
+		return false
+	}
+	c, ok := i.config.Components[string(domain.ComponentMemory)]
+	return ok && c.Enabled
+}
+
+// injectRulesMemoryProtocol computes the memory-protocol section for a rules
+// file (prompt/solo delegation). When the memory component is enabled it owns
+// the rules-file protocol, so the legacy duplicate section is cleared here —
+// team-mode users must end up with exactly one memory protocol per rules file.
+// A profile memory scope of "none" clears it too. Full injection is kept only
+// when the memory component is disabled.
+func (i *Installer) injectRulesMemoryProtocol(content string, agentID domain.AgentID) string {
+	if i.profileMemoryScope() == "none" || i.memoryComponentEnabled() {
+		return marker.InjectSection(content, memorySectionID, "")
+	}
+	return injectMemoryProtocol(content, agentID)
+}
+
+// desiredNativeMemoryContent returns the memory-protocol block a native agent
+// file should carry: full protocol for the orchestrator, the short stub for
+// sub-agents, and profile-scope overrides (summary → stub everywhere, none →
+// no block at all). Empty string means the section should be absent.
+func (i *Installer) desiredNativeMemoryContent(agentID domain.AgentID, roleName string) string {
+	assetPath := memoryProtocolAsset(agentID)
+	if assetPath == "" {
+		return ""
+	}
+	switch i.profileMemoryScope() {
+	case "none":
+		return ""
+	case "summary":
+		return memoryProtocolSubagentStub
+	}
+	if roleName == "orchestrator" {
+		proto, err := assets.Read(assetPath)
+		if err != nil {
+			return ""
+		}
+		return proto
+	}
+	return memoryProtocolSubagentStub
+}
+
+// injectNativeMemoryProtocol injects (or clears) the memory-protocol block in
+// a native agent file according to desiredNativeMemoryContent.
+func (i *Installer) injectNativeMemoryProtocol(content string, agentID domain.AgentID, roleName string) string {
+	return marker.InjectSection(content, memorySectionID,
+		i.desiredNativeMemoryContent(agentID, roleName))
 }
 
 func sortedKeys(m map[string]domain.AgentDef) []string {

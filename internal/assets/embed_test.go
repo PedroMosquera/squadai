@@ -13,9 +13,9 @@ func TestAllMemoryFilesReadable(t *testing.T) {
 		path     string
 		contains string
 	}{
-		{"memory/opencode.md", "AGENTS.md"},
-		{"memory/claude.md", "CLAUDE.md"},
-		{"memory/generic.md", "persistent memory tools"},
+		{"memory/opencode.md", "docs/memory/"},
+		{"memory/claude.md", "docs/memory/"},
+		{"memory/generic.md", "squadai memory search"},
 	}
 
 	for _, f := range files {

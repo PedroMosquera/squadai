@@ -494,6 +494,7 @@ var knownComponents = map[string]struct{}{
 	string(domain.ComponentPermissions): {},
 	string(domain.ComponentHooks):       {},
 	string(domain.ComponentBrand):       {},
+	string(domain.ComponentEfficiency):  {},
 }
 
 func isKnownAdapter(name string) bool {
