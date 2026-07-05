@@ -12,14 +12,17 @@ import (
 )
 
 // Usage holds aggregated token usage and cost for a single model or
-// for the grand total across all models.
+// for the grand total across all models. Cache counters are populated
+// from Claude Code transcripts; other sources report zero.
 type Usage struct {
-	Model         string  `json:"model"`
-	InputTokens   int     `json:"input_tokens"`
-	OutputTokens  int     `json:"output_tokens"`
-	TotalTokens   int     `json:"total_tokens"`
-	EstimatedCost float64 `json:"estimated_cost_usd"`
-	SessionCount  int     `json:"session_count"`
+	Model               string  `json:"model"`
+	InputTokens         int     `json:"input_tokens"`
+	OutputTokens        int     `json:"output_tokens"`
+	CacheReadTokens     int     `json:"cache_read_tokens"`
+	CacheCreationTokens int     `json:"cache_creation_tokens"`
+	TotalTokens         int     `json:"total_tokens"`
+	EstimatedCost       float64 `json:"estimated_cost_usd"`
+	SessionCount        int     `json:"session_count"`
 }
 
 // Aggregation is the result of Aggregate, broken down per model plus a
@@ -72,14 +75,18 @@ func Aggregate(homeDir string, opts AggregateOptions) (*Aggregation, error) {
 	for _, rel := range sessionDirs {
 		walkSessions(filepath.Join(homeDir, rel), cutoff, agg)
 	}
+	scanClaudeSessions(homeDir, cutoff, opts.ProjectDir, agg)
 
 	for model, u := range agg.ByModel {
 		u.Model = model
 		u.TotalTokens = u.InputTokens + u.OutputTokens
-		u.EstimatedCost = pricing.EstimateCost(model, u.InputTokens, u.OutputTokens)
+		u.EstimatedCost = pricing.EstimateCostWithCache(model,
+			u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheCreationTokens)
 		agg.ByModel[model] = u
 		agg.Total.InputTokens += u.InputTokens
 		agg.Total.OutputTokens += u.OutputTokens
+		agg.Total.CacheReadTokens += u.CacheReadTokens
+		agg.Total.CacheCreationTokens += u.CacheCreationTokens
 		agg.Total.TotalTokens += u.TotalTokens
 		agg.Total.EstimatedCost += u.EstimatedCost
 		agg.Total.SessionCount += u.SessionCount
