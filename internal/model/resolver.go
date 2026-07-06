@@ -44,6 +44,10 @@ func NewVSCodeResolver() Resolver { return ForAgent(domain.AgentVSCodeCopilot) }
 // Uses provider-qualified names like OpenCode (anthropic/...).
 func NewPiResolver() Resolver { return ForAgent(domain.AgentPi) }
 
+// NewCodexResolver returns a Resolver for the OpenAI Codex CLI.
+// Uses bare OpenAI model names (gpt-5.2, gpt-5-mini).
+func NewCodexResolver() Resolver { return ForAgent(domain.AgentCodex) }
+
 // ForAgent returns the Resolver appropriate for the given adapter ID, backed
 // by the process-default model catalog. Unknown agent IDs fall back to the
 // OpenCode tier mapping inside the catalog.

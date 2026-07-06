@@ -479,6 +479,7 @@ var knownAdapters = map[string]struct{}{
 	string(domain.AgentCursor):        {},
 	string(domain.AgentWindsurf):      {},
 	string(domain.AgentPi):            {},
+	string(domain.AgentCodex):         {},
 }
 
 var knownComponents = map[string]struct{}{

@@ -10,6 +10,7 @@ const (
 	AgentCursor        AgentID = "cursor"
 	AgentWindsurf      AgentID = "windsurf"
 	AgentPi            AgentID = "pi"
+	AgentCodex         AgentID = "codex"
 )
 
 // Methodology identifies a development methodology preset.
@@ -50,7 +51,7 @@ type DelegationStrategy string
 const (
 	DelegationNativeAgents DelegationStrategy = "native" // OpenCode, Cursor
 	DelegationPromptBased  DelegationStrategy = "prompt" // Claude Code
-	DelegationSoloAgent    DelegationStrategy = "solo"   // VS Code, Windsurf
+	DelegationSoloAgent    DelegationStrategy = "solo"   // VS Code, Windsurf, Codex
 )
 
 // AdapterLane classifies whether an adapter is team-required or personal-optional.

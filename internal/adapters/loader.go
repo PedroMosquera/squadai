@@ -211,6 +211,20 @@ func (o *OverrideAdapter) MCPConfigPath(projectDir string) string {
 	return o.base.MCPConfigPath(projectDir)
 }
 
+// MCPTOMLConfigPath delegates to the base adapter when it exposes a TOML MCP
+// config path (Codex). When a ConfigDir override is set, config.toml is
+// resolved inside the overridden directory. Not all adapters implement this.
+func (o *OverrideAdapter) MCPTOMLConfigPath(homeDir string) string {
+	t, ok := o.base.(interface{ MCPTOMLConfigPath(string) string })
+	if !ok {
+		return ""
+	}
+	if o.spec.ConfigDir != "" {
+		return filepath.Join(o.expandedConfigDir(homeDir), "config.toml")
+	}
+	return t.MCPTOMLConfigPath(homeDir)
+}
+
 // MCPCommandStyle delegates to the base adapter.
 func (o *OverrideAdapter) MCPCommandStyle() string { return o.base.MCPCommandStyle() }
 

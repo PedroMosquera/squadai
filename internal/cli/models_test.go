@@ -102,6 +102,7 @@ func TestModelsForTier_AllTiers_AllAgents_NoNilMaps(t *testing.T) {
 		domain.AgentCursor,
 		domain.AgentWindsurf,
 		domain.AgentPi,
+		domain.AgentCodex,
 	}
 
 	for _, tier := range tiers {

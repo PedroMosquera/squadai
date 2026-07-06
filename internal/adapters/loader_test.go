@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
@@ -330,4 +331,61 @@ func TestEffectivePaths(t *testing.T) {
 
 func TestOverrideAdapter_ImplementsInterface(t *testing.T) {
 	var _ domain.Adapter = (*OverrideAdapter)(nil)
+}
+
+// ─── MCPTOMLConfigPath forwarding ────────────────────────────────────────────
+
+func TestOverrideAdapter_MCPTOMLConfigPath_DelegatesToCodexBase(t *testing.T) {
+	projectDir := t.TempDir()
+	writeOverride(t, projectDir, domain.AgentCodex, OverrideSpec{Delegation: "solo"})
+
+	wrapped, err := ApplyOverride(codex.New(), projectDir)
+	if err != nil {
+		t.Fatalf("ApplyOverride: %v", err)
+	}
+	if _, ok := wrapped.(*OverrideAdapter); !ok {
+		t.Fatal("expected wrapped OverrideAdapter")
+	}
+
+	home := "/Users/test"
+	tc, ok := wrapped.(interface{ MCPTOMLConfigPath(string) string })
+	if !ok {
+		t.Fatal("OverrideAdapter should expose MCPTOMLConfigPath")
+	}
+	want := filepath.Join(home, ".codex", "config.toml")
+	if got := tc.MCPTOMLConfigPath(home); got != want {
+		t.Errorf("MCPTOMLConfigPath = %q, want %q", got, want)
+	}
+}
+
+func TestOverrideAdapter_MCPTOMLConfigPath_ConfigDirOverride(t *testing.T) {
+	projectDir := t.TempDir()
+	writeOverride(t, projectDir, domain.AgentCodex, OverrideSpec{ConfigDir: "~/custom-codex"})
+
+	wrapped, err := ApplyOverride(codex.New(), projectDir)
+	if err != nil {
+		t.Fatalf("ApplyOverride: %v", err)
+	}
+
+	home := "/Users/test"
+	tc := wrapped.(interface{ MCPTOMLConfigPath(string) string })
+	want := filepath.Join(home, "custom-codex", "config.toml")
+	if got := tc.MCPTOMLConfigPath(home); got != want {
+		t.Errorf("MCPTOMLConfigPath = %q, want %q", got, want)
+	}
+}
+
+func TestOverrideAdapter_MCPTOMLConfigPath_NonTOMLBase_Empty(t *testing.T) {
+	projectDir := t.TempDir()
+	writeOverride(t, projectDir, domain.AgentOpenCode, OverrideSpec{ConfigDir: "~/custom"})
+
+	wrapped, err := ApplyOverride(opencode.New(), projectDir)
+	if err != nil {
+		t.Fatalf("ApplyOverride: %v", err)
+	}
+
+	tc := wrapped.(interface{ MCPTOMLConfigPath(string) string })
+	if got := tc.MCPTOMLConfigPath("/Users/test"); got != "" {
+		t.Errorf("MCPTOMLConfigPath = %q, want empty for non-TOML base", got)
+	}
 }
