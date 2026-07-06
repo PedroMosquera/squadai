@@ -34,6 +34,7 @@ var allCanonicalAgents = []domain.AgentID{
 	domain.AgentCursor,
 	domain.AgentWindsurf,
 	domain.AgentPi,
+	domain.AgentCodex,
 }
 
 // screen tracks which screen is active.
@@ -1356,6 +1357,8 @@ func agentDisplayName(id domain.AgentID) string {
 		return "Windsurf"
 	case domain.AgentPi:
 		return "Pi"
+	case domain.AgentCodex:
+		return "Codex"
 	default:
 		return string(id)
 	}

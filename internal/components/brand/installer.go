@@ -253,6 +253,8 @@ func templateForAgentID(agentID domain.AgentID) string {
 		return assets.MustRead("brand/banner-claude-code.txt")
 	case domain.AgentCursor:
 		return assets.MustRead("brand/banner-cursor.txt")
+	case domain.AgentCodex:
+		return assets.MustRead("brand/banner-codex.txt")
 	default:
 		return assets.MustRead("brand/banner-squadai.txt")
 	}

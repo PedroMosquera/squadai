@@ -40,6 +40,10 @@ func TestResolvers_AllTiers(t *testing.T) {
 		{"pi-premium", NewPiResolver(), TierPremium, "anthropic/claude-fable-5"},
 		{"pi-standard", NewPiResolver(), TierStandard, "anthropic/claude-sonnet-4-6"},
 		{"pi-cheap", NewPiResolver(), TierCheap, "anthropic/claude-haiku-4-5"},
+		// CodexResolver
+		{"codex-premium", NewCodexResolver(), TierPremium, "gpt-5.2"},
+		{"codex-standard", NewCodexResolver(), TierStandard, "gpt-5.2"},
+		{"codex-cheap", NewCodexResolver(), TierCheap, "gpt-5-mini"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,6 +67,7 @@ func TestForAgent_MapsToCorrectResolver(t *testing.T) {
 		{domain.AgentWindsurf, TierPremium, "claude-fable-5"},
 		{domain.AgentVSCodeCopilot, TierPremium, "gpt-5.2"},
 		{domain.AgentPi, TierPremium, "anthropic/claude-fable-5"},
+		{domain.AgentCodex, TierPremium, "gpt-5.2"},
 	}
 	for _, tc := range cases {
 		got := ForAgent(tc.agentID).Resolve(tc.tier)

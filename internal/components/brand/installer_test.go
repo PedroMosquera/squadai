@@ -48,6 +48,7 @@ func TestTemplateForAgentID(t *testing.T) {
 		{"cursor", domain.AgentCursor, "brand/banner-cursor.txt"},
 		{"windsurf", domain.AgentWindsurf, "brand/banner-squadai.txt"},
 		{"vscode", domain.AgentVSCodeCopilot, "brand/banner-squadai.txt"},
+		{"codex", domain.AgentCodex, "brand/banner-codex.txt"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,7 +59,8 @@ func TestTemplateForAgentID(t *testing.T) {
 			}
 			// Co-branded banners must differ from the standalone banner.
 			if tc.agentID == domain.AgentOpenCode || tc.agentID == domain.AgentPi ||
-				tc.agentID == domain.AgentClaudeCode || tc.agentID == domain.AgentCursor {
+				tc.agentID == domain.AgentClaudeCode || tc.agentID == domain.AgentCursor ||
+				tc.agentID == domain.AgentCodex {
 				if got == standalone {
 					t.Errorf("templateForAgentID(%q) should be co-branded, not the standalone banner", tc.agentID)
 				}
@@ -90,6 +92,7 @@ func TestTemplateForAgentID_ASCIIOnly(t *testing.T) {
 		domain.AgentCursor,
 		domain.AgentWindsurf,
 		domain.AgentVSCodeCopilot,
+		domain.AgentCodex,
 	}
 	for _, id := range agentIDs {
 		t.Run(string(id), func(t *testing.T) {

@@ -260,6 +260,18 @@
         "cheap": "Use the free/default model tier. Premium models are not needed for most tasks."
       }
     },
+    "codex": {
+      "tiers": {
+        "premium": "gpt-5.2",
+        "standard": "gpt-5.2",
+        "cheap": "gpt-5-mini"
+      },
+      "hints": {
+        "premium": "Use GPT-5.2 with high reasoning effort for all tasks.",
+        "standard": "Use GPT-5.2 for everyday work; lower reasoning effort for quick edits.",
+        "cheap": "Use GPT-5 mini for all tasks to minimize cost."
+      }
+    },
     "vscode-copilot": {
       "tiers": {
         "premium": "gpt-5.2",
