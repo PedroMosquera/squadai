@@ -277,10 +277,11 @@ func countSelected(sel map[string]bool) int {
 
 // ─── views ───────────────────────────────────────────────────────────────────
 
-// quickBanner returns the full ASCII wordmark when the panel is wide enough,
-// otherwise the compact monogram used in the header.
+// quickBanner returns the full ASCII team banner when the panel is wide
+// enough for its 56-column art, otherwise the compact monogram used in the
+// header.
 func (m Model) quickBanner() string {
-	if m.panelWidth() >= 50 {
+	if m.panelWidth() >= 60 {
 		if banner, err := assets.Read("brand/banner-squadai.txt"); err == nil {
 			return bannerStyle.Render(banner)
 		}
