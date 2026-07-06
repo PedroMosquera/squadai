@@ -101,8 +101,8 @@ func TestQuickAgents_WideTerminal_ShowsFullBanner(t *testing.T) {
 	m.width = 100
 
 	view := m.View()
-	// A distinctive row of the ASCII wordmark asset.
-	if !strings.Contains(view, `|____/`) {
+	// A distinctive row of the ASCII team-scene asset: the robot teammate.
+	if !strings.Contains(view, `|o o|`) {
 		t.Errorf("wide quick agents view should contain the full ASCII banner, got:\n%s", view)
 	}
 }
