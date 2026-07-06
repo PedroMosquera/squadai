@@ -263,3 +263,68 @@ func TestSummaryComponentTokens(t *testing.T) {
 		t.Errorf("memory stub count suspiciously large: %d", got[domain.ComponentMemory])
 	}
 }
+
+// ─── legacy v0.6.0 default profile migration ─────────────────────────────────
+
+func legacyV060DefaultProfile() domain.ContextProfile {
+	return domain.ContextProfile{
+		MemoryScope:     "project",
+		MCPServers:      []string{"context7"},
+		SkillScopes:     []string{"shared"},
+		MaxApproxTokens: 12000,
+		Include:         []string{"**/*"},
+		Exclude:         []string{".git/**", "node_modules/**", "dist/**"},
+	}
+}
+
+// squadai <= v0.6.0 persisted a restrictive-but-inert "default" profile in
+// every project.json. Now that profiles are enforced, that exact profile must
+// resolve to "no profile" — otherwise every upgrading project gets a silent
+// 12k cap that apply enforces but diff/verify never converge with.
+func TestResolveActiveProfile_LegacyInertDefaultIgnored(t *testing.T) {
+	merged := &domain.MergedConfig{
+		Context: domain.ContextConfig{
+			DefaultProfile: "default",
+			Profiles: map[string]domain.ContextProfile{
+				"default": legacyV060DefaultProfile(),
+			},
+		},
+	}
+	name, prof, err := resolveActiveProfile(merged, "")
+	if err != nil {
+		t.Fatalf("resolveActiveProfile: %v", err)
+	}
+	if name != "" || prof != nil {
+		t.Errorf("legacy inert default profile should resolve to no profile, got name=%q prof=%+v", name, prof)
+	}
+
+	// Explicit --profile=default with the legacy shape is treated the same:
+	// the profile carries no user intent.
+	name, prof, err = resolveActiveProfile(merged, "default")
+	if err != nil {
+		t.Fatalf("resolveActiveProfile(flag): %v", err)
+	}
+	if name != "" || prof != nil {
+		t.Errorf("explicit legacy default should also resolve to no profile, got name=%q", name)
+	}
+}
+
+// A default profile the user has customized in any way is NOT the inert
+// legacy scaffolding and must be enforced.
+func TestResolveActiveProfile_CustomizedDefaultStillEnforced(t *testing.T) {
+	custom := legacyV060DefaultProfile()
+	custom.MaxApproxTokens = 9000 // user picked their own cap
+	merged := &domain.MergedConfig{
+		Context: domain.ContextConfig{
+			DefaultProfile: "default",
+			Profiles:       map[string]domain.ContextProfile{"default": custom},
+		},
+	}
+	name, prof, err := resolveActiveProfile(merged, "")
+	if err != nil {
+		t.Fatalf("resolveActiveProfile: %v", err)
+	}
+	if name != "default" || prof == nil || prof.MaxApproxTokens != 9000 {
+		t.Errorf("customized default profile must be enforced, got name=%q prof=%+v", name, prof)
+	}
+}
