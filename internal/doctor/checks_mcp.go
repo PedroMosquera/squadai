@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -25,7 +26,32 @@ func (d *Doctor) runMCP(_ context.Context) []CheckResult {
 	for _, server := range d.catalog {
 		results = append(results, d.checkMCPServer(server))
 	}
+	results = append(results, d.checkConsoleRegistered())
 	return results
+}
+
+// checkConsoleRegistered nudges projects created before the SquadAI MCP
+// server became a default: when the project configures other MCP servers but
+// not squadai's own, agents cannot call SquadAI from their console. Warn-only
+// with the explicit, non-destructive upgrade path — never mutate the
+// project's server list.
+func (d *Doctor) checkConsoleRegistered() CheckResult {
+	proj, err := config.LoadProject(d.projectDir)
+	if err != nil || proj == nil {
+		return skip(catMCP, "console-registered", "no project config — nothing to check")
+	}
+	if len(proj.MCP) == 0 {
+		return skip(catMCP, "console-registered", "project configures no MCP servers")
+	}
+	if _, ok := proj.MCP[selfMCPServerName]; ok {
+		return pass(catMCP, "console-registered",
+			"SquadAI MCP server is registered — agents can call SquadAI from their console",
+			"")
+	}
+	return warn(catMCP, "console-registered",
+		"SquadAI's own MCP server is not in this project's MCP config (project predates the console default)",
+		"agents cannot run plan/apply/verify/status/memory from inside their console",
+		"squadai init --merge && squadai apply")
 }
 
 // checkMCPServer checks a single catalog MCP server entry.
