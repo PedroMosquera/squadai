@@ -244,6 +244,9 @@ func TestQuickExtras_Defaults(t *testing.T) {
 	if !m.quickExtras["project-memory"] {
 		t.Error("project memory should be pre-checked")
 	}
+	if !m.quickExtras["squadai"] {
+		t.Error("SquadAI in your agent should be pre-checked")
+	}
 	if !m.quickExtras["context7"] {
 		t.Error("live documentation lookup should be pre-checked")
 	}
@@ -285,6 +288,8 @@ func TestQuickExtras_ViewShowsCopy(t *testing.T) {
 		`All optional. You can change these later with "Quick Setup".`,
 		"Project memory",
 		"A shared project notebook your AI tools read and keep up to date.",
+		"SquadAI in your agent",
+		"run SquadAI themselves", // description may be wrapped by the panel
 		"Live documentation lookup",
 		"Lets your tools read up-to-date docs for the libraries you use.",
 		"GitHub access",
@@ -300,7 +305,7 @@ func TestQuickExtras_ViewShowsCopy(t *testing.T) {
 func TestQuickExtras_SpaceToggles(t *testing.T) {
 	m := newQuickModel()
 	m.screen = screenQuickExtras
-	m.initCursor = 2 // github
+	m.initCursor = 3 // github
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	model := updated.(Model)
@@ -532,8 +537,26 @@ func TestBuildInitArgs_QuickExtrasMapToMCP(t *testing.T) {
 	m = m.applyQuickSelections()
 
 	args := m.buildInitArgs()
-	if !containsString(args, "--mcp=context7,github") {
-		t.Errorf("args %v missing --mcp=context7,github", args)
+	if !containsString(args, "--mcp=context7,github,squadai") {
+		t.Errorf("args %v missing --mcp=context7,github,squadai", args)
+	}
+}
+
+// TestBuildInitArgs_SquadaiExtraDeselectable: unchecking the pre-checked
+// SquadAI console extra must drop it from the --mcp list.
+func TestBuildInitArgs_SquadaiExtraDeselectable(t *testing.T) {
+	m := newQuickModel(&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam})
+	m.quickExtras["squadai"] = false
+	m = m.applyQuickSelections()
+
+	args := m.buildInitArgs()
+	if !containsString(args, "--mcp=context7") {
+		t.Errorf("args %v missing --mcp=context7", args)
+	}
+	for _, a := range args {
+		if strings.HasPrefix(a, "--mcp=") && strings.Contains(a, "squadai") {
+			t.Errorf("args %v must not include squadai after deselection", args)
+		}
 	}
 }
 

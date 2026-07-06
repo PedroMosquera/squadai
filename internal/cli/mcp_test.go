@@ -63,6 +63,32 @@ func TestDefaultMCPServers_AllCatalogEntriesPresent(t *testing.T) {
 	}
 }
 
+// TestDefaultMCPServers_SquadaiSelfServer: the catalog's control-plane entry
+// converts into a plain command server def (no env, no URL) usable by every
+// MCP-supporting adapter format.
+func TestDefaultMCPServers_SquadaiSelfServer(t *testing.T) {
+	servers := DefaultMCPServers()
+	def, ok := servers["squadai"]
+	if !ok {
+		t.Fatal("DefaultMCPServers should contain 'squadai' key")
+	}
+	if !def.Enabled {
+		t.Error("squadai should be Enabled by default")
+	}
+	if def.Type != "local" {
+		t.Errorf("squadai Type = %q, want %q", def.Type, "local")
+	}
+	if len(def.Command) != 2 || def.Command[0] != "squadai" || def.Command[1] != "mcp-server" {
+		t.Errorf("squadai Command = %v, want [squadai mcp-server]", def.Command)
+	}
+	if def.URL != "" {
+		t.Errorf("squadai URL = %q, want empty", def.URL)
+	}
+	if len(def.Environment) != 0 {
+		t.Errorf("squadai Environment = %v, want empty", def.Environment)
+	}
+}
+
 func TestDefaultMCPServers_HasContext7(t *testing.T) {
 	servers := DefaultMCPServers()
 	if _, ok := servers["context7"]; !ok {

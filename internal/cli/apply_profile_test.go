@@ -107,6 +107,43 @@ func TestApplyProfileToConfig_MCPFilter(t *testing.T) {
 	})
 }
 
+// TestApplyProfileToConfig_BuiltinProfilesKeepSquadai: switching to any
+// built-in profile with an explicit MCP filter must keep the SquadAI
+// control-plane server so agents never lose console access; review and cheap
+// intentionally drop all MCP, squadai included.
+func TestApplyProfileToConfig_BuiltinProfilesKeepSquadai(t *testing.T) {
+	tests := []struct {
+		profile     string
+		wantSquadai bool
+	}{
+		{"debug", true},
+		{"feature", true},
+		{"docs", true},
+		{"incident", true},
+		{"review", false},
+		{"cheap", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.profile, func(t *testing.T) {
+			merged := profileTestConfig()
+			merged.MCP = DefaultMCPServers()
+			merged.Context = domain.DefaultContextConfig()
+
+			prof, ok := merged.Context.Profiles[tc.profile]
+			if !ok {
+				t.Fatalf("built-in profile %q missing", tc.profile)
+			}
+			applyProfileToConfig(merged, tc.profile, &prof)
+
+			_, got := merged.MCP["squadai"]
+			if got != tc.wantSquadai {
+				t.Errorf("profile %q: squadai present = %v, want %v (MCP after filter: %v)",
+					tc.profile, got, tc.wantSquadai, merged.MCP)
+			}
+		})
+	}
+}
+
 func TestApplyProfileToConfig_MemoryScope(t *testing.T) {
 	t.Run("none disables the memory component", func(t *testing.T) {
 		merged := profileTestConfig()

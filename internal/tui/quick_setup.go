@@ -68,6 +68,12 @@ var quickExtraOptions = []quickExtraOption{
 		preChecked: true,
 	},
 	{
+		key:        "squadai",
+		label:      "SquadAI in your agent",
+		desc:       "Lets your AI tools run SquadAI themselves: check status, sync config, and use project memory.",
+		preChecked: true,
+	},
+	{
 		key:        "context7",
 		label:      "Live documentation lookup",
 		desc:       "Lets your tools read up-to-date docs for the libraries you use.",

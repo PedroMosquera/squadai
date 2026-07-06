@@ -137,6 +137,86 @@ func TestRunInit_MCPNone_EnablesNoServers(t *testing.T) {
 	}
 }
 
+// ─── squadai self-registration ───────────────────────────────────────────────
+
+// TestRunInit_SquadaiIncludedByDefault_AllPresets: every init preset (and the
+// no-preset default) must enable the SquadAI control-plane MCP server so
+// `squadai apply` registers it into each agent's MCP config.
+func TestRunInit_SquadaiIncludedByDefault_AllPresets(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"no_preset", nil},
+		{"solo_minimal", []string{"--preset=solo-minimal"}},
+		{"solo_power", []string{"--preset=solo-power"}},
+		{"team_standard", []string{"--preset=team-standard"}},
+		{"full_squad", []string{"--preset=full-squad"}},
+		{"lean", []string{"--preset=lean"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			project := setupInitDir(t)
+
+			var buf bytes.Buffer
+			if err := RunInit(tc.args, &buf); err != nil {
+				t.Fatalf("RunInit %v: %v", tc.args, err)
+			}
+			proj, err := config.LoadProject(project)
+			if err != nil {
+				t.Fatalf("load project config: %v", err)
+			}
+			def, ok := proj.MCP["squadai"]
+			if !ok {
+				t.Fatalf("project.json MCP should contain 'squadai', got: %v", proj.MCP)
+			}
+			if !def.Enabled {
+				t.Error("squadai MCP server should be enabled by default")
+			}
+			if len(def.Command) != 2 || def.Command[0] != "squadai" || def.Command[1] != "mcp-server" {
+				t.Errorf("squadai MCP command = %v, want [squadai mcp-server]", def.Command)
+			}
+		})
+	}
+}
+
+// TestRunInit_MCPSelectionWithoutSquadai_Excluded: an explicit --mcp list that
+// omits squadai must not sneak it back in — the entry stays deselectable.
+func TestRunInit_MCPSelectionWithoutSquadai_Excluded(t *testing.T) {
+	project := setupInitDir(t)
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--mcp=context7"}, &buf); err != nil {
+		t.Fatalf("RunInit: %v", err)
+	}
+	proj, err := config.LoadProject(project)
+	if err != nil {
+		t.Fatalf("load project config: %v", err)
+	}
+	if _, ok := proj.MCP["squadai"]; ok {
+		t.Errorf("--mcp=context7 must exclude squadai, got: %v", proj.MCP)
+	}
+}
+
+// TestRunInit_MCPNone_ExcludesSquadai: --mcp=none must also drop the
+// pre-checked squadai entry (covered by the zero-length check above, pinned
+// here by name so the regression reads clearly).
+func TestRunInit_MCPNone_ExcludesSquadai(t *testing.T) {
+	project := setupInitDir(t)
+
+	var buf bytes.Buffer
+	if err := RunInit([]string{"--mcp=none"}, &buf); err != nil {
+		t.Fatalf("RunInit: %v", err)
+	}
+	proj, err := config.LoadProject(project)
+	if err != nil {
+		t.Fatalf("load project config: %v", err)
+	}
+	if _, ok := proj.MCP["squadai"]; ok {
+		t.Errorf("--mcp=none must exclude squadai, got: %v", proj.MCP)
+	}
+}
+
 // ─── both-memory-systems conflict note ───────────────────────────────────────
 
 func TestBothMemorySystemsEnabled(t *testing.T) {

@@ -387,16 +387,20 @@ func DefaultMemoryConfig() MemoryConfig {
 // skill scoping, no token cap): profiles are ACTIVE now, and the baseline
 // profile must reproduce plain-apply behavior exactly. Restrictive setups are
 // an explicit switch away (`squadai profile cheap`, `apply --profile=review`).
+//
+// Profiles with an explicit MCPServers list keep "squadai" so switching
+// profiles never silently removes the agent-console access to SquadAI itself.
+// "review" and "cheap" intentionally keep no MCP servers at all.
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
 		DefaultProfile: "default",
 		Profiles: map[string]ContextProfile{
 			"default":  {MemoryScope: "project", Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
-			"debug":    {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 16000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
-			"feature":  {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd", "sdd"}, MaxApproxTokens: 20000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"debug":    {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 16000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"feature":  {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared", "tdd", "sdd"}, MaxApproxTokens: 20000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 			"review":   {MemoryScope: "project", MCPServers: []string{}, SkillScopes: []string{"shared/code-review"}, MaxApproxTokens: 10000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
-			"docs":     {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 10000, Include: []string{"docs/**", "README.md", "*.md"}, Exclude: []string{".git/**", "node_modules/**"}},
-			"incident": {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 24000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"docs":     {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 10000, Include: []string{"docs/**", "README.md", "*.md"}, Exclude: []string{".git/**", "node_modules/**"}},
+			"incident": {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 24000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 			"cheap":    {MemoryScope: "summary", MCPServers: []string{}, SkillScopes: []string{"shared"}, MaxApproxTokens: 6000, Include: []string{"README.md", "docs/**"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 		},
 	}
@@ -508,13 +512,25 @@ type CuratedMCPServer struct {
 	MinNodeVersion string // e.g. "20"
 }
 
-// DefaultMCPCatalog returns the 5 curated MCP servers offered during init.
-// Context7 is pre-checked; the others default to unselected. The community
-// knowledge-graph server (config key "memory", kept for compatibility) is
-// intentionally sorted last: it overlaps with SquadAI Project Memory and is
-// de-emphasized in the setup flows.
+// DefaultMCPCatalog returns the 6 curated MCP servers offered during init.
+// The SquadAI control-plane server and Context7 are pre-checked; the others
+// default to unselected. The community knowledge-graph server (config key
+// "memory", kept for compatibility) is intentionally sorted last: it overlaps
+// with SquadAI Project Memory and is de-emphasized in the setup flows.
 func DefaultMCPCatalog() []CuratedMCPServer {
 	return []CuratedMCPServer{
+		{
+			// SquadAI's own stdio MCP server: registered into every
+			// MCP-capable agent so squadai can be driven from inside the
+			// agent console. Command is the bare binary name — after install
+			// "squadai" is on PATH; `squadai doctor` warns when it is not.
+			Name:        "squadai",
+			Description: "SquadAI control plane — plan, apply, verify, status, and project memory from inside your agent",
+			Type:        "local",
+			PreChecked:  true,
+			Command:     "squadai",
+			Args:        []string{"mcp-server"},
+		},
 		{
 			Name:        "context7",
 			Description: "Up-to-date documentation lookup for libraries and frameworks",

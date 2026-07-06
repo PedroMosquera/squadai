@@ -9,6 +9,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
 	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/pi"
 	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/domain"
@@ -1607,6 +1608,113 @@ func TestApplyMCPConfigFile_PreservesVSCodeInputs(t *testing.T) {
 	// Old server should be replaced (we overwrite the servers key entirely).
 	if _, ok := serversMap["old-server"]; ok {
 		t.Error("old-server should have been replaced")
+	}
+}
+
+// ─── SquadAI self-server across all adapters ─────────────────────────────────
+
+// TestApply_SquadaiServer_AllAdapters plans and applies the built-in SquadAI
+// control-plane server (plain command, no env/URL) through every
+// MCP-supporting adapter and verifies each native config format.
+func TestApply_SquadaiServer_AllAdapters(t *testing.T) {
+	squadaiDef := map[string]domain.MCPServerDef{
+		"squadai": {
+			Type:    "local",
+			Command: []string{"squadai", "mcp-server"},
+			Enabled: true,
+		},
+	}
+
+	tests := []struct {
+		name       string
+		adapter    domain.Adapter
+		targetPath string // relative to project dir
+		rootKey    string
+		wantType   string // expected "type" field value; empty = key absent
+		arrayCmd   bool   // true = single command array, false = split command/args
+	}{
+		{"opencode_merged_config", opencode.New(), "opencode.json", "mcp", "local", true},
+		{"pi_merged_config", pi.New(), "pi.json", "mcp", "local", true},
+		{"claude_mcp_json", claude.New(), ".mcp.json", "mcpServers", "", false},
+		{"cursor_mcp_json", cursor.New(), filepath.Join(".cursor", "mcp.json"), "mcpServers", "", false},
+		{"windsurf_mcp_config", windsurf.New(), filepath.Join(".windsurf", "mcp_config.json"), "mcpServers", "", false},
+		{"vscode_mcp_json", vscode.New(), filepath.Join(".vscode", "mcp.json"), "servers", "", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			project := t.TempDir()
+			inst := New(squadaiDef)
+
+			actions, err := inst.Plan(tc.adapter, t.TempDir(), project)
+			if err != nil {
+				t.Fatalf("Plan: %v", err)
+			}
+			if len(actions) != 1 {
+				t.Fatalf("expected 1 action, got %d", len(actions))
+			}
+			wantPath := filepath.Join(project, tc.targetPath)
+			if actions[0].TargetPath != wantPath {
+				t.Fatalf("TargetPath = %q, want %q", actions[0].TargetPath, wantPath)
+			}
+			if err := inst.Apply(actions[0]); err != nil {
+				t.Fatalf("Apply: %v", err)
+			}
+
+			doc := readTestJSON(t, wantPath)
+			serversRaw, ok := doc[tc.rootKey].(map[string]interface{})
+			if !ok {
+				t.Fatalf("%s key missing or not a map: %v", tc.rootKey, doc)
+			}
+			server, ok := serversRaw["squadai"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("squadai server missing under %q: %v", tc.rootKey, serversRaw)
+			}
+
+			if tc.wantType == "" {
+				if _, has := server["type"]; has {
+					t.Errorf("type field should be omitted for a stdio server, got %v", server["type"])
+				}
+			} else if server["type"] != tc.wantType {
+				t.Errorf("type = %v, want %q", server["type"], tc.wantType)
+			}
+
+			if tc.arrayCmd {
+				cmd, ok := server["command"].([]interface{})
+				if !ok || len(cmd) != 2 || cmd[0] != "squadai" || cmd[1] != "mcp-server" {
+					t.Errorf("command = %v, want [squadai mcp-server]", server["command"])
+				}
+				if _, has := server["args"]; has {
+					t.Error("array-style adapters must not emit a separate args key")
+				}
+			} else {
+				if server["command"] != "squadai" {
+					t.Errorf("command = %v, want squadai", server["command"])
+				}
+				args, ok := server["args"].([]interface{})
+				if !ok || len(args) != 1 || args[0] != "mcp-server" {
+					t.Errorf("args = %v, want [mcp-server]", server["args"])
+				}
+			}
+
+			// A plain command server must not leak env/url keys.
+			for _, forbidden := range []string{"env", "environment", "url", "serverUrl", "headers"} {
+				if _, has := server[forbidden]; has {
+					t.Errorf("squadai server should not have %q, got %v", forbidden, server[forbidden])
+				}
+			}
+
+			// Verify converges immediately after Apply.
+			results, err := inst.Verify(tc.adapter, t.TempDir(), project)
+			if err != nil {
+				t.Fatalf("Verify: %v", err)
+			}
+			for _, r := range results {
+				if !r.Passed {
+					t.Errorf("verify check %q failed: %s", r.Check, r.Message)
+				}
+			}
+		})
 	}
 }
 
