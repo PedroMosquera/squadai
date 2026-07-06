@@ -427,8 +427,10 @@ func methodologySkillPaths(m domain.Methodology) []string {
 func sharedSkillPaths() []string {
 	return []string{
 		"skills/shared/code-review",
+		"skills/shared/context-discipline",
 		"skills/shared/find-skills",
 		"skills/shared/pr-description",
+		"skills/shared/squadai-init-playbook",
 		"skills/shared/testing",
 	}
 }

@@ -368,9 +368,9 @@ func TestPlanMethodologySkills_TDD_OpenCode_EightActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// 5 TDD skills + 4 shared = 9
-	if len(actions) != 9 {
-		t.Errorf("expected 9 actions for TDD (5+4), got %d", len(actions))
+	// 5 TDD skills + 6 shared = 11
+	if len(actions) != 11 {
+		t.Errorf("expected 11 actions for TDD (5+6), got %d", len(actions))
 	}
 }
 
@@ -384,9 +384,9 @@ func TestPlanMethodologySkills_SDD_TenActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// 7 SDD skills + 4 shared = 11
-	if len(actions) != 11 {
-		t.Errorf("expected 11 actions for SDD (7+4), got %d", len(actions))
+	// 7 SDD skills + 6 shared = 13
+	if len(actions) != 13 {
+		t.Errorf("expected 13 actions for SDD (7+6), got %d", len(actions))
 	}
 }
 
@@ -400,9 +400,9 @@ func TestPlanMethodologySkills_Conventional_ThreeSharedOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Conventional: 0 methodology-specific + 4 shared = 4
-	if len(actions) != 4 {
-		t.Errorf("expected 4 actions for Conventional (shared only), got %d", len(actions))
+	// Conventional: 0 methodology-specific + 6 shared = 6
+	if len(actions) != 6 {
+		t.Errorf("expected 6 actions for Conventional (shared only), got %d", len(actions))
 	}
 }
 
@@ -538,8 +538,8 @@ func TestSharedSkillPaths_IncludesFindSkills(t *testing.T) {
 	if !found {
 		t.Error("sharedSkillPaths() must include skills/shared/find-skills")
 	}
-	if len(paths) != 4 {
-		t.Errorf("expected 4 shared skill paths, got %d", len(paths))
+	if len(paths) != 6 {
+		t.Errorf("expected 6 shared skill paths, got %d", len(paths))
 	}
 }
 
