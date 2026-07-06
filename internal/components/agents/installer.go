@@ -17,6 +17,11 @@ import (
 )
 
 const teamSectionID = "team"
+
+// budgetModeSummary mirrors the budget fitter's ModeSummary value on
+// domain.PlannedAction.Mode: the compact orchestrator digest is injected
+// instead of the full orchestrator when the plan was budget-degraded.
+const budgetModeSummary = "summary"
 const refinementSectionID = "refinement"
 const memorySectionID = "memory-protocol"
 const refinementPlaceholder = "<!-- empty until /squadai-init populates -->"
@@ -569,8 +574,11 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 		return err
 	}
 
-	templatePath := "teams/" + methodology + "/orchestrator-" + variant + ".md"
-	rendered, err := renderTemplate("orchestrator", assets.MustRead(templatePath), data)
+	templateBody := assets.MustRead("teams/" + methodology + "/orchestrator-" + variant + ".md")
+	if action.Mode == budgetModeSummary {
+		templateBody = orchestratorDigestTemplate
+	}
+	rendered, err := renderTemplate("orchestrator", templateBody, data)
 	if err != nil {
 		return fmt.Errorf("render %s orchestrator: %w", variant, err)
 	}
@@ -894,6 +902,39 @@ func (i *Installer) renderNativeAgentContent(action domain.PlannedAction) (strin
 	return i.maybeTranslateContent(action.Agent, roleName, rendered)
 }
 
+// orchestratorDigestTemplate is the compact orchestrator injected into rules
+// files when the budget fitter degrades the agents component to summary mode.
+// It keeps the coordination contract while dropping the full workflow prose,
+// which remains reachable via the methodology skills.
+const orchestratorDigestTemplate = `# {{.Methodology}} Orchestrator (compact)
+
+Token budget forced this section into compact mode. You still coordinate the
+{{.Methodology}} workflow — decompose, delegate where sub-agents exist,
+synthesize; never implement directly when a sub-agent fits the task.
+
+- Follow the {{.Methodology}} phase order; load each phase's skill from
+  ` + "`{{.SkillsDir}}`" + ` at phase start and follow it.
+- Delegate proactively at 60% context; pass phase summaries, not the full
+  output of prior phases.
+{{- if .TestCommand }}
+- Test command: ` + "`{{.TestCommand}}`" + `.
+{{- end }}
+- Long-session hygiene and compaction recovery:
+  ` + "`{{.SkillsDir}}/shared/context-discipline/SKILL.md`" + `.
+`
+
+// OrchestratorDigest renders the compact orchestrator for token counting.
+// It uses placeholder-free minimal data; real installs render with the full
+// template data, so this is a close approximation for the budget fitter.
+func OrchestratorDigest(methodology string) string {
+	rendered, err := renderTemplate("orchestrator-digest", orchestratorDigestTemplate,
+		TemplateData{Methodology: methodology})
+	if err != nil {
+		return orchestratorDigestTemplate
+	}
+	return rendered
+}
+
 // renderMarkerInjectionContent computes the content for a prompt/solo marker injection.
 func (i *Installer) renderMarkerInjectionContent(action domain.PlannedAction, variant string) (string, error) {
 	if i.config == nil {
@@ -904,8 +945,11 @@ func (i *Installer) renderMarkerInjectionContent(action domain.PlannedAction, va
 	if err != nil {
 		return "", err
 	}
-	templatePath := "teams/" + methodology + "/orchestrator-" + variant + ".md"
-	rendered, err := renderTemplate("orchestrator", assets.MustRead(templatePath), data)
+	templateBody := assets.MustRead("teams/" + methodology + "/orchestrator-" + variant + ".md")
+	if action.Mode == budgetModeSummary {
+		templateBody = orchestratorDigestTemplate
+	}
+	rendered, err := renderTemplate("orchestrator", templateBody, data)
 	if err != nil {
 		return "", fmt.Errorf("render %s orchestrator: %w", variant, err)
 	}
