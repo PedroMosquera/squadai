@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
@@ -66,6 +67,13 @@ func (i *Installer) Preview(adapter domain.Adapter, homeDir, projectDir string) 
 // not tracked in the managed-keys sidecar, and has a value different from
 // what SquadAI would write.
 func (i *Installer) detectConflicts(action domain.PlannedAction, projectDir string) ([]domain.Conflict, error) {
+	// TOML targets (Codex's config.toml) are marker-managed: Apply rewrites
+	// only the hash-marker block and preserves user TOML outside it verbatim,
+	// so root-key conflicts cannot occur — and the file must never be parsed
+	// as JSON.
+	if strings.HasPrefix(action.Description, "mcp:toml:") {
+		return nil, nil
+	}
 	existing, err := fileutil.ReadJSONFile(action.TargetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read existing JSON: %w", err)
