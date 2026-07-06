@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/components/agents"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
 	"github.com/PedroMosquera/squadai/internal/components/rules"
 	"github.com/PedroMosquera/squadai/internal/domain"
@@ -207,7 +208,11 @@ func frontmatterOnly(content []byte) []byte {
 //     only their own section content instead of the whole shared document, so
 //     three components sharing AGENTS.md don't each get billed for the full
 //     file.
-func desiredComponentTokens(p *planner.Planner, actions []domain.PlannedAction, homeDir, projectDir, modelName string) (map[domain.ComponentID]int, error) {
+// The second return value is the subtotal for agents-component actions that
+// are NOT prompt/solo rules-file injections (native agent files, settings):
+// these are unchanged in the fitter's summary mode, so the summary estimate
+// for agents is that subtotal plus the compact digest per injection target.
+func desiredComponentTokens(p *planner.Planner, actions []domain.PlannedAction, homeDir, projectDir, modelName string) (map[domain.ComponentID]int, int, error) {
 	counter := tokenizer.ForModel(modelName)
 	// Each RenderAction returns the FULL rendered target document. When several
 	// actions of the same component target one file (e.g. the OpenCode and Pi
@@ -222,13 +227,14 @@ func desiredComponentTokens(p *planner.Planner, actions []domain.PlannedAction, 
 		path      string
 	}
 	tokensByPath := make(map[compPath]int)
+	injectionKey := make(map[compPath]bool)
 	for _, action := range actions {
 		if action.Action == domain.ActionDelete || action.TargetPath == "" {
 			continue
 		}
 		_, desired, err := p.RenderAction(action, homeDir, projectDir)
 		if err != nil {
-			return nil, fmt.Errorf("render %s: %w", action.ID, err)
+			return nil, 0, fmt.Errorf("render %s: %w", action.ID, err)
 		}
 		key := compPath{component: action.Component, path: action.TargetPath}
 		if section, ok := plannedSectionContent(action, desired); ok {
@@ -242,30 +248,57 @@ func desiredComponentTokens(p *planner.Planner, actions []domain.PlannedAction, 
 		if tokens > tokensByPath[key] {
 			tokensByPath[key] = tokens
 		}
+		if action.Component == domain.ComponentAgents && isAgentsInjectionAction(action) {
+			injectionKey[key] = true
+		}
 	}
 	tokensByComponent := make(map[domain.ComponentID]int)
+	nativeAgentsTokens := 0
 	for key, tokens := range tokensByPath {
 		tokensByComponent[key.component] += tokens
+		if key.component == domain.ComponentAgents && !injectionKey[key] {
+			nativeAgentsTokens += tokens
+		}
 	}
-	return tokensByComponent, nil
+	return tokensByComponent, nativeAgentsTokens, nil
+}
+
+// isAgentsInjectionAction reports whether an agents-component action injects
+// the orchestrator into a shared rules file (prompt/solo delegation) rather
+// than writing a standalone native agent file.
+func isAgentsInjectionAction(action domain.PlannedAction) bool {
+	return strings.HasPrefix(action.Description, "team:prompt:") ||
+		strings.HasPrefix(action.Description, "team:solo:")
 }
 
 // summaryComponentTokens returns real token counts for the summary renders of
 // the summarizable components present in the plan (the memory stub and the
 // condensed team standards), sized per distinct target path. The fitter uses
 // these instead of the tokens/2 guess.
-func summaryComponentTokens(actions []domain.PlannedAction, modelName string) map[domain.ComponentID]int {
+// nativeAgentsTokens is the full-render subtotal for non-injection agents
+// actions from desiredComponentTokens: native agent files are unchanged in
+// summary mode, so the agents summary is that subtotal plus one compact
+// orchestrator digest per prompt/solo rules-file target.
+func summaryComponentTokens(actions []domain.PlannedAction, modelName string, nativeAgentsTokens int) map[domain.ComponentID]int {
 	counter := tokenizer.ForModel(modelName)
 	paths := map[domain.ComponentID]map[string]bool{
 		domain.ComponentMemory: {},
 		domain.ComponentRules:  {},
 	}
+	injectionTargets := map[string]bool{}
+	hasAgents := false
 	for _, a := range actions {
 		if a.TargetPath == "" || a.Action == domain.ActionDelete {
 			continue
 		}
 		if set, ok := paths[a.Component]; ok {
 			set[a.TargetPath] = true
+		}
+		if a.Component == domain.ComponentAgents {
+			hasAgents = true
+			if isAgentsInjectionAction(a) {
+				injectionTargets[a.TargetPath] = true
+			}
 		}
 	}
 	out := make(map[domain.ComponentID]int)
@@ -274,6 +307,10 @@ func summaryComponentTokens(actions []domain.PlannedAction, modelName string) ma
 	}
 	if n := len(paths[domain.ComponentRules]); n > 0 {
 		out[domain.ComponentRules] = n * counter.Count(rules.SummaryContent())
+	}
+	if hasAgents {
+		digest := counter.Count(agents.OrchestratorDigest(""))
+		out[domain.ComponentAgents] = nativeAgentsTokens + len(injectionTargets)*digest
 	}
 	return out
 }

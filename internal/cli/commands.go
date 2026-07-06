@@ -1393,7 +1393,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	// resolveFitModel (--fit-model > profile tier > standard-tier default).
 	if cap := effectiveTokenCap(maxTokens, activeProfile); cap > 0 {
 		fitModel = resolveFitModel(merged, profileName, fitModel)
-		componentTokens, tokenErr := desiredComponentTokens(p, actions, homeDir, projectDir, fitModel)
+		componentTokens, nativeAgentsTokens, tokenErr := desiredComponentTokens(p, actions, homeDir, projectDir, fitModel)
 		if tokenErr != nil {
 			return fmt.Errorf("budget token estimate: %w", tokenErr)
 		}
@@ -1402,7 +1402,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			Model:           fitModel,
 			Profile:         profileName,
 			ComponentTokens: componentTokens,
-			SummaryTokens:   summaryComponentTokens(actions, fitModel),
+			SummaryTokens:   summaryComponentTokens(actions, fitModel, nativeAgentsTokens),
 		})
 		if fitErr != nil {
 			return fmt.Errorf("budget fit: %w", fitErr)
