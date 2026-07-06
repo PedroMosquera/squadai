@@ -523,7 +523,7 @@ func TestInitMCP_ToggleContext7(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
 	m.mcpSelections = map[string]bool{"context7": true}
-	m.initCursor = 0
+	m.initCursor = 1 // context7 sits after the squadai control-plane entry
 
 	// Space toggles context7 off.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -1840,15 +1840,15 @@ func TestInstallSummary_AllDeselectedExceptOne_ProceedsWithOne(t *testing.T) {
 
 // ─── MCP Catalog-driven screen ───────────────────────────────────────────────
 
-func TestInitMCP_CatalogShowsAllFiveItems(t *testing.T) {
+func TestInitMCP_CatalogShowsAllSixItems(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
 	m.mcpSelections = catalogPreCheckedSelections()
 
 	view := m.View()
 	catalog := domain.DefaultMCPCatalog()
-	if len(catalog) != 5 {
-		t.Fatalf("catalog size changed, expected 5, got %d", len(catalog))
+	if len(catalog) != 6 {
+		t.Fatalf("catalog size changed, expected 6, got %d", len(catalog))
 	}
 	for _, s := range catalog {
 		if !strings.Contains(view, s.Display()) {
@@ -1892,8 +1892,14 @@ func TestInitMCP_PreCheckedCount(t *testing.T) {
 			count++
 		}
 	}
-	if count != 1 {
-		t.Errorf("expected 1 pre-checked items, got %d", count)
+	if count != 2 {
+		t.Errorf("expected 2 pre-checked items (squadai + context7), got %d", count)
+	}
+	if !sel["squadai"] {
+		t.Error("squadai should start selected")
+	}
+	if !sel["context7"] {
+		t.Error("context7 should start selected")
 	}
 }
 
@@ -1901,13 +1907,33 @@ func TestInitMCP_ToggleChangesSelection(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
 	m.mcpSelections = catalogPreCheckedSelections()
-	m.initCursor = 0 // context7, which is pre-checked
+	m.initCursor = 1 // context7, which is pre-checked
 
 	// Space should toggle it off.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model := updated.(Model)
 	if model.mcpSelections["context7"] {
 		t.Error("toggling pre-checked context7 should deselect it")
+	}
+}
+
+// TestInitMCP_SquadaiToggleable: the pre-checked SquadAI console entry sits
+// first in the catalog and stays deselectable like any other server.
+func TestInitMCP_SquadaiToggleable(t *testing.T) {
+	catalog := domain.DefaultMCPCatalog()
+	if catalog[0].Name != "squadai" {
+		t.Fatalf("first catalog entry = %q, want squadai", catalog[0].Name)
+	}
+
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = catalogPreCheckedSelections()
+	m.initCursor = 0 // squadai
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := updated.(Model)
+	if model.mcpSelections["squadai"] {
+		t.Error("toggling pre-checked squadai should deselect it")
 	}
 }
 

@@ -224,6 +224,31 @@ func TestCheckMCPServer(t *testing.T) {
 			wantStatus: CheckFail,
 		},
 		{
+			// The SquadAI self-server is warn-only when the binary is off
+			// PATH (e.g. running via `go run`): squadai itself clearly works,
+			// but agents configured with the MCP server cannot start it.
+			name: "MCP_squadai_binary_missing_warns_only",
+			server: domain.CuratedMCPServer{
+				Name:    "squadai",
+				Type:    "local",
+				Command: "squadai",
+				Args:    []string{"mcp-server"},
+			},
+			lookFound:  map[string]string{},
+			wantStatus: CheckWarn,
+		},
+		{
+			name: "MCP_squadai_binary_on_path_passes",
+			server: domain.CuratedMCPServer{
+				Name:    "squadai",
+				Type:    "local",
+				Command: "squadai",
+				Args:    []string{"mcp-server"},
+			},
+			lookFound:  map[string]string{"squadai": "/usr/local/bin/squadai"},
+			wantStatus: CheckPass,
+		},
+		{
 			name: "MCP_min_node_version_warn",
 			server: domain.CuratedMCPServer{
 				Name:           "context7",

@@ -11,6 +11,10 @@ import (
 
 const catMCP = "MCP Servers"
 
+// selfMCPServerName is the catalog key of SquadAI's own MCP server
+// (`squadai mcp-server`), which gets a warn-only PATH check.
+const selfMCPServerName = "squadai"
+
 // runMCP checks each entry in the MCP catalog.
 func (d *Doctor) runMCP(_ context.Context) []CheckResult {
 	if len(d.catalog) == 0 {
@@ -71,6 +75,17 @@ func (d *Doctor) checkMCPServer(server CuratedMCPServer) CheckResult {
 	// For local servers, check that the command binary is available.
 	if server.Type == "local" && server.Command != "" {
 		if _, err := d.looker.LookPath(server.Command); err != nil {
+			// SquadAI's own MCP server is registered into agent configs by
+			// `squadai apply` as the bare "squadai" binary. When the CLI runs
+			// without being installed on PATH (e.g. via `go run`), the agent
+			// configs reference a binary agents cannot start — warn only,
+			// since squadai itself is obviously working right now.
+			if name == selfMCPServerName {
+				return warn(catMCP, name,
+					fmt.Sprintf("%s — the squadai binary is not on PATH; agents with the SquadAI MCP server configured cannot start it", name),
+					"",
+					"Install the squadai binary on PATH (e.g. 'go install github.com/PedroMosquera/squadai/cmd/squadai@latest')")
+			}
 			return fail(catMCP, name,
 				fmt.Sprintf("%s — %s not found in PATH", name, server.Command),
 				"",

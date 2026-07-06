@@ -78,7 +78,7 @@ The result is a team where everyone's agents have:
 
 - **A methodology** — TDD (6 roles), SDD (8 roles), or Conventional (4 roles), each with an orchestrator that delegates to specialist sub-agents
 - **Consistent coding standards** — auto-detected by language (Go, TypeScript, Python, Rust, and [12 more](docs/architecture.md))
-- **Shared MCP servers** — Context7 is enabled by default; others are opt-in
+- **Shared MCP servers** — the SquadAI control plane and Context7 are enabled by default; others are opt-in
 - **Native memory defaults** — local-first project memory metadata with `docs/memory/` export/import compatibility
 - **Context profiles** — built-in profiles for default, debug, feature, review, docs, incident, and cheap sessions
 - **Usage controls** — approximate session/daily token budgets and enforcement mode metadata
@@ -97,6 +97,14 @@ Different agents handle sub-agents differently. squadai adapts:
 | Windsurf | `.windsurf/rules/squadai.md` | Solo all-in-one prompt + workflow files |
 | VS Code Copilot | `.github/copilot-instructions.md` | Solo all-in-one prompt |
 | Pi | `~/.pi/agent/AGENTS.md` | Native agent files in `~/.pi/agent/agents/` + prompts in `~/.pi/agent/prompts/` |
+
+---
+
+## SquadAI inside your agent
+
+`squadai apply` registers SquadAI's own MCP server (`squadai mcp-server`) in every enabled agent — Claude Code, OpenCode, Cursor, Windsurf, VS Code Copilot, and Pi. That means your agents can run SquadAI themselves and get the same outcomes everywhere: check `status`, `plan`/`apply`/`verify` config changes, run `doctor`, and search or add project memory — all without leaving the agent console.
+
+It's on by default (the `squadai` entry in the curated MCP catalog is pre-checked). Deselect it in the wizard or pass `--mcp=none` (or an explicit `--mcp=` list without `squadai`) to `squadai init` to opt out. The registration invokes the `squadai` binary from PATH; `squadai doctor` warns if it can't be found.
 
 ---
 

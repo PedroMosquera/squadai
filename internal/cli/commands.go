@@ -4897,10 +4897,19 @@ adapter's settings file (.claude/settings.json, .cursor/mcp.json, etc.).
 
 ## SquadAI as MCP server
 
-SquadAI can itself be used as an MCP tool server by Claude Code:
-  squadai mcp-server
+SquadAI is itself an MCP tool server ('squadai mcp-server') exposing plan,
+apply, verify, status, context, init, doctor, and project memory as tools.
 
-Register it in .claude/settings.json:
+The curated catalog includes a "squadai" entry (pre-checked), so 'squadai init'
++ 'squadai apply' register it in every MCP-capable agent automatically —
+Claude Code, OpenCode, Cursor, Windsurf, VS Code Copilot, and Pi all get the
+same control plane inside the agent console. Opt out with --mcp=none or by
+unchecking it in the wizard.
+
+The registration references the bare "squadai" binary, so it must be on PATH
+for agents to start it ('squadai doctor' warns when it is not).
+
+To register manually (Claude Code example):
   { "mcpServers": { "squadai": { "command": "squadai", "args": ["mcp-server"] } } }
 
 Then use 'squadai install-commands' to add slash commands to .claude/commands/.`, true
