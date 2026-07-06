@@ -1,44 +1,124 @@
 <!-- squadai:memory:opencode -->
-## Memory Protocol
+## Project Memory Protocol
 
-This protocol defines how you manage persistent context across sessions using AGENTS.md
-and the `.squadai/` configuration directory.
+`docs/memory/` is this project's persistent, indexed memory store for
+decisions, learnings, and incidents. It is shared by every agent working in
+this repository — use it.
 
-### Session Start
+**Search first.** Before any research, planning, or implementation task, run
+`/memory-search <query>` (or `squadai memory search <query>`) and pass the
+findings as context. Never skip memory-search before architecture or API
+decisions.
 
-1. Read the project's `AGENTS.md` for accumulated context, prior decisions, and conventions.
-2. Check `.squadai/project.json` for project configuration, enabled components, and team policy.
-3. Search existing memory for any notes relevant to the current task before beginning work.
-4. Review the most recent session summary (if present) at the end of AGENTS.md.
+**Capture as you go.** After a decision, fix, or discovery, run
+`/memory-add <note>` (or `squadai memory add "<note>"`). Notes land in
+`docs/memory/_inbox/` as drafts until promoted.
 
-### Save Triggers
+**Housekeeping.** Run `/memory-promote` periodically to graduate inbox drafts
+into permanent topic folders, and `/memory-reindex` after manual edits under
+`docs/memory/` to keep the search index current.
 
-Save important context to AGENTS.md after any of these events:
-
-- **Architecture decisions** — record the decision, alternatives considered, and rationale.
-- **Bug discoveries and fixes** — document the root cause, symptoms, and the fix applied.
-- **New conventions or patterns** — note the pattern, where it applies, and examples.
-- **Configuration changes** — record what changed, why, and any migration steps.
-- **Dependency additions or removals** — note the package, version, and reason.
-- **Performance findings** — document measurements, bottlenecks, and optimizations.
-- **Security considerations** — record any security-relevant decisions or constraints.
-
-### Search Protocol
-
-- At session start, search AGENTS.md for context relevant to the current task.
-- Before making architectural decisions, check for prior decisions on the same topic.
-- Before modifying shared infrastructure, check for documented conventions.
-- Use keyword search for specific topics (e.g., "error handling", "testing", "deployment").
-
-### Session End
-
-At the end of each session, append a summary to AGENTS.md including:
-
-- **Goal**: what was the objective for this session
-- **Accomplished**: what was completed
-- **Decisions**: any architectural or design decisions made
-- **Discoveries**: what was learned about the codebase or problem domain
-- **Next Steps**: what remains to be done
-
-Keep summaries concise (5-10 lines). Remove stale summaries when they are no longer relevant.
+For deeper multi-query research, delegate to the `@librarian` agent with a
+plain-language question; it returns ranked excerpts from the memory index.
 <!-- /squadai:memory:opencode -->
+
+<!-- squadai:brand:opencode -->
+```text
+                          *
+    o      o      o     .---.
+   /|\____/|\____/|\____|o o|    S Q U A D A I
+   / \    / \    / \    '---'    x OpenCode
+```
+
+<!-- /squadai:brand:opencode -->
+
+<!-- squadai:efficiency:opencode -->
+## Session Efficiency Protocol
+
+Work token-efficiently. These rules apply to every task in this repository.
+
+**Search before read.** Locate code with grep/glob first; read only the files
+and line ranges you need. Never read a whole file when a targeted range works.
+
+**Never re-read a file you just edited.** The edit either succeeded or
+errored; trust that result instead of re-opening the file to check.
+
+**Summarize long output.** When a tool returns more than ~30 lines, extract
+the relevant findings instead of pasting the whole output into the transcript.
+
+**Delegate exploration.** Send open-ended codebase exploration to sub-agents
+and request a compact report (files, symbols, one-line conclusions) — keep
+raw file dumps out of the main context.
+
+**Memory first.** Run a memory search before exploring the codebase — prior
+decisions often answer the question faster than fresh exploration.
+
+**Response discipline.** Answer, then stop. Prefer code over prose; do not
+restate the request or narrate obvious steps.
+
+**Checkpoint at ~60% context.** When roughly 60% of the context window is
+used, stop exploring, write down what you know, and finish the current step
+before starting anything new.
+<!-- /squadai:efficiency:opencode -->
+
+<!-- squadai:memory:pi -->
+## Project Memory Protocol
+
+`docs/memory/` is this project's persistent, indexed memory store for
+decisions, learnings, and incidents. It survives across sessions — use it.
+
+**Search first.** Before starting significant work, run
+`squadai memory search <query>` (or `/memory-search <query>` where slash
+commands are available) and pass any findings into your plan. Never skip
+memory-search before architecture or API decisions.
+
+**Capture as you go.** After a decision, fix, or discovery, run
+`squadai memory add "<note>"` (or `/memory-add <note>`). Notes land in
+`docs/memory/_inbox/` as drafts until promoted.
+
+**Housekeeping.** Run `squadai memory promote` periodically to graduate inbox
+drafts into permanent topic folders, and `squadai memory reindex` after manual
+edits under `docs/memory/` to keep the search index current.
+
+For deeper multi-query research, ask the `@librarian` agent with a
+plain-language question; it returns ranked excerpts from the memory index.
+<!-- /squadai:memory:pi -->
+
+<!-- squadai:brand:pi -->
+```text
+                          *
+    o      o      o     .---.
+   /|\____/|\____/|\____|o o|    S Q U A D A I
+   / \    / \    / \    '---'    x Pi
+```
+
+<!-- /squadai:brand:pi -->
+
+<!-- squadai:efficiency:pi -->
+## Session Efficiency Protocol
+
+Work token-efficiently. These rules apply to every task in this repository.
+
+**Search before read.** Locate code with grep/glob first; read only the files
+and line ranges you need. Never read a whole file when a targeted range works.
+
+**Never re-read a file you just edited.** The edit either succeeded or
+errored; trust that result instead of re-opening the file to check.
+
+**Summarize long output.** When a tool returns more than ~30 lines, extract
+the relevant findings instead of pasting the whole output into the transcript.
+
+**Delegate exploration.** Send open-ended codebase exploration to sub-agents
+and request a compact report (files, symbols, one-line conclusions) — keep
+raw file dumps out of the main context.
+
+**Memory first.** Run a memory search before exploring the codebase — prior
+decisions often answer the question faster than fresh exploration.
+
+**Response discipline.** Answer, then stop. Prefer code over prose; do not
+restate the request or narrate obvious steps.
+
+**Checkpoint at ~60% context.** When roughly 60% of the context window is
+used, stop exploring, write down what you know, and finish the current step
+before starting anything new.
+<!-- /squadai:efficiency:pi -->

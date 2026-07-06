@@ -1,18 +1,37 @@
 {
   "version": 1,
+  "preset": "full-squad",
   "adapters": {
     "claude-code": {
       "enabled": true
     },
     "opencode": {
       "enabled": true
+    },
+    "pi": {
+      "enabled": true
     }
   },
   "components": {
+    "agents": {
+      "enabled": true
+    },
+    "brand": {
+      "enabled": true
+    },
+    "commands": {
+      "enabled": true
+    },
     "copilot": {
       "enabled": true
     },
+    "mcp": {
+      "enabled": true
+    },
     "memory": {
+      "enabled": true
+    },
+    "permissions": {
       "enabled": true
     },
     "rules": {
@@ -20,6 +39,12 @@
       "settings": {
         "team_standards_file": "templates/team-standards.md"
       }
+    },
+    "skills": {
+      "enabled": true
+    },
+    "workflows": {
+      "enabled": true
     }
   },
   "copilot": {
@@ -31,6 +56,10 @@
       "description": "Structured code review",
       "content_file": "skills/code-review.md"
     },
+    "find-skills": {
+      "description": "Find and load available skills",
+      "content_file": "skills/find-skills.md"
+    },
     "pr-description": {
       "description": "PR description generation",
       "content_file": "skills/pr-description.md"
@@ -40,11 +69,266 @@
       "content_file": "skills/testing.md"
     }
   },
+  "commands": {
+    "review": {
+      "description": "Run structured code review on staged changes",
+      "template": "Review the staged changes using the code-review skill."
+    },
+    "spec": {
+      "description": "Generate a formal spec document for a feature",
+      "template": "Using the sdd-spec skill, write a formal specification for the requested feature."
+    }
+  },
+  "mcp": {
+    "context7": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "enabled": true
+    }
+  },
   "meta": {
     "name": "squadai",
     "language": "Go",
+    "languages": [
+      "Go"
+    ],
     "test_command": "go test ./...",
     "build_command": "go build ./...",
     "lint_command": "go vet ./..."
-  }
+  },
+  "methodology": "sdd",
+  "memory": {
+    "backend": "native",
+    "auto_capture": true,
+    "project_key_strategy": "git-remote",
+    "export_path": "docs/memory"
+  },
+  "context": {
+    "default_profile": "default",
+    "profiles": {
+      "cheap": {
+        "memory_scope": "summary",
+        "mcp_servers": [],
+        "skill_scopes": [
+          "shared"
+        ],
+        "max_approx_tokens": 6000,
+        "include": [
+          "README.md",
+          "docs/**"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**",
+          "dist/**"
+        ]
+      },
+      "debug": {
+        "memory_scope": "project",
+        "mcp_servers": [
+          "context7"
+        ],
+        "skill_scopes": [
+          "shared",
+          "tdd/systematic-debugging"
+        ],
+        "max_approx_tokens": 16000,
+        "include": [
+          "**/*"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**",
+          "dist/**"
+        ]
+      },
+      "default": {
+        "memory_scope": "project",
+        "mcp_servers": null,
+        "skill_scopes": null,
+        "include": [
+          "**/*"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**",
+          "dist/**"
+        ]
+      },
+      "docs": {
+        "memory_scope": "project",
+        "mcp_servers": [
+          "context7"
+        ],
+        "skill_scopes": [
+          "shared"
+        ],
+        "max_approx_tokens": 10000,
+        "include": [
+          "docs/**",
+          "README.md",
+          "*.md"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**"
+        ]
+      },
+      "feature": {
+        "memory_scope": "project",
+        "mcp_servers": [
+          "context7"
+        ],
+        "skill_scopes": [
+          "shared",
+          "tdd",
+          "sdd"
+        ],
+        "max_approx_tokens": 20000,
+        "include": [
+          "**/*"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**",
+          "dist/**"
+        ]
+      },
+      "incident": {
+        "memory_scope": "project",
+        "mcp_servers": [
+          "context7"
+        ],
+        "skill_scopes": [
+          "shared",
+          "tdd/systematic-debugging"
+        ],
+        "max_approx_tokens": 24000,
+        "include": [
+          "**/*"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**",
+          "dist/**"
+        ]
+      },
+      "review": {
+        "memory_scope": "project",
+        "mcp_servers": [],
+        "skill_scopes": [
+          "shared/code-review"
+        ],
+        "max_approx_tokens": 10000,
+        "include": [
+          "**/*"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**",
+          "dist/**"
+        ]
+      }
+    }
+  },
+  "usage": {
+    "daily_token_budget": 200000,
+    "session_token_budget": 50000,
+    "enforcement": "warn",
+    "currency": "USD",
+    "price_catalog_source": "embedded",
+    "profile_tiers": {
+      "cheap": "cheap",
+      "debug": "balanced",
+      "default": "balanced",
+      "docs": "cheap",
+      "feature": "premium",
+      "incident": "premium",
+      "review": "balanced"
+    }
+  },
+  "models": {
+    "profiles": {
+      "balanced": {
+        "tier": "balanced",
+        "description": "default cost/quality profile"
+      },
+      "cheap": {
+        "tier": "cheap",
+        "description": "lowest-cost capable model for routine edits"
+      },
+      "default": {
+        "tier": "balanced",
+        "description": "compatibility alias for model_tier"
+      },
+      "premium": {
+        "tier": "premium",
+        "description": "flagship model profile for hard planning, debugging, and review"
+      }
+    },
+    "overrides": {
+      "sdd.designer": "premium",
+      "sdd.explorer": "balanced",
+      "sdd.implementer": "balanced",
+      "sdd.proposer": "premium",
+      "sdd.spec-writer": "premium",
+      "sdd.verifier": "premium",
+      "tdd.brainstormer": "balanced",
+      "tdd.debugger": "premium",
+      "tdd.implementer": "balanced",
+      "tdd.planner": "premium",
+      "tdd.reviewer": "premium"
+    }
+  },
+  "team": {
+    "designer": {
+      "description": "Architecture and interface design",
+      "mode": "subagent",
+      "skill_ref": "sdd/sdd-design"
+    },
+    "explorer": {
+      "description": "Codebase analysis and context gathering",
+      "mode": "subagent",
+      "skill_ref": "sdd/sdd-explore"
+    },
+    "implementer": {
+      "description": "Spec-faithful implementation",
+      "mode": "subagent",
+      "skill_ref": "sdd/sdd-apply"
+    },
+    "orchestrator": {
+      "description": "SDD orchestrator — manages spec-driven workflow",
+      "mode": "subagent"
+    },
+    "proposer": {
+      "description": "Solution proposals with tradeoff analysis",
+      "mode": "subagent",
+      "skill_ref": "sdd/sdd-propose"
+    },
+    "spec-writer": {
+      "description": "Formal specification document authoring",
+      "mode": "subagent",
+      "skill_ref": "sdd/sdd-spec"
+    },
+    "task-planner": {
+      "description": "Dependency-ordered task breakdown",
+      "mode": "subagent",
+      "skill_ref": "sdd/sdd-tasks"
+    },
+    "verifier": {
+      "description": "Spec compliance verification",
+      "mode": "subagent",
+      "skill_ref": "sdd/sdd-verify"
+    }
+  },
+  "claude": {
+    "agent_teams": {
+      "enabled": false
+    }
+  },
+  "marketplace": {}
 }

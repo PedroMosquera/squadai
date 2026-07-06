@@ -1,5 +1,6 @@
 {
   "_squadai_permissions": "managed",
+  "agent": "orchestrator",
   "permissions": {
     "ask": [
       "Bash(git push --force*)",
