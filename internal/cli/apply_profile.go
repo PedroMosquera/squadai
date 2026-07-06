@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -38,7 +39,34 @@ func resolveActiveProfile(merged *domain.MergedConfig, flagProfile string) (stri
 		return "", nil, fmt.Errorf("unknown context profile %q (available: %s)",
 			name, strings.Join(profileNames(merged), ", "))
 	}
+	if isLegacyInertDefaultProfile(name, prof) {
+		return "", nil, nil
+	}
 	return name, &prof, nil
+}
+
+// isLegacyInertDefaultProfile reports whether the active profile is the
+// exact "default" profile that squadai <= v0.6.0 wrote into every
+// project.json as scaffolding. Context profiles were inert in those
+// releases, so users never opted into that profile's restrictions (12k
+// token cap, context7-only MCP, shared-only skills); enforcing them on
+// upgrade would silently cap and degrade existing installs, and diff/verify
+// (which do not run the budget fitter) would never converge with apply.
+// A default profile the user has modified in any way does not match and is
+// enforced normally.
+func isLegacyInertDefaultProfile(name string, prof domain.ContextProfile) bool {
+	if name != "default" {
+		return false
+	}
+	legacy := domain.ContextProfile{
+		MemoryScope:     "project",
+		MCPServers:      []string{"context7"},
+		SkillScopes:     []string{"shared"},
+		MaxApproxTokens: 12000,
+		Include:         []string{"**/*"},
+		Exclude:         []string{".git/**", "node_modules/**", "dist/**"},
+	}
+	return reflect.DeepEqual(prof, legacy)
 }
 
 // profileNames returns the sorted names of the configured context profiles.
