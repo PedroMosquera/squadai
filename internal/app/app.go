@@ -599,7 +599,7 @@ func buildCommandRegistry() helpOutput {
 			{
 				Name:        "mcp-server",
 				Group:       groupInternal,
-				Description: "Start SquadAI as an MCP stdio server. Exposes plan, apply, verify, status, context, init, doctor, plugins, and more as MCP tools callable by Claude Code.",
+				Description: "Start SquadAI as an MCP stdio server. Exposes plan, apply, verify, status, context, init, doctor, plugins, and more as MCP tools callable from any MCP-capable agent (Claude Code, OpenCode, Cursor, Windsurf, VS Code Copilot, Pi). 'squadai apply' registers it in every agent automatically.",
 			},
 			{
 				Name:        "profile",
