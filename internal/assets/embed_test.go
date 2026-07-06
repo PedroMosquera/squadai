@@ -161,8 +161,12 @@ func TestOrchestratorTemplates_HasDelegationRulesSection(t *testing.T) {
 	for _, path := range orchestratorPaths {
 		t.Run(path, func(t *testing.T) {
 			content := MustRead(path)
-			if !strings.Contains(content, "## Delegation Rules") {
-				t.Errorf("%s: expected to contain '## Delegation Rules' section", path)
+			// Delegating variants carry an explicit Delegation Rules section;
+			// solo variants state up front that no delegation exists instead
+			// of carrying a boilerplate section.
+			if !strings.Contains(content, "## Delegation Rules") &&
+				!strings.Contains(content, "you ARE the entire team") {
+				t.Errorf("%s: expected '## Delegation Rules' section or the solo 'you ARE the entire team' statement", path)
 			}
 		})
 	}

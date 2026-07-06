@@ -23,19 +23,19 @@ type personaBudget struct {
 }
 
 var personaBudgets = []personaBudget{
-	{path: "teams/conventional/orchestrator-native.md", maxTokens: 1808, delegating: true, native: true},
-	{path: "teams/conventional/orchestrator-prompt.md", maxTokens: 1513, delegating: true},
-	{path: "teams/conventional/orchestrator-solo.md", maxTokens: 1303},
-	{path: "teams/sdd/orchestrator-native.md", maxTokens: 2403, delegating: true, native: true},
-	{path: "teams/sdd/orchestrator-prompt.md", maxTokens: 2072, delegating: true},
-	{path: "teams/sdd/orchestrator-solo.md", maxTokens: 1794},
-	{path: "teams/tdd/orchestrator-native.md", maxTokens: 2158, delegating: true, native: true},
-	{path: "teams/tdd/orchestrator-prompt.md", maxTokens: 1910, delegating: true},
-	{path: "teams/tdd/orchestrator-solo.md", maxTokens: 1560},
+	{path: "teams/conventional/orchestrator-native.md", maxTokens: 1060, delegating: true, native: true},
+	{path: "teams/conventional/orchestrator-prompt.md", maxTokens: 1015, delegating: true},
+	{path: "teams/conventional/orchestrator-solo.md", maxTokens: 755},
+	{path: "teams/sdd/orchestrator-native.md", maxTokens: 1530, delegating: true, native: true},
+	{path: "teams/sdd/orchestrator-prompt.md", maxTokens: 1550, delegating: true},
+	{path: "teams/sdd/orchestrator-solo.md", maxTokens: 1045},
+	{path: "teams/tdd/orchestrator-native.md", maxTokens: 1315, delegating: true, native: true},
+	{path: "teams/tdd/orchestrator-prompt.md", maxTokens: 1330, delegating: true},
+	{path: "teams/tdd/orchestrator-solo.md", maxTokens: 895},
 }
 
 // squadaiInitBudget is the ceiling for the /squadai-init driver command.
-const squadaiInitBudget = 4796
+const squadaiInitBudget = 1070
 
 func TestOrchestratorPersonas_TokenCeilings(t *testing.T) {
 	counter := tokenizer.ForModel(sizeCeilingModel)
