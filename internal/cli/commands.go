@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/pi"
@@ -3353,7 +3354,8 @@ func removeEmptyManagedDirs(projectDir string, deletedPaths []string) []string {
 
 // DetectAdapters returns all registered adapters that are installed or have config.
 // OpenCode (team lane) is always included. Personal-lane adapters (Claude Code,
-// VS Code Copilot, Cursor, Windsurf, Pi) are included only when detected on the system.
+// VS Code Copilot, Cursor, Windsurf, Pi, Codex) are included only when detected
+// on the system.
 func DetectAdapters(homeDir string) []domain.Adapter {
 	ctx := context.Background()
 	var adapters []domain.Adapter
@@ -3386,6 +3388,11 @@ func DetectAdapters(homeDir string) []domain.Adapter {
 	piAgent := pi.New()
 	if installed, configFound, err := piAgent.Detect(ctx, homeDir); err == nil && (installed || configFound) {
 		adapters = append(adapters, piAgent)
+	}
+
+	cx := codex.New()
+	if installed, configFound, err := cx.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, cx)
 	}
 
 	return adapters
@@ -4689,7 +4696,7 @@ Focus: balanced general-purpose software development without methodology lock-in
 	case "adapters":
 		return `# Adapters
 
-SquadAI manages configurations for six AI coding agents ("adapters"):
+SquadAI manages configurations for seven AI coding agents ("adapters"):
 
   claude     Claude Code — .claude/CLAUDE.md, .claude/agents/, .claude/settings.json
              Delegation: multi-agent (orchestrator + subagents)
@@ -4712,6 +4719,11 @@ SquadAI manages configurations for six AI coding agents ("adapters"):
              Delegation: multi-agent (native subagents)
              Commands render as prompt templates in prompts/
              Supports per-agent banner branding
+
+  codex      OpenAI Codex CLI — AGENTS.md, ~/.codex/AGENTS.md, ~/.codex/config.toml
+             Delegation: solo agent (inline only)
+             MCP servers written as [mcp_servers.*] TOML tables inside a
+             squadai-managed marker block in ~/.codex/config.toml
 
 Adapters are auto-detected by checking PATH and config directory presence.
 Override detection with 'adapters' in project.json.

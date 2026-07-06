@@ -21,6 +21,21 @@ func CloseTag(sectionID string) string {
 	return fmt.Sprintf("<!-- /%s:%s -->", prefix, sectionID)
 }
 
+// HashOpenTag returns the opening hash-comment marker for a section. Used in
+// files where HTML comments are not valid syntax (e.g. TOML configs).
+//
+//	# squadai:SECTION_ID:start
+func HashOpenTag(sectionID string) string {
+	return fmt.Sprintf("# %s:%s:start", prefix, sectionID)
+}
+
+// HashCloseTag returns the closing hash-comment marker for a section.
+//
+//	# squadai:SECTION_ID:end
+func HashCloseTag(sectionID string) string {
+	return fmt.Sprintf("# %s:%s:end", prefix, sectionID)
+}
+
 // InjectSection inserts or replaces content between marker tags in a document.
 //
 // Behavior:
@@ -29,9 +44,17 @@ func CloseTag(sectionID string) string {
 //   - If section not found: appends at end with markers.
 //   - Content outside markers is never modified.
 func InjectSection(document, sectionID, content string) string {
-	open := OpenTag(sectionID)
-	close := CloseTag(sectionID)
+	return injectBetween(document, OpenTag(sectionID), CloseTag(sectionID), content)
+}
 
+// InjectHashSection is InjectSection for hash-comment markers (TOML/shell-style
+// files where HTML comments are invalid syntax).
+func InjectHashSection(document, sectionID, content string) string {
+	return injectBetween(document, HashOpenTag(sectionID), HashCloseTag(sectionID), content)
+}
+
+// injectBetween inserts or replaces content between arbitrary open/close tags.
+func injectBetween(document, open, close, content string) string {
 	openIdx := strings.Index(document, open)
 	closeIdx := strings.Index(document, close)
 
@@ -77,9 +100,16 @@ func InjectSection(document, sectionID, content string) string {
 
 // ExtractSection returns the content between markers, or empty string if not found.
 func ExtractSection(document, sectionID string) string {
-	open := OpenTag(sectionID)
-	close := CloseTag(sectionID)
+	return extractBetween(document, OpenTag(sectionID), CloseTag(sectionID))
+}
 
+// ExtractHashSection is ExtractSection for hash-comment markers.
+func ExtractHashSection(document, sectionID string) string {
+	return extractBetween(document, HashOpenTag(sectionID), HashCloseTag(sectionID))
+}
+
+// extractBetween returns the content between arbitrary open/close tags.
+func extractBetween(document, open, close string) string {
 	openIdx := strings.Index(document, open)
 	closeIdx := strings.Index(document, close)
 
@@ -95,6 +125,12 @@ func ExtractSection(document, sectionID string) string {
 func HasSection(document, sectionID string) bool {
 	return strings.Contains(document, OpenTag(sectionID)) &&
 		strings.Contains(document, CloseTag(sectionID))
+}
+
+// HasHashSection reports whether a document contains hash-comment markers for a section.
+func HasHashSection(document, sectionID string) bool {
+	return strings.Contains(document, HashOpenTag(sectionID)) &&
+		strings.Contains(document, HashCloseTag(sectionID))
 }
 
 // StripAll removes all squadai marker blocks from document.
@@ -132,7 +168,10 @@ func StripAll(document string) (string, bool) {
 		search = rest[end+len(" -->"):]
 	}
 
-	if len(sectionIDs) == 0 {
+	// Discover hash-comment sections (used in TOML/shell-style files).
+	hashIDs := discoverHashSectionIDs(document)
+
+	if len(sectionIDs) == 0 && len(hashIDs) == 0 {
 		return document, false
 	}
 
@@ -141,6 +180,35 @@ func StripAll(document string) (string, bool) {
 	for _, id := range sectionIDs {
 		result = InjectSection(result, id, "")
 	}
+	for _, id := range hashIDs {
+		result = InjectHashSection(result, id, "")
+	}
 
 	return result, true
+}
+
+// discoverHashSectionIDs scans a document for hash-comment open tags
+// ("# squadai:<id>:start" on its own line) and returns the unique section IDs.
+func discoverHashSectionIDs(document string) []string {
+	openPrefix := fmt.Sprintf("# %s:", prefix)
+	const openSuffix = ":start"
+
+	seen := make(map[string]struct{})
+	var ids []string
+
+	for _, line := range strings.Split(document, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, openPrefix) || !strings.HasSuffix(trimmed, openSuffix) {
+			continue
+		}
+		id := trimmed[len(openPrefix) : len(trimmed)-len(openSuffix)]
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; !exists {
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }

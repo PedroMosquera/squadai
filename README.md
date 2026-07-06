@@ -8,7 +8,7 @@ One local control plane for setup, context, memory, permissions, model usage, an
 
 ---
 
-If you've ever opened a repo and had your AI agent lose the thread — project memory, standards, MCP servers, permissions, model choices, and workflow habits — that's the problem squadai solves. You declare the local operating model once in `.squadai/project.json`, and `squadai apply` writes the right native files for every supported agent: OpenCode, Claude Code, Cursor, Windsurf, VS Code Copilot, and Pi.
+If you've ever opened a repo and had your AI agent lose the thread — project memory, standards, MCP servers, permissions, model choices, and workflow habits — that's the problem squadai solves. You declare the local operating model once in `.squadai/project.json`, and `squadai apply` writes the right native files for every supported agent: OpenCode, Claude Code, Cursor, Windsurf, VS Code Copilot, Pi, and Codex.
 
 SquadAI is solo-first: it should make your daily agent sessions predictable on one machine and one repo. The same primitives also scale to teams through policy, verification, backup, rollback, and drift checks.
 
@@ -97,6 +97,7 @@ Different agents handle sub-agents differently. squadai adapts:
 | Windsurf | `.windsurf/rules/squadai.md` | Solo all-in-one prompt + workflow files |
 | VS Code Copilot | `.github/copilot-instructions.md` | Solo all-in-one prompt |
 | Pi | `~/.pi/agent/AGENTS.md` | Native agent files in `~/.pi/agent/agents/` + prompts in `~/.pi/agent/prompts/` |
+| Codex | `AGENTS.md` + `~/.codex/config.toml` | Solo all-in-one prompt; MCP servers as TOML tables |
 
 ---
 

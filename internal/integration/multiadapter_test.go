@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
@@ -14,6 +15,8 @@ import (
 	"github.com/PedroMosquera/squadai/internal/cli"
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/verify"
 )
 
 // ─── Config builders ──────────────────────────────────────────────────────────
@@ -953,4 +956,218 @@ func TestMultiAdapter_Simultaneous_OpenCodeClaudeCursor(t *testing.T) {
 	// Original Node/React project files must survive.
 	assertFileExists(t, filepath.Join(dir, "package.json"), "Simultaneous: package.json untouched after remove")
 	assertFileExists(t, filepath.Join(dir, "src", "App.tsx"), "Simultaneous: src/App.tsx untouched after remove")
+}
+
+// ─── Codex / Node React ───────────────────────────────────────────────────────
+
+// buildCodexNodeReactConfig writes and loads a config for Codex + Node/React project.
+func buildCodexNodeReactConfig(t *testing.T, home, project string, meta domain.ProjectMeta) *domain.MergedConfig {
+	t.Helper()
+
+	userCfg := domain.DefaultUserConfig()
+	userCfg.Adapters[string(domain.AgentOpenCode)] = domain.AdapterConfig{Enabled: false}
+	userCfg.Adapters[string(domain.AgentCodex)] = domain.AdapterConfig{Enabled: true}
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatalf("write user config: %v", err)
+	}
+
+	projCfg := &domain.ProjectConfig{
+		Version: 1,
+		Meta:    meta,
+		Adapters: map[string]domain.AdapterConfig{
+			string(domain.AgentCodex): {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentMemory): {Enabled: true},
+			string(domain.ComponentMCP):    {Enabled: true},
+			string(domain.ComponentAgents): {Enabled: true},
+		},
+		Copilot:     domain.CopilotConfig{InstructionsTemplate: "standard"},
+		Methodology: domain.MethodologyConventional,
+		Team:        domain.DefaultTeam(domain.MethodologyConventional),
+		MCP:         cli.DefaultMCPServers(),
+	}
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	return loadMerged(t, home, project)
+}
+
+// TestMultiAdapter_Codex_NodeReact_MCPFormat verifies Codex writes MCP servers
+// as [mcp_servers.*] TOML tables inside a hash-marker managed block in
+// ~/.codex/config.toml (TOMLConfigFile strategy).
+func TestMultiAdapter_Codex_NodeReact_MCPFormat(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	dir := scaffoldNodeReact(t)
+	meta := cli.DetectProjectMeta(dir)
+	merged := buildCodexNodeReactConfig(t, home, dir, meta)
+
+	adapter := codex.New()
+	report := runPlanExecute(t, merged, adapter, home, dir)
+	if !report.Success {
+		for _, s := range report.Steps {
+			if s.Status == domain.StepFailed {
+				t.Errorf("step %q failed: %s", s.Action.ID, s.Error)
+			}
+		}
+		t.Fatal("Codex/NodeReact/MCPFormat: apply should succeed")
+	}
+
+	configTOML := filepath.Join(home, ".codex", "config.toml")
+	assertFileExists(t, configTOML, "Codex/NodeReact: ~/.codex/config.toml")
+
+	data, err := os.ReadFile(configTOML)
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"# squadai:mcp:start",
+		"[mcp_servers.",
+		"# squadai:mcp:end",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("Codex/NodeReact: config.toml missing %q:\n%s", want, content)
+		}
+	}
+	// TOML config must not contain JSON-style keys.
+	if strings.Contains(content, `"mcpServers"`) || strings.Contains(content, `"mcp":`) {
+		t.Error("Codex/NodeReact: config.toml must not contain JSON MCP keys")
+	}
+}
+
+// TestMultiAdapter_Codex_NodeReact_RulesAndMemory verifies Codex injects its
+// adapter-scoped memory section into the shared repo-root AGENTS.md.
+func TestMultiAdapter_Codex_NodeReact_RulesAndMemory(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	dir := scaffoldNodeReact(t)
+	meta := cli.DetectProjectMeta(dir)
+	merged := buildCodexNodeReactConfig(t, home, dir, meta)
+
+	adapter := codex.New()
+	report := runPlanExecute(t, merged, adapter, home, dir)
+	if !report.Success {
+		t.Fatal("Codex/NodeReact/RulesAndMemory: apply should succeed")
+	}
+
+	agentsMD := filepath.Join(dir, "AGENTS.md")
+	assertFileExists(t, agentsMD, "Codex/NodeReact: AGENTS.md")
+
+	data, err := os.ReadFile(agentsMD)
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "<!-- squadai:memory:codex -->") {
+		t.Errorf("Codex/NodeReact: AGENTS.md missing codex-scoped memory marker:\n%s", content)
+	}
+	// Codex has no slash commands: the generic memory protocol leads with the
+	// squadai CLI wording so instructions remain actionable.
+	if !strings.Contains(content, "squadai memory search") {
+		t.Error("Codex/NodeReact: memory protocol should reference the squadai CLI")
+	}
+	// Solo delegation: the orchestrator template is injected into AGENTS.md
+	// rather than written to an agents directory.
+	if !strings.Contains(content, "<!-- squadai:team -->") {
+		t.Errorf("Codex/NodeReact: AGENTS.md missing solo orchestrator team section:\n%s", content)
+	}
+}
+
+// TestMultiAdapter_Codex_NodeReact_VerifyAfterApply confirms the verifier
+// passes for the Codex adapter after a fresh apply, including the TOML MCP check.
+func TestMultiAdapter_Codex_NodeReact_VerifyAfterApply(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	dir := scaffoldNodeReact(t)
+	meta := cli.DetectProjectMeta(dir)
+	merged := buildCodexNodeReactConfig(t, home, dir, meta)
+
+	adapter := codex.New()
+	report := runPlanExecute(t, merged, adapter, home, dir)
+	if !report.Success {
+		t.Fatal("Codex/NodeReact/Verify: apply should succeed")
+	}
+
+	v := verify.New()
+	vReport, err := v.Verify(merged, []domain.Adapter{adapter}, home, dir)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !vReport.AllPass {
+		for _, r := range vReport.Results {
+			if !r.Passed {
+				t.Errorf("verify check %q failed: %s", r.Check, r.Message)
+			}
+		}
+	}
+}
+
+// TestMultiAdapter_Codex_NodeReact_Reversibility validates that remove strips
+// the managed TOML block from ~/.codex/config.toml while preserving user
+// content, and leaves the original project files untouched.
+func TestMultiAdapter_Codex_NodeReact_Reversibility(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	dir := scaffoldNodeReact(t)
+	meta := cli.DetectProjectMeta(dir)
+
+	// Pre-seed user content in config.toml so remove must strip, not delete.
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	configTOML := filepath.Join(codexDir, "config.toml")
+	userContent := "model = \"gpt-5.2\"\n"
+	if err := os.WriteFile(configTOML, []byte(userContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	merged := buildCodexNodeReactConfig(t, home, dir, meta)
+	adapter := codex.New()
+	report := runPlanExecute(t, merged, adapter, home, dir)
+	if !report.Success {
+		t.Fatal("Codex/NodeReact/Reversibility: apply should succeed before remove test")
+	}
+	assertFileContains(t, configTOML, "# squadai:mcp:start", "Codex/NodeReact: config.toml has managed block before remove")
+
+	// Project-level cleanup via the sidecar-driven Remove.
+	removeReport, err := cli.Remove(cli.RemoveOptions{ProjectDir: dir})
+	if err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(removeReport.Errors) > 0 {
+		t.Errorf("Remove reported errors: %v", removeReport.Errors)
+	}
+	totalRemoved := len(removeReport.RemovedFiles) + len(removeReport.CleanedFiles)
+	if totalRemoved == 0 {
+		t.Error("Codex/NodeReact: Remove should have removed or cleaned at least one file")
+	}
+
+	// The managed TOML block strips cleanly via the marker primitive remove
+	// uses, preserving user content outside the markers.
+	data, err := os.ReadFile(configTOML)
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	stripped, found := marker.StripAll(string(data))
+	if !found {
+		t.Fatal("Codex/NodeReact: config.toml managed block should be discoverable by StripAll")
+	}
+	if strings.Contains(stripped, "mcp_servers") {
+		t.Errorf("Codex/NodeReact: StripAll should remove the managed block, got:\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "model = \"gpt-5.2\"") {
+		t.Errorf("Codex/NodeReact: StripAll should preserve user content, got:\n%s", stripped)
+	}
+
+	// Original Node/React project files must be untouched.
+	assertFileExists(t, filepath.Join(dir, "package.json"), "Codex/NodeReact: package.json untouched after remove")
+	assertFileExists(t, filepath.Join(dir, "src", "App.tsx"), "Codex/NodeReact: src/App.tsx untouched after remove")
 }

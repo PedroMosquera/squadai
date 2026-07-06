@@ -43,7 +43,7 @@ func ModelsForTierWithCatalog(tier domain.ModelTier, agentID domain.AgentID, cat
 		return ModelConfig{
 			Settings: map[string]interface{}{"model": cat.TierModel(string(agentID), catalogTier)},
 		}
-	case domain.AgentVSCodeCopilot, domain.AgentCursor, domain.AgentWindsurf:
+	case domain.AgentVSCodeCopilot, domain.AgentCursor, domain.AgentWindsurf, domain.AgentCodex:
 		return ModelConfig{
 			Settings:   map[string]interface{}{},
 			PromptHint: cat.Hint(string(agentID), catalogTier),

@@ -1515,7 +1515,7 @@ func newTestInstaller() *Installer {
 // going through Plan.
 func installerWithSchema(adapter domain.Adapter) *Installer {
 	inst := New(nil)
-	inst.ensureAgentConfig(adapter, "")
+	inst.ensureAgentConfig(adapter, "", "")
 	return inst
 }
 
