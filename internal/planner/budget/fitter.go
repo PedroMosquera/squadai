@@ -61,6 +61,9 @@ type Options struct {
 var summarizableComponents = map[domain.ComponentID]bool{
 	domain.ComponentMemory: true,
 	domain.ComponentRules:  true,
+	// Agents degrade to a compact orchestrator digest in shared rules files;
+	// native agent files are unchanged (they are lazy-loaded by the agent).
+	domain.ComponentAgents: true,
 }
 
 // componentPriority lists content components ordered from lowest to highest

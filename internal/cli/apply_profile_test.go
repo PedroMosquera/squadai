@@ -248,7 +248,7 @@ func TestSummaryComponentTokens(t *testing.T) {
 		{Component: domain.ComponentRules, Action: domain.ActionCreate, TargetPath: "/p/AGENTS.md"},
 		{Component: domain.ComponentSkills, Action: domain.ActionCreate, TargetPath: "/p/skill.md"},
 	}
-	got := summaryComponentTokens(actions, "")
+	got := summaryComponentTokens(actions, "", 0)
 	if got[domain.ComponentMemory] <= 0 {
 		t.Error("memory summary tokens should be positive")
 	}

@@ -212,18 +212,38 @@ func TestFit_SummarySkipActionUpgradedToUpdate(t *testing.T) {
 
 func TestFit_NonSummarizableGoesStraightToOmit(t *testing.T) {
 	dir := t.TempDir()
-	a1 := writeFile(t, dir, "agents.md", 800) // 200
+	a1 := writeFile(t, dir, "cmds.md", 800) // 200
 	res, err := Fit([]domain.PlannedAction{
-		contentAction(domain.ComponentAgents, a1),
+		contentAction(domain.ComponentCommands, a1),
 	}, Options{MaxTokens: 100})
 	if err != nil {
 		t.Fatalf("Fit: %v", err)
 	}
 	if res.Decisions[0].Mode != ModeOmit {
-		t.Errorf("agents Mode = %s, want omit (agents has no summary render)", res.Decisions[0].Mode)
+		t.Errorf("commands Mode = %s, want omit (commands has no summary render)", res.Decisions[0].Mode)
 	}
 	if len(res.Actions) != 0 {
 		t.Errorf("omitted action should be dropped, got %d", len(res.Actions))
+	}
+}
+
+func TestFit_AgentsSummarizable(t *testing.T) {
+	dir := t.TempDir()
+	a1 := writeFile(t, dir, "agents.md", 800) // 200 tokens full
+	res, err := Fit([]domain.PlannedAction{
+		contentAction(domain.ComponentAgents, a1),
+	}, Options{
+		MaxTokens:     150,
+		SummaryTokens: map[domain.ComponentID]int{domain.ComponentAgents: 40},
+	})
+	if err != nil {
+		t.Fatalf("Fit: %v", err)
+	}
+	if res.Decisions[0].Mode != ModeSummary {
+		t.Fatalf("agents Mode = %s, want summary", res.Decisions[0].Mode)
+	}
+	if len(res.Actions) != 1 || res.Actions[0].Mode != "summary" {
+		t.Errorf("summarized agents action should be kept with Mode=summary, got %+v", res.Actions)
 	}
 }
 
