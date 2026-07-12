@@ -36,10 +36,10 @@ func (m *mockAdapter) ProjectCommandsDir(projectDir string) string { return "" }
 func (m *mockAdapter) DelegationStrategy() domain.DelegationStrategy {
 	return domain.DelegationSoloAgent
 }
-func (m *mockAdapter) SupportsSubAgents() bool                { return false }
-func (m *mockAdapter) SubAgentsDir(homeDir string) string     { return "" }
-func (m *mockAdapter) SupportsWorkflows() bool                { return false }
-func (m *mockAdapter) WorkflowsDir(projectDir string) string  { return "" }
+func (m *mockAdapter) SupportsSubAgents() bool                   { return false }
+func (m *mockAdapter) SubAgentsDir(homeDir string) string        { return "" }
+func (m *mockAdapter) SupportsWorkflows() bool                   { return false }
+func (m *mockAdapter) WorkflowsDir(projectDir string) string     { return "" }
 func (m *mockAdapter) MCPRootKey() string                        { return "mcpServers" }
 func (m *mockAdapter) MCPURLKey() string                         { return "url" }
 func (m *mockAdapter) MCPConfigPath(projectDir string) string    { return "" }
@@ -49,13 +49,26 @@ func (m *mockAdapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
 func (m *mockAdapter) RulesFrontmatter() string                  { return "" }
 func (m *mockAdapter) RulesFileSizeCap() int                     { return 0 }
 
-// ─── Intro Screen ───────────────────────────────────────────────────────────
+// ─── Welcome (quick track) Screen ───────────────────────────────────────────
 
-func TestIntroScreen_ShowsVersionAndMode(t *testing.T) {
+// menuCursorFor returns the flattened menu row index for a command, failing
+// the test when the command is not present in the grouped menu.
+func menuCursorFor(t *testing.T, command string) int {
+	t.Helper()
+	for i, row := range menuRows() {
+		if row.selectable() && row.item.command == command {
+			return i
+		}
+	}
+	t.Fatalf("menu command %q not found", command)
+	return -1
+}
+
+func TestWelcomeScreen_ShowsVersionAndMode(t *testing.T) {
 	adapters := []domain.Adapter{
 		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
 	}
-	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home").startQuickSetup(false)
 
 	view := m.View()
 	if !strings.Contains(view, "SquadAI v1.0.0") {
@@ -64,19 +77,18 @@ func TestIntroScreen_ShowsVersionAndMode(t *testing.T) {
 	if !strings.Contains(view, "One config. Every AI agent. Zero drift.") {
 		t.Error("header should show product tagline")
 	}
-	// Display name format: "  OpenCode"
 	if !strings.Contains(view, "OpenCode") {
-		t.Error("intro should show detected adapter display name")
+		t.Error("welcome screen should show detected adapter display name")
 	}
 }
 
-func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
+func TestWelcomeScreen_ShowsMultipleAdapters(t *testing.T) {
 	adapters := []domain.Adapter{
 		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
 		&mockAdapter{id: domain.AgentClaudeCode, lane: domain.LanePersonal},
 		&mockAdapter{id: domain.AgentVSCodeCopilot, lane: domain.LanePersonal},
 	}
-	m := NewModel("1.0.0", domain.ModePersonal, adapters, "/tmp/home")
+	m := NewModel("1.0.0", domain.ModePersonal, adapters, "/tmp/home").startQuickSetup(false)
 
 	view := m.View()
 	// Display names instead of raw IDs
@@ -91,28 +103,28 @@ func TestIntroScreen_ShowsMultipleAdapters(t *testing.T) {
 	}
 }
 
-func TestIntroScreen_NoAdapters(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModePersonal, nil, "/tmp/home")
+func TestWelcomeScreen_UndetectedAgentsMarked(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModePersonal, nil, "/tmp/home").startQuickSetup(false)
 
 	view := m.View()
-	if !strings.Contains(view, "(none detected)") {
-		t.Error("should show no adapters message")
+	if !strings.Contains(view, "(not found on this machine)") {
+		t.Error("undetected agents should carry the not-found suffix")
 	}
 }
 
 // ─── Screen Navigation ─────────────────────────────────────────────────────
 
-func TestIntro_AnyKeyAdvancesToMenu(t *testing.T) {
-	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+func TestQuickAgents_MKeyGoesToMenu(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home").startQuickSetup(false)
 
-	if m.screen != screenIntro {
-		t.Fatal("should start on intro")
+	if m.screen != screenQuickAgents {
+		t.Fatal("quick setup should start on the agents screen")
 	}
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	model := updated.(Model)
 	if model.screen != screenMenu {
-		t.Error("any key on intro should advance to menu")
+		t.Error("m on the quick agents screen should open the full menu")
 	}
 }
 
@@ -121,9 +133,21 @@ func TestMenu_ShowsAllItems(t *testing.T) {
 	m.screen = screenMenu
 
 	view := m.View()
-	for _, item := range menuItems {
+	for _, item := range selectableMenuItems() {
 		if !strings.Contains(view, item.label) {
 			t.Errorf("menu should contain %q", item.label)
+		}
+	}
+}
+
+func TestMenu_ShowsSectionHeaders(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+
+	view := m.View()
+	for _, header := range []string{"Daily", "Setup", "Advanced"} {
+		if !strings.Contains(view, header) {
+			t.Errorf("menu should contain section header %q", header)
 		}
 	}
 }
@@ -131,51 +155,71 @@ func TestMenu_ShowsAllItems(t *testing.T) {
 func TestMenu_CursorNavigation(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
-	m.cursor = 0
+	m.cursor = firstSelectableMenuRow()
 
 	// Move down.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	model := updated.(Model)
-	if model.cursor != 1 {
-		t.Errorf("cursor = %d, want 1", model.cursor)
+	want := nextSelectableMenuRow(firstSelectableMenuRow(), +1)
+	if model.cursor != want {
+		t.Errorf("cursor = %d, want %d", model.cursor, want)
 	}
 
 	// Move down again.
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
 	model = updated.(Model)
-	if model.cursor != 2 {
-		t.Errorf("cursor = %d, want 2", model.cursor)
+	want2 := nextSelectableMenuRow(want, +1)
+	if model.cursor != want2 {
+		t.Errorf("cursor = %d, want %d", model.cursor, want2)
 	}
 
 	// Move up.
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
 	model = updated.(Model)
-	if model.cursor != 1 {
-		t.Errorf("cursor = %d, want 1", model.cursor)
+	if model.cursor != want {
+		t.Errorf("cursor = %d, want %d", model.cursor, want)
+	}
+}
+
+func TestMenu_CursorSkipsSectionHeaders(t *testing.T) {
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenMenu
+	m.cursor = firstSelectableMenuRow()
+
+	rows := menuRows()
+	// Walk the whole menu; the cursor must always land on a selectable row.
+	model := m
+	for i := 0; i < len(rows)+2; i++ {
+		updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+		model = updated.(Model)
+		if !rows[model.cursor].selectable() {
+			t.Fatalf("cursor %d landed on a section header", model.cursor)
+		}
 	}
 }
 
 func TestMenu_CursorDoesNotGoNegative(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
-	m.cursor = 0
+	m.cursor = firstSelectableMenuRow()
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	model := updated.(Model)
-	if model.cursor != 0 {
-		t.Errorf("cursor = %d, want 0 (should not go negative)", model.cursor)
+	if model.cursor != firstSelectableMenuRow() {
+		t.Errorf("cursor = %d, want %d (should not go above the first item)", model.cursor, firstSelectableMenuRow())
 	}
 }
 
 func TestMenu_CursorDoesNotExceedMax(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
-	m.cursor = len(menuItems) - 1
+	last := len(menuRows()) - 1
+	m.cursor = last
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	model := updated.(Model)
-	if model.cursor != len(menuItems)-1 {
-		t.Errorf("cursor = %d, want %d (should not exceed max)", model.cursor, len(menuItems)-1)
+	if model.cursor != last {
+		t.Errorf("cursor = %d, want %d (should not exceed max)", model.cursor, last)
 	}
 }
 
@@ -196,13 +240,7 @@ func TestMenu_QuitKeyQuits(t *testing.T) {
 func TestMenu_SelectQuitItem(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
-	// Find "Quit" index.
-	for i, item := range menuItems {
-		if item.command == "quit" {
-			m.cursor = i
-			break
-		}
-	}
+	m.cursor = menuCursorFor(t, "quit")
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
@@ -231,13 +269,7 @@ func TestMenu_CtrlCQuits(t *testing.T) {
 func TestMenu_RestoreShowsMessage(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
-	// Find "Restore backup" index.
-	for i, item := range menuItems {
-		if item.command == "restore" {
-			m.cursor = i
-			break
-		}
-	}
+	m.cursor = menuCursorFor(t, "restore")
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
@@ -321,10 +353,10 @@ func TestView_Quitting_ReturnsEmpty(t *testing.T) {
 func TestMenu_CursorIndicator(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
-	m.cursor = 0
+	m.cursor = firstSelectableMenuRow()
 
 	view := m.View()
-	if !strings.Contains(view, "> Init / Setup") {
+	if !strings.Contains(view, "> Team Status") {
 		t.Error("first item should have cursor indicator")
 	}
 }
@@ -336,8 +368,11 @@ func TestMenu_ShowsInitSetup(t *testing.T) {
 	m.screen = screenMenu
 
 	view := m.View()
-	if !strings.Contains(view, "Init / Setup") {
-		t.Error("menu should contain 'Init / Setup'")
+	if !strings.Contains(view, "Quick Setup") {
+		t.Error("menu should contain 'Quick Setup'")
+	}
+	if !strings.Contains(view, "Advanced Setup") {
+		t.Error("menu should contain 'Advanced Setup'")
 	}
 }
 
@@ -488,7 +523,7 @@ func TestInitMCP_ToggleContext7(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
 	m.mcpSelections = map[string]bool{"context7": true}
-	m.initCursor = 0
+	m.initCursor = 1 // context7 sits after the squadai control-plane entry
 
 	// Space toggles context7 off.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -615,17 +650,15 @@ func TestStyles_AllDefined(t *testing.T) {
 
 // ─── Intro Screen New Tests ───────────────────────────────────────────────────
 
-func TestIntroScreen_ShowsDelegationStrategy(t *testing.T) {
+func TestWelcomeScreen_ShowsAdapterDisplayName(t *testing.T) {
 	adapters := []domain.Adapter{
 		&mockAdapter{id: domain.AgentOpenCode, lane: domain.LaneTeam},
 	}
-	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home")
+	m := NewModel("1.0.0", domain.ModeTeam, adapters, "/tmp/home").startQuickSetup(false)
 
 	view := m.View()
-	// Delegation strategy is no longer displayed on the intro screen.
-	// Verify the adapter display name is shown instead.
 	if !strings.Contains(view, "OpenCode") {
-		t.Errorf("intro should show adapter display name 'OpenCode', got:\n%s", view)
+		t.Errorf("welcome screen should show adapter display name 'OpenCode', got:\n%s", view)
 	}
 }
 
@@ -637,7 +670,8 @@ func TestMenu_AllItemsPresent(t *testing.T) {
 
 	view := m.View()
 	expectedLabels := []string{
-		"Init / Setup",
+		"Quick Setup",
+		"Advanced Setup",
 		"Plan (dry-run)",
 		"Apply",
 		"Team Status",
@@ -855,13 +889,7 @@ func TestMenu_ShowsBrowseSkills(t *testing.T) {
 func TestMenu_SelectBrowseSkills_GoesToSkillBrowser(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
-	// Navigate cursor to "Browse Skills".
-	for i, item := range menuItems {
-		if item.command == "skills" {
-			m.cursor = i
-			break
-		}
-	}
+	m.cursor = menuCursorFor(t, "skills")
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
@@ -1126,7 +1154,8 @@ func TestMenu_AllItemsIncludingSkills(t *testing.T) {
 
 	view := m.View()
 	expected := []string{
-		"Init / Setup",
+		"Quick Setup",
+		"Advanced Setup",
 		"Plan (dry-run)",
 		"Apply",
 		"Team Status",
@@ -1308,7 +1337,6 @@ func TestRenderPanel_ContainsContent(t *testing.T) {
 func TestInitModelTier_ScreenExists(t *testing.T) {
 	// screenInitModelTier must be distinct from other screens.
 	screens := []screen{
-		screenIntro,
 		screenMenu,
 		screenRunning,
 		screenResult,
@@ -1316,12 +1344,16 @@ func TestInitModelTier_ScreenExists(t *testing.T) {
 		screenTeamStatus,
 		screenInitMCP,
 		screenInitPlugins,
-		screenInitScope,
 		screenInitAdapters,
 		screenInitPreset,
 		screenInitInstallSummary,
 		screenSkillBrowser,
 		screenInitApplyPrompt,
+		screenQuickAgents,
+		screenQuickStyle,
+		screenQuickExtras,
+		screenQuickSummary,
+		screenQuickDone,
 	}
 	for _, s := range screens {
 		if s == screenInitModelTier {
@@ -1363,7 +1395,6 @@ func TestInitModelTier_Enter_AdvancesToMCP(t *testing.T) {
 func TestInitAdapters_ScreenExists(t *testing.T) {
 	// screenInitAdapters must be distinct from all other screen constants.
 	others := []screen{
-		screenIntro,
 		screenMenu,
 		screenRunning,
 		screenResult,
@@ -1372,7 +1403,6 @@ func TestInitAdapters_ScreenExists(t *testing.T) {
 		screenInitMCP,
 		screenInitPlugins,
 		screenInitModelTier,
-		screenInitScope,
 		screenInitPreset,
 		screenInitInstallSummary,
 		screenSkillBrowser,
@@ -1542,7 +1572,6 @@ func TestInitAdapters_AllDetectedPreChecked(t *testing.T) {
 
 func TestInitPreset_ScreenExists(t *testing.T) {
 	others := []screen{
-		screenIntro,
 		screenMenu,
 		screenRunning,
 		screenResult,
@@ -1551,7 +1580,6 @@ func TestInitPreset_ScreenExists(t *testing.T) {
 		screenInitMCP,
 		screenInitPlugins,
 		screenInitModelTier,
-		screenInitScope,
 		screenInitAdapters,
 		screenInitInstallSummary,
 		screenSkillBrowser,
@@ -1622,15 +1650,15 @@ func TestInitPreset_FullSquad_GoesToAdapters(t *testing.T) {
 	}
 }
 
-func TestInitPreset_Esc_GoesToScope(t *testing.T) {
+func TestInitPreset_Esc_GoesToMenu(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitPreset
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := updated.(Model)
 
-	if model.screen != screenInitScope {
-		t.Errorf("screen = %d, want screenInitScope (%d) after esc on preset", model.screen, screenInitScope)
+	if model.screen != screenMenu {
+		t.Errorf("screen = %d, want screenMenu (%d) after esc on preset (scope screen removed)", model.screen, screenMenu)
 	}
 }
 
@@ -1812,23 +1840,35 @@ func TestInstallSummary_AllDeselectedExceptOne_ProceedsWithOne(t *testing.T) {
 
 // ─── MCP Catalog-driven screen ───────────────────────────────────────────────
 
-func TestInitMCP_CatalogShowsAllFiveItems(t *testing.T) {
+func TestInitMCP_CatalogShowsAllSixItems(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
 	m.mcpSelections = catalogPreCheckedSelections()
 
 	view := m.View()
 	catalog := domain.DefaultMCPCatalog()
-	if len(catalog) != 5 {
-		t.Fatalf("catalog size changed, expected 5, got %d", len(catalog))
+	if len(catalog) != 6 {
+		t.Fatalf("catalog size changed, expected 6, got %d", len(catalog))
 	}
 	for _, s := range catalog {
-		if !strings.Contains(view, s.Name) {
-			t.Errorf("MCP screen missing server %q", s.Name)
+		if !strings.Contains(view, s.Display()) {
+			t.Errorf("MCP screen missing server %q", s.Display())
 		}
-		if !strings.Contains(view, s.Description) {
+		// Long descriptions may be wrapped by the panel; check a fragment.
+		frag := s.Description
+		if len(frag) > 30 {
+			frag = frag[:30]
+		}
+		if !strings.Contains(view, frag) {
 			t.Errorf("MCP screen missing description for %q", s.Name)
 		}
+	}
+	// The de-emphasized knowledge-graph server is renamed and sorted last.
+	if catalog[len(catalog)-1].Name != "memory" {
+		t.Errorf("memory server should be sorted last in the catalog")
+	}
+	if !strings.Contains(view, "knowledge-graph (community)") {
+		t.Errorf("MCP screen should show the renamed knowledge-graph entry")
 	}
 }
 
@@ -1852,8 +1892,14 @@ func TestInitMCP_PreCheckedCount(t *testing.T) {
 			count++
 		}
 	}
-	if count != 1 {
-		t.Errorf("expected 1 pre-checked items, got %d", count)
+	if count != 2 {
+		t.Errorf("expected 2 pre-checked items (squadai + context7), got %d", count)
+	}
+	if !sel["squadai"] {
+		t.Error("squadai should start selected")
+	}
+	if !sel["context7"] {
+		t.Error("context7 should start selected")
 	}
 }
 
@@ -1861,7 +1907,7 @@ func TestInitMCP_ToggleChangesSelection(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenInitMCP
 	m.mcpSelections = catalogPreCheckedSelections()
-	m.initCursor = 0 // context7, which is pre-checked
+	m.initCursor = 1 // context7, which is pre-checked
 
 	// Space should toggle it off.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -1871,18 +1917,38 @@ func TestInitMCP_ToggleChangesSelection(t *testing.T) {
 	}
 }
 
+// TestInitMCP_SquadaiToggleable: the pre-checked SquadAI console entry sits
+// first in the catalog and stays deselectable like any other server.
+func TestInitMCP_SquadaiToggleable(t *testing.T) {
+	catalog := domain.DefaultMCPCatalog()
+	if catalog[0].Name != "squadai" {
+		t.Fatalf("first catalog entry = %q, want squadai", catalog[0].Name)
+	}
+
+	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
+	m.screen = screenInitMCP
+	m.mcpSelections = catalogPreCheckedSelections()
+	m.initCursor = 0 // squadai
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := updated.(Model)
+	if model.mcpSelections["squadai"] {
+		t.Error("toggling pre-checked squadai should deselect it")
+	}
+}
+
 // ─── Remove Confirmation Screen ───────────────────────────────────────────────
 
 func TestMenuItems_ContainsRemove(t *testing.T) {
 	found := false
-	for _, item := range menuItems {
+	for _, item := range selectableMenuItems() {
 		if item.command == "remove" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("menuItems should contain a 'remove' entry")
+		t.Error("menu should contain a 'remove' entry")
 	}
 }
 
@@ -1900,18 +1966,7 @@ func TestMenu_SelectRemove_NavigatesToConfirmScreen(t *testing.T) {
 	m := NewModel("1.0.0", domain.ModeTeam, nil, "/tmp/home")
 	m.screen = screenMenu
 
-	// Navigate to the remove item.
-	removeIdx := -1
-	for i, item := range menuItems {
-		if item.command == "remove" {
-			removeIdx = i
-			break
-		}
-	}
-	if removeIdx < 0 {
-		t.Fatal("remove menu item not found")
-	}
-	m.cursor = removeIdx
+	m.cursor = menuCursorFor(t, "remove")
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)

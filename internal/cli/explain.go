@@ -176,7 +176,7 @@ Focus: balanced general-purpose software development without methodology lock-in
 	case "adapters":
 		return `# Adapters
 
-SquadAI manages configurations for six AI coding agents ("adapters"):
+SquadAI manages configurations for seven AI coding agents ("adapters"):
 
   claude     Claude Code — .claude/CLAUDE.md, .claude/agents/, .claude/settings.json
              Delegation: multi-agent (orchestrator + subagents)
@@ -199,6 +199,11 @@ SquadAI manages configurations for six AI coding agents ("adapters"):
              Delegation: multi-agent (native subagents)
              Commands render as prompt templates in prompts/
              Supports per-agent banner branding
+
+  codex      OpenAI Codex CLI — AGENTS.md, ~/.codex/AGENTS.md, ~/.codex/config.toml
+             Delegation: solo agent (inline only)
+             MCP servers written as [mcp_servers.*] TOML tables inside a
+             squadai-managed marker block in ~/.codex/config.toml
 
 Adapters are auto-detected by checking PATH and config directory presence.
 Override detection with 'adapters' in project.json.
@@ -384,10 +389,19 @@ adapter's settings file (.claude/settings.json, .cursor/mcp.json, etc.).
 
 ## SquadAI as MCP server
 
-SquadAI can itself be used as an MCP tool server by Claude Code:
-  squadai mcp-server
+SquadAI is itself an MCP tool server ('squadai mcp-server') exposing plan,
+apply, verify, status, context, init, doctor, and project memory as tools.
 
-Register it in .claude/settings.json:
+The curated catalog includes a "squadai" entry (pre-checked), so 'squadai init'
++ 'squadai apply' register it in every MCP-capable agent automatically —
+Claude Code, OpenCode, Cursor, Windsurf, VS Code Copilot, and Pi all get the
+same control plane inside the agent console. Opt out with --mcp=none or by
+unchecking it in the wizard.
+
+The registration references the bare "squadai" binary, so it must be on PATH
+for agents to start it ('squadai doctor' warns when it is not).
+
+To register manually (Claude Code example):
   { "mcpServers": { "squadai": { "command": "squadai", "args": ["mcp-server"] } } }
 
 Then use 'squadai install-commands' to add slash commands to .claude/commands/.`, true
@@ -441,7 +455,7 @@ token cost of your agent configuration.
 
   squadai token-budget          # human-readable per-component breakdown
   squadai token-budget --json   # machine-readable
-  squadai token-budget --model=claude-sonnet-4
+  squadai token-budget --model=claude-sonnet-4-6
 
 This reads the installed agent files and estimates tokens. Without --model it
 uses a chars/4 heuristic; with --model it uses the model-aware tokenizer when
@@ -449,7 +463,7 @@ available. The brand component appears as its own row.
 
 ## Active fitting
 
-  squadai apply --max-tokens=60000 --fit-model=claude-sonnet-4
+  squadai apply --max-tokens=60000 --fit-model=claude-sonnet-4-6
 
 This renders the planned output, estimates desired tokens, then orders
 components by priority and omits lowest-priority content to fit within the

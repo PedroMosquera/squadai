@@ -1,6 +1,10 @@
 package cli
 
-import "github.com/PedroMosquera/squadai/internal/domain"
+import (
+	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/model"
+	"github.com/PedroMosquera/squadai/internal/modelcatalog"
+)
 
 // ModelConfig holds the model settings for a specific agent at a specific tier.
 type ModelConfig struct {
@@ -12,116 +16,37 @@ type ModelConfig struct {
 	PromptHint string
 }
 
-// ModelsForTier returns the model configuration for a given tier and agent.
+// ModelsForTier returns the model configuration for a given tier and agent,
+// resolved through the unified model catalog. The manual tier returns empty
+// settings (the user picks models themselves).
 func ModelsForTier(tier domain.ModelTier, agentID domain.AgentID) ModelConfig {
-	switch tier {
-	case domain.ModelTierPerformance:
-		return performanceModels(agentID)
-	case domain.ModelTierStarter:
-		return starterModels(agentID)
-	case domain.ModelTierManual:
-		return ModelConfig{Settings: map[string]interface{}{}}
-	default: // balanced
-		return balancedModels(agentID)
-	}
+	return ModelsForTierWithCatalog(tier, agentID, modelcatalog.Default())
 }
 
-func balancedModels(agentID domain.AgentID) ModelConfig {
+// ModelsForTierWithCatalog is ModelsForTier against an explicit catalog.
+func ModelsForTierWithCatalog(tier domain.ModelTier, agentID domain.AgentID, cat *modelcatalog.Catalog) ModelConfig {
+	if tier == domain.ModelTierManual {
+		return ModelConfig{Settings: map[string]interface{}{}}
+	}
+	catalogTier := string(model.TierFromModelTier(tier))
+
 	switch agentID {
 	case domain.AgentOpenCode:
 		return ModelConfig{
-			Settings: map[string]interface{}{"model": "anthropic/claude-sonnet-4-20250514"},
+			Settings: map[string]interface{}{"model": cat.TierModel(string(agentID), catalogTier)},
 		}
 	case domain.AgentPi:
 		return ModelConfig{
-			Settings: map[string]interface{}{"defaultModel": "anthropic/claude-sonnet-4-20250514"},
+			Settings: map[string]interface{}{"defaultModel": cat.TierModel(string(agentID), catalogTier)},
 		}
 	case domain.AgentClaudeCode:
 		return ModelConfig{
-			Settings: map[string]interface{}{"model": "claude-sonnet-4-20250514"},
+			Settings: map[string]interface{}{"model": cat.TierModel(string(agentID), catalogTier)},
 		}
-	case domain.AgentVSCodeCopilot:
+	case domain.AgentVSCodeCopilot, domain.AgentCursor, domain.AgentWindsurf, domain.AgentCodex:
 		return ModelConfig{
 			Settings:   map[string]interface{}{},
-			PromptHint: "Use Claude Sonnet 4 or GPT-4.1-mini. Use flagship models only for architecture decisions.",
-		}
-	case domain.AgentCursor:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use Claude Sonnet 4 for complex tasks, GPT-4.1-mini for edits and quick fixes.",
-		}
-	case domain.AgentWindsurf:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use the default Cascade model. Switch to premium only for complex refactors.",
-		}
-	default:
-		return ModelConfig{Settings: map[string]interface{}{}}
-	}
-}
-
-func performanceModels(agentID domain.AgentID) ModelConfig {
-	switch agentID {
-	case domain.AgentOpenCode:
-		return ModelConfig{
-			Settings: map[string]interface{}{"model": "anthropic/claude-sonnet-4-5"},
-		}
-	case domain.AgentPi:
-		return ModelConfig{
-			Settings: map[string]interface{}{"defaultModel": "anthropic/claude-sonnet-4-5"},
-		}
-	case domain.AgentClaudeCode:
-		return ModelConfig{
-			Settings: map[string]interface{}{"model": "claude-sonnet-4-5"},
-		}
-	case domain.AgentVSCodeCopilot:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use Claude Sonnet 4.5 or GPT-4.1 for all tasks",
-		}
-	case domain.AgentCursor:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use Claude Sonnet 4.5 or GPT-4.1 for all tasks",
-		}
-	case domain.AgentWindsurf:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use the most capable model available (Claude Sonnet 4.5)",
-		}
-	default:
-		return ModelConfig{Settings: map[string]interface{}{}}
-	}
-}
-
-func starterModels(agentID domain.AgentID) ModelConfig {
-	switch agentID {
-	case domain.AgentOpenCode:
-		return ModelConfig{
-			Settings: map[string]interface{}{"model": "anthropic/claude-haiku-3-5"},
-		}
-	case domain.AgentPi:
-		return ModelConfig{
-			Settings: map[string]interface{}{"defaultModel": "anthropic/claude-haiku-3-5"},
-		}
-	case domain.AgentClaudeCode:
-		return ModelConfig{
-			Settings: map[string]interface{}{"model": "claude-haiku-3-5"},
-		}
-	case domain.AgentVSCodeCopilot:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use GPT-4.1-mini or Claude Haiku for all tasks to minimize cost.",
-		}
-	case domain.AgentCursor:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use GPT-4.1-mini for all tasks. Avoid premium models to stay within budget.",
-		}
-	case domain.AgentWindsurf:
-		return ModelConfig{
-			Settings:   map[string]interface{}{},
-			PromptHint: "Use the free/default model tier. Premium models are not needed for most tasks.",
+			PromptHint: cat.Hint(string(agentID), catalogTier),
 		}
 	default:
 		return ModelConfig{Settings: map[string]interface{}{}}

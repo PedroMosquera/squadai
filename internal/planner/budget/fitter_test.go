@@ -105,12 +105,10 @@ func TestFit_OmitLowestPriority(t *testing.T) {
 		contentAction(domain.ComponentCommands, c),
 		contentAction(domain.ComponentSkills, s),
 	}
-	// Full total = 600. cap = 100:
-	//   pass 1 summarizes all → 300 > 100.
-	//   pass 2 omits plugins → 200 > 100; omits commands → 100 ≤ 100.
-	// So plugins and commands are omitted (lowest priority first), skills is
-	// marked summary and skipped until real summary rendering exists.
-	res, err := Fit(actions, Options{MaxTokens: 100})
+	// Full total = 600. cap = 250. None of plugins/commands/skills is
+	// summarizable, so pass 1 is a no-op and pass 2 omits lowest priority
+	// first: plugins → 400 > 250; commands → 200 ≤ 250. Skills stay full.
+	res, err := Fit(actions, Options{MaxTokens: 250})
 	if err != nil {
 		t.Fatalf("Fit: %v", err)
 	}
@@ -124,10 +122,10 @@ func TestFit_OmitLowestPriority(t *testing.T) {
 	if m[domain.ComponentCommands] != ModeOmit {
 		t.Errorf("commands: %s, want omit", m[domain.ComponentCommands])
 	}
-	if m[domain.ComponentSkills] == ModeOmit {
-		t.Errorf("skills: %s, should not be omitted before commands", m[domain.ComponentSkills])
+	if m[domain.ComponentSkills] != ModeFull {
+		t.Errorf("skills: %s, should stay full (higher priority than commands)", m[domain.ComponentSkills])
 	}
-	// Omitted and summary actions must be filtered out.
+	// Omitted actions must be filtered out; kept components stay.
 	seen := make(map[domain.ComponentID]bool)
 	for _, a := range res.Actions {
 		seen[a.Component] = true
@@ -135,20 +133,20 @@ func TestFit_OmitLowestPriority(t *testing.T) {
 	if seen[domain.ComponentPlugins] || seen[domain.ComponentCommands] {
 		t.Errorf("omitted components should not appear in actions: %+v", seen)
 	}
-	if seen[domain.ComponentSkills] {
-		t.Error("summary component action should be skipped until summary rendering exists")
+	if !seen[domain.ComponentSkills] {
+		t.Error("skills action should be kept in full")
 	}
 }
 
 func TestFit_SummaryBeforeOmit(t *testing.T) {
 	dir := t.TempDir()
-	p := writeFile(t, dir, "plugins.md", 800)  // 200
-	c := writeFile(t, dir, "commands.md", 800) // 200
+	m1 := writeFile(t, dir, "memory.md", 800) // 200
+	r1 := writeFile(t, dir, "rules.md", 800)  // 200
 	actions := []domain.PlannedAction{
-		contentAction(domain.ComponentPlugins, p),
-		contentAction(domain.ComponentCommands, c),
+		contentAction(domain.ComponentMemory, m1),
+		contentAction(domain.ComponentRules, r1),
 	}
-	// Full total = 400. cap = 300: halving plugins → 300 ≤ 300, so plugins is
+	// Full total = 400. cap = 300: halving memory → 300 ≤ 300, so memory is
 	// summarized and nothing is omitted.
 	res, err := Fit(actions, Options{MaxTokens: 300})
 	if err != nil {
@@ -158,11 +156,11 @@ func TestFit_SummaryBeforeOmit(t *testing.T) {
 		t.Error("FitAchieved = false, want true")
 	}
 	m := modesFrom(res)
-	if m[domain.ComponentPlugins] != ModeSummary {
-		t.Errorf("plugins: %s, want summary", m[domain.ComponentPlugins])
+	if m[domain.ComponentMemory] != ModeSummary {
+		t.Errorf("memory: %s, want summary", m[domain.ComponentMemory])
 	}
-	if m[domain.ComponentCommands] != ModeFull {
-		t.Errorf("commands: %s, want full", m[domain.ComponentCommands])
+	if m[domain.ComponentRules] != ModeFull {
+		t.Errorf("rules: %s, want full", m[domain.ComponentRules])
 	}
 	for _, d := range res.Decisions {
 		if d.Mode == ModeOmit {
@@ -172,11 +170,117 @@ func TestFit_SummaryBeforeOmit(t *testing.T) {
 	if res.TotalTokens != 300 {
 		t.Errorf("TotalTokens = %d, want 300 (summary 100 + full 200)", res.TotalTokens)
 	}
-	if len(res.Actions) != 1 {
-		t.Errorf("expected only full action kept, got %d", len(res.Actions))
+	// Summarized actions are KEPT, tagged Mode="summary" so installers render
+	// the condensed variant.
+	if len(res.Actions) != 2 {
+		t.Fatalf("expected both actions kept, got %d", len(res.Actions))
 	}
-	if res.Actions[0].Component != domain.ComponentCommands {
-		t.Errorf("kept component = %s, want commands", res.Actions[0].Component)
+	for _, a := range res.Actions {
+		switch a.Component {
+		case domain.ComponentMemory:
+			if a.Mode != string(ModeSummary) {
+				t.Errorf("memory action Mode = %q, want %q", a.Mode, ModeSummary)
+			}
+		case domain.ComponentRules:
+			if a.Mode != "" {
+				t.Errorf("rules action Mode = %q, want empty (full)", a.Mode)
+			}
+		}
+	}
+}
+
+func TestFit_SummarySkipActionUpgradedToUpdate(t *testing.T) {
+	dir := t.TempDir()
+	m1 := writeFile(t, dir, "memory.md", 800) // 200
+	action := contentAction(domain.ComponentMemory, m1)
+	action.Action = domain.ActionSkip // full content already on disk
+	res, err := Fit([]domain.PlannedAction{action}, Options{MaxTokens: 100})
+	if err != nil {
+		t.Fatalf("Fit: %v", err)
+	}
+	if len(res.Actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(res.Actions))
+	}
+	got := res.Actions[0]
+	if got.Mode != string(ModeSummary) {
+		t.Errorf("Mode = %q, want summary", got.Mode)
+	}
+	if got.Action != domain.ActionUpdate {
+		t.Errorf("Action = %q, want update (disk has full content, not the summary)", got.Action)
+	}
+}
+
+func TestFit_NonSummarizableGoesStraightToOmit(t *testing.T) {
+	dir := t.TempDir()
+	a1 := writeFile(t, dir, "cmds.md", 800) // 200
+	res, err := Fit([]domain.PlannedAction{
+		contentAction(domain.ComponentCommands, a1),
+	}, Options{MaxTokens: 100})
+	if err != nil {
+		t.Fatalf("Fit: %v", err)
+	}
+	if res.Decisions[0].Mode != ModeOmit {
+		t.Errorf("commands Mode = %s, want omit (commands has no summary render)", res.Decisions[0].Mode)
+	}
+	if len(res.Actions) != 0 {
+		t.Errorf("omitted action should be dropped, got %d", len(res.Actions))
+	}
+}
+
+func TestFit_AgentsSummarizable(t *testing.T) {
+	dir := t.TempDir()
+	a1 := writeFile(t, dir, "agents.md", 800) // 200 tokens full
+	res, err := Fit([]domain.PlannedAction{
+		contentAction(domain.ComponentAgents, a1),
+	}, Options{
+		MaxTokens:     150,
+		SummaryTokens: map[domain.ComponentID]int{domain.ComponentAgents: 40},
+	})
+	if err != nil {
+		t.Fatalf("Fit: %v", err)
+	}
+	if res.Decisions[0].Mode != ModeSummary {
+		t.Fatalf("agents Mode = %s, want summary", res.Decisions[0].Mode)
+	}
+	if len(res.Actions) != 1 || res.Actions[0].Mode != "summary" {
+		t.Errorf("summarized agents action should be kept with Mode=summary, got %+v", res.Actions)
+	}
+}
+
+func TestFit_SummaryTokensOverride(t *testing.T) {
+	dir := t.TempDir()
+	m1 := writeFile(t, dir, "memory.md", 800) // 200 full
+	// tokens/2 would be 100 > cap 60, but the real summary render is 40 ≤ 60.
+	res, err := Fit([]domain.PlannedAction{
+		contentAction(domain.ComponentMemory, m1),
+	}, Options{
+		MaxTokens:     60,
+		SummaryTokens: map[domain.ComponentID]int{domain.ComponentMemory: 40},
+	})
+	if err != nil {
+		t.Fatalf("Fit: %v", err)
+	}
+	if !res.FitAchieved {
+		t.Error("FitAchieved = false, want true with real summary counts")
+	}
+	if res.Decisions[0].Mode != ModeSummary {
+		t.Errorf("Mode = %s, want summary", res.Decisions[0].Mode)
+	}
+	if res.TotalTokens != 40 {
+		t.Errorf("TotalTokens = %d, want 40 (real summary count)", res.TotalTokens)
+	}
+}
+
+func TestComponentPriority_EfficiencyDropsNearlyLast(t *testing.T) {
+	effRank := priorityRank(domain.ComponentEfficiency)
+	if effRank <= priorityRank(domain.ComponentAgents) {
+		t.Error("efficiency must rank above agents (drop later)")
+	}
+	if effRank >= priorityRank(domain.ComponentBrand) {
+		t.Error("efficiency must rank below brand (drop before brand)")
+	}
+	if effRank >= priorityRank(domain.ComponentPermissions) {
+		t.Error("efficiency must rank below permissions")
 	}
 }
 
@@ -184,12 +288,12 @@ func TestFit_UsesComponentTokenOverrides(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "planned-new-file.md")
 	actions := []domain.PlannedAction{
-		contentAction(domain.ComponentAgents, missing),
+		contentAction(domain.ComponentMemory, missing),
 	}
 	res, err := Fit(actions, Options{
 		MaxTokens: 100,
 		ComponentTokens: map[domain.ComponentID]int{
-			domain.ComponentAgents: 200,
+			domain.ComponentMemory: 200,
 		},
 	})
 	if err != nil {
@@ -201,8 +305,8 @@ func TestFit_UsesComponentTokenOverrides(t *testing.T) {
 	if res.Decisions[0].Mode != ModeSummary {
 		t.Errorf("Mode = %s, want summary", res.Decisions[0].Mode)
 	}
-	if len(res.Actions) != 0 {
-		t.Errorf("summary action should be skipped, got %d action(s)", len(res.Actions))
+	if len(res.Actions) != 1 || res.Actions[0].Mode != string(ModeSummary) {
+		t.Errorf("summary action should be kept with Mode set, got %+v", res.Actions)
 	}
 }
 
@@ -418,6 +522,38 @@ func TestDetectDrift_ModelChanged(t *testing.T) {
 	}
 	if !drift {
 		t.Error("drift = false, want true when model changed")
+	}
+}
+
+func TestDetectDrift_ProfileChanged(t *testing.T) {
+	dir := t.TempDir()
+	p := writeFile(t, dir, "plugins.md", 800)
+	res, err := Fit([]domain.PlannedAction{contentAction(domain.ComponentPlugins, p)},
+		Options{MaxTokens: 1000, Model: "claude-sonnet-4", Profile: "default"})
+	if err != nil {
+		t.Fatalf("Fit: %v", err)
+	}
+	if err := Persist(dir, res); err != nil {
+		t.Fatalf("Persist: %v", err)
+	}
+	drift, err := DetectDrift(dir, []domain.PlannedAction{
+		contentAction(domain.ComponentPlugins, p),
+	}, Options{Model: "claude-sonnet-4", Profile: "cheap"})
+	if err != nil {
+		t.Fatalf("DetectDrift: %v", err)
+	}
+	if !drift {
+		t.Error("drift = false, want true when the active profile changed")
+	}
+
+	same, err := DetectDrift(dir, []domain.PlannedAction{
+		contentAction(domain.ComponentPlugins, p),
+	}, Options{Model: "claude-sonnet-4", Profile: "default"})
+	if err != nil {
+		t.Fatalf("DetectDrift: %v", err)
+	}
+	if same {
+		t.Error("drift = true, want false when the profile is unchanged")
 	}
 }
 

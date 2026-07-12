@@ -73,6 +73,12 @@ func RunStatus(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// Keep a pre-profile view for config-level reporting (e.g. the memory
+	// conflict note must fire on what the user configured, not on the
+	// profile-filtered effective set). Shallow copy: applyProfileToConfig
+	// replaces the MCP/Components maps rather than mutating them in place.
+	cfgBeforeProfile := *mergedCfg
+	applyDefaultProfile(mergedCfg)
 
 	adapters := DetectAdapters(homeDir)
 
@@ -206,6 +212,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			LastBackup     *backupInfo         `json:"last_backup,omitempty"`
 			Health         *healthSummary      `json:"health,omitempty"`
 			Refinement     *refinementJSON     `json:"refinement,omitempty"`
+			Context        *contextHealth      `json:"context,omitempty"`
 		}
 
 		adapterList := make([]adapterStatus, 0, len(adapters))
@@ -272,6 +279,7 @@ func RunStatus(args []string, stdout io.Writer) error {
 			LastBackup:     lastBackupJSON,
 			Health:         health,
 			Refinement:     refJSON,
+			Context:        collectContextHealth(homeDir, projectDir, mergedCfg, false),
 		}
 		data, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
@@ -304,7 +312,10 @@ func RunStatus(args []string, stdout io.Writer) error {
 	}
 
 	if daily {
-		printDailyStatus(stdout, projectDir, language, methodology, mode, preset, contextProfile, mergedCfg, adapters, mcpNames, lastManifest, verifyReport, refInfo)
+		printDailyStatus(stdout, projectDir, language, methodology, mode, preset, contextProfile, &cfgBeforeProfile, adapters, mcpNames, lastManifest, verifyReport, refInfo)
+		// Session aggregation can be slow, so real usage only appears in the
+		// daily dashboard, not the fast default status.
+		printContextSection(stdout, collectContextHealth(homeDir, projectDir, mergedCfg, true))
 		return nil
 	}
 
@@ -332,6 +343,9 @@ func RunStatus(args []string, stdout io.Writer) error {
 		mcpDisplay = strings.Join(mcpNames, ", ")
 	}
 	fmt.Fprintf(stdout, "MCP servers: %s\n", mcpDisplay)
+	if bothMemorySystemsEnabled(&cfgBeforeProfile) {
+		fmt.Fprintln(stdout, memoryConflictNote)
+	}
 	fmt.Fprintln(stdout)
 
 	if lastManifest != nil {
@@ -384,7 +398,28 @@ func RunStatus(args []string, stdout io.Writer) error {
 		}
 	}
 
+	// Context health section (installed token cost vs profile cap).
+	printContextSection(stdout, collectContextHealth(homeDir, projectDir, mergedCfg, false))
+
 	return nil
+}
+
+// memoryConflictNote is shown when both the community knowledge-graph MCP
+// server (config key "memory") and SquadAI Project Memory are enabled.
+const memoryConflictNote = "note: both memory systems enabled — they don't share data"
+
+// bothMemorySystemsEnabled reports whether the community knowledge-graph MCP
+// server and the SquadAI Project Memory component are enabled at the same time.
+func bothMemorySystemsEnabled(cfg *domain.MergedConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	mcpDef, ok := cfg.MCP["memory"]
+	if !ok || !mcpDef.Enabled {
+		return false
+	}
+	comp, ok := cfg.Components[string(domain.ComponentMemory)]
+	return ok && comp.Enabled
 }
 
 func printDailyStatus(stdout io.Writer, projectDir, language, methodology, mode, preset, contextProfile string, mergedCfg *domain.MergedConfig, adapters []domain.Adapter, mcpNames []string, lastManifest *backup.Manifest, verifyReport *domain.VerifyReport, refInfo *squadRefinementInfo) {
@@ -408,6 +443,9 @@ func printDailyStatus(stdout io.Writer, projectDir, language, methodology, mode,
 		mcpDisplay = strings.Join(mcpNames, ", ")
 	}
 	fmt.Fprintf(stdout, "MCP: %s\n", mcpDisplay)
+	if bothMemorySystemsEnabled(mergedCfg) {
+		fmt.Fprintln(stdout, memoryConflictNote)
+	}
 
 	memoryBackend := mergedCfg.Memory.Backend
 	if memoryBackend == "" {

@@ -10,6 +10,7 @@ const (
 	AgentCursor        AgentID = "cursor"
 	AgentWindsurf      AgentID = "windsurf"
 	AgentPi            AgentID = "pi"
+	AgentCodex         AgentID = "codex"
 )
 
 // Methodology identifies a development methodology preset.
@@ -50,7 +51,7 @@ type DelegationStrategy string
 const (
 	DelegationNativeAgents DelegationStrategy = "native" // OpenCode, Cursor
 	DelegationPromptBased  DelegationStrategy = "prompt" // Claude Code
-	DelegationSoloAgent    DelegationStrategy = "solo"   // VS Code, Windsurf
+	DelegationSoloAgent    DelegationStrategy = "solo"   // VS Code, Windsurf, Codex
 )
 
 // AdapterLane classifies whether an adapter is team-required or personal-optional.
@@ -89,6 +90,11 @@ const (
 	// developers see a visual indicator that SquadAI is active at session start.
 	// Toggled via ProjectConfig.Brand.Enabled (default: true).
 	ComponentBrand ComponentID = "brand"
+	// ComponentEfficiency injects a short session-efficiency protocol
+	// (search-before-read, output summarization, context checkpointing) into
+	// each adapter's rules file. Always on by default; disable via
+	// components.efficiency.enabled = false.
+	ComponentEfficiency ComponentID = "efficiency"
 )
 
 // OperationalMode determines config precedence behavior.
@@ -128,6 +134,10 @@ type PlannedAction struct {
 	Action      ActionType  `json:"action"`
 	TargetPath  string      `json:"target_path"`
 	Description string      `json:"description"`
+	// Mode selects the render mode for the action's content. Empty means the
+	// full content; "summary" means the condensed variant chosen by the budget
+	// fitter. Installers that support summaries (memory, rules) honor it.
+	Mode string `json:"mode,omitempty"`
 }
 
 // StepResult records what happened when a PlannedAction was executed.

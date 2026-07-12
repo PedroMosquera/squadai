@@ -11,6 +11,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/managed"
+	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // agentMCPConfig caches adapter-declared MCP schema for use during Apply,
@@ -23,6 +24,18 @@ type agentMCPConfig struct {
 	commandStyle string
 	typeFieldFn  func(domain.MCPServerDef) string
 	isConfigFile bool
+	// tomlPath is the marker-managed TOML config target for adapters whose
+	// MCP config is TOML (Codex's ~/.codex/config.toml). Empty for JSON
+	// adapters. When set it takes precedence over the JSON strategies.
+	tomlPath string
+}
+
+// tomlMCPConfigurer is the optional adapter capability for TOML-based MCP
+// configs. Adapters that implement it (Codex) get their MCP servers rendered
+// as [<rootKey>.<name>] TOML tables inside a hash-marker managed block,
+// preserving any user content outside the markers.
+type tomlMCPConfigurer interface {
+	MCPTOMLConfigPath(homeDir string) string
 }
 
 // rootKeyForAgent returns the cached MCP root key for the given agent.
@@ -34,11 +47,15 @@ func (i *Installer) rootKeyForAgent(agent domain.AgentID) string {
 // ensureAgentConfig populates the schema cache for the adapter on first use.
 // Plan, Verify, and Preview all call this so the cache is independent of the
 // callsite ordering.
-func (i *Installer) ensureAgentConfig(adapter domain.Adapter, projectDir string) {
+func (i *Installer) ensureAgentConfig(adapter domain.Adapter, homeDir, projectDir string) {
 	if _, ok := i.agentConfigs[adapter.ID()]; ok {
 		return
 	}
 	mcpPath := adapter.MCPConfigPath(projectDir)
+	var tomlPath string
+	if tc, ok := adapter.(tomlMCPConfigurer); ok {
+		tomlPath = tc.MCPTOMLConfigPath(homeDir)
+	}
 	i.agentConfigs[adapter.ID()] = agentMCPConfig{
 		rootKey:      adapter.MCPRootKey(),
 		urlKey:       adapter.MCPURLKey(),
@@ -46,6 +63,7 @@ func (i *Installer) ensureAgentConfig(adapter domain.Adapter, projectDir string)
 		commandStyle: adapter.MCPCommandStyle(),
 		typeFieldFn:  adapter.MCPTypeField,
 		isConfigFile: mcpPath != "",
+		tomlPath:     tomlPath,
 	}
 }
 
@@ -55,6 +73,8 @@ func (i *Installer) ensureAgentConfig(adapter domain.Adapter, projectDir string)
 //     (used by OpenCode — adapter.MCPConfigPath returns "").
 //   - MCPConfigFile: writes all servers into a dedicated MCP config file
 //     (used by adapters where MCPConfigPath returns a non-empty path).
+//   - TOMLConfigFile: renders servers as TOML tables inside a hash-marker
+//     managed block (used by Codex — adapter implements MCPTOMLConfigPath).
 type Installer struct {
 	// servers is the desired MCP server configuration.
 	servers map[string]domain.MCPServerDef
@@ -68,6 +88,19 @@ type Installer struct {
 	// policy carries user decisions from the review screen (per-key overwrite
 	// consent, OverwriteAll). Zero value = no overrides, match legacy behavior.
 	policy domain.ApplyPolicy
+
+	// opts carries construction-time options (e.g. profile-driven pruning).
+	opts Options
+}
+
+// Options controls optional MCP installer behavior.
+type Options struct {
+	// PruneWhenEmpty plans and applies actions even when the desired server
+	// set is empty, so previously managed servers are removed from adapter
+	// configs. Set when an active context profile declares an MCP filter —
+	// without it an empty desired set is treated as "MCP not configured" and
+	// stale managed servers would survive a profile switch.
+	PruneWhenEmpty bool
 }
 
 // SetApplyPolicy implements domain.PolicyAware. The pipeline executor calls
@@ -79,14 +112,18 @@ func (i *Installer) SetApplyPolicy(p domain.ApplyPolicy) {
 
 // New returns an MCP installer configured from the merged MCP config.
 // Only enabled servers are included.
-func New(mcpConfig map[string]domain.MCPServerDef) *Installer {
+func New(mcpConfig map[string]domain.MCPServerDef, opts ...Options) *Installer {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	servers := make(map[string]domain.MCPServerDef)
 	for name, def := range mcpConfig {
 		if def.Enabled {
 			servers[name] = def
 		}
 	}
-	return &Installer{servers: servers, agentConfigs: make(map[domain.AgentID]agentMCPConfig)}
+	return &Installer{servers: servers, agentConfigs: make(map[domain.AgentID]agentMCPConfig), opts: o}
 }
 
 // ID returns the component identifier.
@@ -105,7 +142,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, nil
 	}
 
-	if len(i.servers) == 0 {
+	if len(i.servers) == 0 && !i.opts.PruneWhenEmpty {
 		return nil, nil
 	}
 
@@ -114,7 +151,12 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	// Populate adapter-declared MCP schema cache so Apply / Verify / Preview
 	// (which only receive an AgentID) can resolve schema without the live adapter.
-	i.ensureAgentConfig(adapter, projectDir)
+	i.ensureAgentConfig(adapter, homeDir, projectDir)
+
+	// Strategy 0: TOMLConfigFile — adapter declares a marker-managed TOML config.
+	if cfg := i.agentConfigs[adapter.ID()]; cfg.tomlPath != "" {
+		return i.planTOMLConfigFile(adapter, cfg.tomlPath)
+	}
 
 	// Strategy 1: MCPConfigFile — adapter declares a separate MCP config path.
 	if i.agentConfigs[adapter.ID()].isConfigFile {
@@ -138,6 +180,11 @@ func (i *Installer) planMergedConfig(adapter domain.Adapter, projectDir string) 
 	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
+	}
+
+	// Nothing to install and nothing on disk to prune.
+	if len(i.servers) == 0 && (existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
 	}
 
 	if existing == nil {
@@ -185,8 +232,13 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return nil
 	}
 
-	if len(i.servers) == 0 {
+	if len(i.servers) == 0 && !i.opts.PruneWhenEmpty {
 		return nil
+	}
+
+	// TOMLConfigFile actions have a "mcp:toml:" prefix.
+	if strings.HasPrefix(action.Description, "mcp:toml:") {
+		return i.applyTOMLConfigFile(action)
 	}
 
 	// MCPConfigFile actions have a "mcp:configfile:" prefix.
@@ -223,6 +275,11 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, targetPath string)
 	existing, err := fileutil.ReadJSONFile(targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read MCP config file: %w", err)
+	}
+
+	// Nothing to install and nothing on disk to prune.
+	if len(i.servers) == 0 && (existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
 	}
 
 	if existing == nil {
@@ -276,6 +333,156 @@ func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
 	incoming := map[string]any{rootKey: serversMap}
 
 	return i.mergeAndWrite(action, incoming, []string{rootKey})
+}
+
+// tomlSectionID is the hash-marker section ID for the managed TOML MCP block:
+// "# squadai:mcp:start" / "# squadai:mcp:end".
+const tomlSectionID = "mcp"
+
+// planTOMLConfigFile plans actions for the TOMLConfigFile strategy. All
+// servers are rendered as TOML tables inside a hash-marker managed block;
+// user content outside the markers is never touched.
+func (i *Installer) planTOMLConfigFile(adapter domain.Adapter, targetPath string) ([]domain.PlannedAction, error) {
+	if targetPath == "" {
+		return nil, nil
+	}
+
+	actionID := fmt.Sprintf("%s-mcp", adapter.ID())
+
+	existing, err := fileutil.ReadFileOrEmpty(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read MCP TOML config: %w", err)
+	}
+
+	desired := i.renderTOMLBlock(adapter.ID())
+
+	// Nothing to install and no managed block on disk to prune.
+	if len(i.servers) == 0 && !marker.HasHashSection(string(existing), tomlSectionID) {
+		return nil, nil
+	}
+
+	base := domain.PlannedAction{
+		ID:         actionID,
+		Agent:      adapter.ID(),
+		Component:  domain.ComponentMCP,
+		TargetPath: targetPath,
+	}
+
+	if marker.HasHashSection(string(existing), tomlSectionID) {
+		if marker.ExtractHashSection(string(existing), tomlSectionID) == desired {
+			base.Action = domain.ActionSkip
+			base.Description = "mcp:toml:MCP server configuration already up to date"
+			return []domain.PlannedAction{base}, nil
+		}
+		base.Action = domain.ActionUpdate
+		base.Description = "mcp:toml:update MCP server block"
+		return []domain.PlannedAction{base}, nil
+	}
+
+	base.Action = domain.ActionCreate
+	if len(existing) > 0 {
+		base.Action = domain.ActionUpdate
+	}
+	base.Description = "mcp:toml:inject MCP server block"
+	return []domain.PlannedAction{base}, nil
+}
+
+// applyTOMLConfigFile injects the rendered TOML server block between hash
+// markers in the target file, preserving user content outside the markers.
+// An empty desired server set (profile pruning) removes the managed block.
+func (i *Installer) applyTOMLConfigFile(action domain.PlannedAction) error {
+	rendered, err := i.renderTOMLConfigContent(action)
+	if err != nil {
+		return err
+	}
+
+	dir := filepath.Dir(action.TargetPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+
+	if _, err := fileutil.WriteAtomic(action.TargetPath, rendered, 0644); err != nil {
+		return fmt.Errorf("write MCP TOML config: %w", err)
+	}
+	return nil
+}
+
+// renderTOMLConfigContent computes what applyTOMLConfigFile would write.
+func (i *Installer) renderTOMLConfigContent(action domain.PlannedAction) ([]byte, error) {
+	existing, err := fileutil.ReadFileOrEmpty(action.TargetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read MCP TOML config: %w", err)
+	}
+	block := i.renderTOMLBlock(action.Agent)
+	updated := marker.InjectHashSection(string(existing), tomlSectionID, block)
+	return []byte(updated), nil
+}
+
+// renderTOMLBlock renders the desired server set as the managed TOML block
+// body for the given agent. Returns "" when no servers are configured (which
+// removes the managed block on inject).
+func (i *Installer) renderTOMLBlock(agent domain.AgentID) string {
+	if len(i.servers) == 0 {
+		return ""
+	}
+	return renderTOMLServers(i.rootKeyForAgent(agent), i.servers)
+}
+
+// verifyTOMLConfigFile checks the TOMLConfigFile strategy result.
+func (i *Installer) verifyTOMLConfigFile(adapter domain.Adapter, targetPath string) ([]domain.VerifyResult, error) {
+	if targetPath == "" {
+		return nil, nil
+	}
+
+	var results []domain.VerifyResult
+
+	existing, err := fileutil.ReadFileOrEmpty(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read MCP TOML config: %w", err)
+	}
+
+	// A pruned-to-empty profile with no managed block on disk is a clean state.
+	if len(i.servers) == 0 && !marker.HasHashSection(string(existing), tomlSectionID) {
+		return nil, nil
+	}
+
+	if _, statErr := os.Stat(targetPath); statErr != nil {
+		results = append(results, domain.VerifyResult{
+			Check:     "mcp-toml-exists",
+			Passed:    false,
+			Severity:  domain.SeverityError,
+			Component: "mcp",
+			Message:   fmt.Sprintf("MCP TOML config not found: %s", targetPath),
+		})
+		return results, nil
+	}
+	results = append(results, domain.VerifyResult{
+		Check:     "mcp-toml-exists",
+		Passed:    true,
+		Severity:  domain.SeverityInfo,
+		Component: "mcp",
+	})
+
+	desired := i.renderTOMLBlock(adapter.ID())
+	if marker.ExtractHashSection(string(existing), tomlSectionID) == desired &&
+		(desired == "" || marker.HasHashSection(string(existing), tomlSectionID)) {
+		results = append(results, domain.VerifyResult{
+			Check:     "mcp-toml-servers-current",
+			Passed:    true,
+			Severity:  domain.SeverityInfo,
+			Component: "mcp",
+		})
+	} else {
+		results = append(results, domain.VerifyResult{
+			Check:     "mcp-toml-servers-current",
+			Passed:    false,
+			Severity:  domain.SeverityError,
+			Component: "mcp",
+			Message:   "MCP server block does not match expected state",
+		})
+	}
+
+	return results, nil
 }
 
 // mergeAndWrite is the shared helper both MCP apply branches route through.
@@ -375,6 +582,10 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 	var results []domain.VerifyResult
 
 	existing, err := fileutil.ReadJSONFile(targetPath)
+	// A pruned-to-empty profile with nothing on disk is a clean state.
+	if len(i.servers) == 0 && (err != nil || existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
+	}
 	if err != nil || existing == nil {
 		results = append(results, domain.VerifyResult{
 			Check:     "mcp-configfile-exists",
@@ -441,11 +652,15 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	if len(i.servers) == 0 {
+	if len(i.servers) == 0 && !i.opts.PruneWhenEmpty {
 		return nil, nil
 	}
 
-	i.ensureAgentConfig(adapter, projectDir)
+	i.ensureAgentConfig(adapter, homeDir, projectDir)
+
+	if cfg := i.agentConfigs[adapter.ID()]; cfg.tomlPath != "" {
+		return i.verifyTOMLConfigFile(adapter, cfg.tomlPath)
+	}
 
 	if i.agentConfigs[adapter.ID()].isConfigFile {
 		return i.verifyMCPConfigFile(adapter, projectDir)
@@ -464,6 +679,10 @@ func (i *Installer) verifyMergedConfig(adapter domain.Adapter, projectDir string
 	var results []domain.VerifyResult
 
 	existing, err := fileutil.ReadJSONFile(targetPath)
+	// A pruned-to-empty profile with nothing on disk is a clean state.
+	if len(i.servers) == 0 && (err != nil || existing == nil || existing[i.rootKeyForAgent(adapter.ID())] == nil) {
+		return nil, nil
+	}
 	if err != nil || existing == nil {
 		results = append(results, domain.VerifyResult{
 			Check:   "mcp-file-exists",
@@ -496,6 +715,9 @@ func (i *Installer) verifyMergedConfig(adapter domain.Adapter, projectDir string
 // RenderContent returns the content that Apply would write for the given action,
 // without performing the write. Used by the diff renderer.
 func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
+	if strings.HasPrefix(action.Description, "mcp:toml:") {
+		return i.renderTOMLConfigContent(action)
+	}
 	if strings.HasPrefix(action.Description, "mcp:configfile:") {
 		return i.renderMCPConfigFileContent(action)
 	}

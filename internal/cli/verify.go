@@ -59,6 +59,7 @@ func RunVerify(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	applyDefaultProfile(merged)
 
 	adapters := DetectAdapters(homeDir)
 	v := verify.New()

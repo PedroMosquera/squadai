@@ -16,6 +16,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/brand"
 	"github.com/PedroMosquera/squadai/internal/components/commands"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
+	"github.com/PedroMosquera/squadai/internal/components/efficiency"
 	"github.com/PedroMosquera/squadai/internal/components/hooks"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
@@ -50,17 +51,42 @@ type Set struct {
 	AgentTeams  *agent_teams.Installer
 	Hooks       *hooks.Installer
 	Brand       *brand.Installer
+	Efficiency  *efficiency.Installer
 	Copilot     *copilot.Manager
+}
+
+// MemoryEnabled reports whether the memory component is enabled in cfg.
+func MemoryEnabled(cfg *domain.MergedConfig) bool {
+	c, ok := cfg.Components[string(domain.ComponentMemory)]
+	return ok && c.Enabled
+}
+
+// EfficiencyEnabled reports whether the efficiency component is enabled.
+// Unlike other components it defaults to ON when the key is absent, so
+// projects created before the component existed gain it on their next apply.
+func EfficiencyEnabled(cfg *domain.MergedConfig) bool {
+	if c, ok := cfg.Components[string(domain.ComponentEfficiency)]; ok {
+		return c.Enabled
+	}
+	return true
 }
 
 // Build returns a Set with installers for every enabled component plus the
 // always-present memory installer and copilot manager.
 func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, error) {
+	profile := cfg.ActiveContextProfile
+
+	memOpts := memory.Options{}
+	if profile != nil {
+		memOpts.Scope = profile.MemoryScope
+	}
+
 	s := &Set{
-		Memory:      memory.New(),
+		Memory:      memory.New(memOpts),
 		Copilot:     copilot.New(),
 		Permissions: permissions.New(),
 		Brand:       brand.New(),
+		Efficiency:  efficiency.New(efficiency.Options{MemoryEnabled: MemoryEnabled(cfg)}),
 	}
 
 	if rulesCfg, ok := cfg.Components[string(domain.ComponentRules)]; ok && rulesCfg.Enabled {
@@ -76,7 +102,12 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 	}
 
 	if mcpCfg, ok := cfg.Components[string(domain.ComponentMCP)]; ok && mcpCfg.Enabled {
-		s.MCP = mcp.New(cfg.MCP)
+		// When a context profile declares an MCP filter (even an empty one),
+		// the installer must prune previously managed servers that were
+		// filtered out — including down to an empty set.
+		s.MCP = mcp.New(cfg.MCP, mcp.Options{
+			PruneWhenEmpty: profile != nil && profile.MCPServers != nil,
+		})
 	}
 
 	if agentsCfg, ok := cfg.Components[string(domain.ComponentAgents)]; ok && agentsCfg.Enabled {
@@ -85,7 +116,11 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 	}
 
 	if skillsCfg, ok := cfg.Components[string(domain.ComponentSkills)]; ok && skillsCfg.Enabled {
-		s.Skills = skills.New(cfg.Skills, cfg, projectDir)
+		skillOpts := skills.Options{}
+		if profile != nil {
+			skillOpts.Scopes = profile.SkillScopes
+		}
+		s.Skills = skills.New(cfg.Skills, cfg, projectDir, skillOpts)
 	}
 
 	if cmdsCfg, ok := cfg.Components[string(domain.ComponentCommands)]; ok && cmdsCfg.Enabled {

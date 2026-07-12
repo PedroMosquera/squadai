@@ -42,93 +42,84 @@ func brandTargetPath(adapter domain.Adapter, homeDir, projectDir string) string 
 	return adapter.SystemPromptFile(homeDir)
 }
 
+// brandTarget describes one file the brand banner is injected into.
+type brandTarget struct {
+	path     string
+	idSuffix string // distinguishes multiple actions per adapter
+	global   bool   // true for Pi's extra home-directory target
+}
+
+// brandTargets returns every file the banner should land in for this adapter.
+// All adapters get the primary target (project rules file, falling back to the
+// global system prompt). Pi additionally gets its global ~/.pi/agent/AGENTS.md
+// so every Pi session carries the banner, not just this project's.
+func brandTargets(adapter domain.Adapter, homeDir, projectDir string) []brandTarget {
+	targets := []brandTarget{{path: brandTargetPath(adapter, homeDir, projectDir), idSuffix: "banner"}}
+	if adapter.ID() == domain.AgentPi && homeDir != "" {
+		global := adapter.SystemPromptFile(homeDir)
+		if global != "" && global != targets[0].path {
+			targets = append(targets, brandTarget{path: global, idSuffix: "banner-global", global: true})
+		}
+	}
+	return targets
+}
+
 // Plan determines what actions are needed for this adapter.
 func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]domain.PlannedAction, error) {
 	if !adapter.SupportsComponent(domain.ComponentBrand) {
 		return nil, nil
 	}
 
-	promptPath := brandTargetPath(adapter, homeDir, projectDir)
+	var actions []domain.PlannedAction
+	for _, tgt := range brandTargets(adapter, homeDir, projectDir) {
+		action, err := planTarget(adapter, tgt)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+	return actions, nil
+}
 
-	existing, err := fileutil.ReadFileOrEmpty(promptPath)
+// planTarget computes the planned action for a single banner target file.
+func planTarget(adapter domain.Adapter, tgt brandTarget) (domain.PlannedAction, error) {
+	existing, err := fileutil.ReadFileOrEmpty(tgt.path)
 	if err != nil {
-		return nil, fmt.Errorf("read target file: %w", err)
+		return domain.PlannedAction{}, fmt.Errorf("read target file: %w", err)
+	}
+
+	base := domain.PlannedAction{
+		ID:         fmt.Sprintf("%s-%s-brand", adapter.ID(), tgt.idSuffix),
+		Agent:      adapter.ID(),
+		Component:  domain.ComponentBrand,
+		TargetPath: tgt.path,
 	}
 
 	desiredContent := fence(templateForAdapter(adapter))
-
 	sectionID := SectionIDForAgentID(adapter.ID())
 
-	// Check if the adapter-scoped section already matches.
-	if marker.HasSection(string(existing), sectionID) {
-		current := marker.ExtractSection(string(existing), sectionID)
-		if current == desiredContent {
-			return []domain.PlannedAction{
-				{
-					ID:          fmt.Sprintf("%s-%s-brand", adapter.ID(), "banner"),
-					Agent:       adapter.ID(),
-					Component:   domain.ComponentBrand,
-					Action:      domain.ActionSkip,
-					TargetPath:  promptPath,
-					Description: "brand banner already up to date",
-				},
-			}, nil
+	// Check the adapter-scoped section first; fall back to a legacy unscoped
+	// section for single-adapter installs (new writes migrate to scoped markers).
+	for _, sid := range []string{sectionID, SectionID} {
+		if !marker.HasSection(string(existing), sid) {
+			continue
 		}
-		return []domain.PlannedAction{
-			{
-				ID:          fmt.Sprintf("%s-%s-brand", adapter.ID(), "banner"),
-				Agent:       adapter.ID(),
-				Component:   domain.ComponentBrand,
-				Action:      domain.ActionUpdate,
-				TargetPath:  promptPath,
-				Description: "update brand banner in target file",
-			},
-		}, nil
+		if marker.ExtractSection(string(existing), sid) == desiredContent {
+			base.Action = domain.ActionSkip
+			base.Description = "brand banner already up to date"
+		} else {
+			base.Action = domain.ActionUpdate
+			base.Description = "update brand banner in target file"
+		}
+		return base, nil
 	}
 
-	// Backward compatibility: accept a matching legacy unscoped section for
-	// single-adapter installs, but new writes migrate to scoped markers.
-	if marker.HasSection(string(existing), SectionID) {
-		current := marker.ExtractSection(string(existing), SectionID)
-		if current == desiredContent {
-			return []domain.PlannedAction{
-				{
-					ID:          fmt.Sprintf("%s-%s-brand", adapter.ID(), "banner"),
-					Agent:       adapter.ID(),
-					Component:   domain.ComponentBrand,
-					Action:      domain.ActionSkip,
-					TargetPath:  promptPath,
-					Description: "brand banner already up to date",
-				},
-			}, nil
-		}
-		return []domain.PlannedAction{
-			{
-				ID:          fmt.Sprintf("%s-%s-brand", adapter.ID(), "banner"),
-				Agent:       adapter.ID(),
-				Component:   domain.ComponentBrand,
-				Action:      domain.ActionUpdate,
-				TargetPath:  promptPath,
-				Description: "update brand banner in target file",
-			},
-		}, nil
-	}
-
-	action := domain.ActionCreate
+	base.Action = domain.ActionCreate
 	if len(existing) > 0 {
-		action = domain.ActionUpdate
+		base.Action = domain.ActionUpdate
 	}
-
-	return []domain.PlannedAction{
-		{
-			ID:          fmt.Sprintf("%s-%s-brand", adapter.ID(), "banner"),
-			Agent:       adapter.ID(),
-			Component:   domain.ComponentBrand,
-			Action:      action,
-			TargetPath:  promptPath,
-			Description: "inject brand banner into target file",
-		},
-	}, nil
+	base.Description = "inject brand banner into target file"
+	return base, nil
 }
 
 // Apply executes a single planned action.
@@ -162,21 +153,37 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	promptPath := brandTargetPath(adapter, homeDir, projectDir)
+	var results []domain.VerifyResult
+	for _, tgt := range brandTargets(adapter, homeDir, projectDir) {
+		checkPrefix := "brand"
+		if tgt.global {
+			checkPrefix = "brand-global"
+		}
+		targetResults, err := verifyTarget(adapter, tgt.path, checkPrefix)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, targetResults...)
+	}
+	return results, nil
+}
+
+// verifyTarget checks a single banner target file.
+func verifyTarget(adapter domain.Adapter, promptPath, checkPrefix string) ([]domain.VerifyResult, error) {
 	var results []domain.VerifyResult
 
 	// Check file exists.
 	_, err := os.Stat(promptPath)
 	if err != nil {
 		results = append(results, domain.VerifyResult{
-			Check:   "brand-file-exists",
+			Check:   checkPrefix + "-file-exists",
 			Passed:  false,
 			Message: fmt.Sprintf("target file not found: %s", promptPath),
 		})
 		return results, nil
 	}
 	results = append(results, domain.VerifyResult{
-		Check:  "brand-file-exists",
+		Check:  checkPrefix + "-file-exists",
 		Passed: true,
 	})
 
@@ -189,14 +196,14 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	sectionID := SectionIDForAgentID(adapter.ID())
 	if !marker.HasSection(string(content), sectionID) && !marker.HasSection(string(content), SectionID) {
 		results = append(results, domain.VerifyResult{
-			Check:   "brand-markers-present",
+			Check:   checkPrefix + "-markers-present",
 			Passed:  false,
 			Message: "brand marker section not found in target file",
 		})
 		return results, nil
 	}
 	results = append(results, domain.VerifyResult{
-		Check:  "brand-markers-present",
+		Check:  checkPrefix + "-markers-present",
 		Passed: true,
 	})
 
@@ -208,13 +215,13 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	expected := fence(templateForAdapter(adapter))
 	if current != expected {
 		results = append(results, domain.VerifyResult{
-			Check:   "brand-content-current",
+			Check:   checkPrefix + "-content-current",
 			Passed:  false,
 			Message: "brand banner content is outdated",
 		})
 	} else {
 		results = append(results, domain.VerifyResult{
-			Check:  "brand-content-current",
+			Check:  checkPrefix + "-content-current",
 			Passed: true,
 		})
 	}
@@ -242,6 +249,12 @@ func templateForAgentID(agentID domain.AgentID) string {
 		return assets.MustRead("brand/banner-opencode.txt")
 	case domain.AgentPi:
 		return assets.MustRead("brand/banner-pi.txt")
+	case domain.AgentClaudeCode:
+		return assets.MustRead("brand/banner-claude-code.txt")
+	case domain.AgentCursor:
+		return assets.MustRead("brand/banner-cursor.txt")
+	case domain.AgentCodex:
+		return assets.MustRead("brand/banner-codex.txt")
 	default:
 		return assets.MustRead("brand/banner-squadai.txt")
 	}

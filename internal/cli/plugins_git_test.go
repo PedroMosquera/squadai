@@ -13,20 +13,6 @@ import (
 
 // chdirTemp switches the working directory to a fresh temp dir for the test
 // and restores the original directory on cleanup.
-func chdirTemp(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	orig, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(orig) })
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	return dir
-}
-
 // setTTYHook overrides IsTTYHook for the test and restores it on cleanup.
 func setTTYHook(t *testing.T, hook func() bool) {
 	t.Helper()

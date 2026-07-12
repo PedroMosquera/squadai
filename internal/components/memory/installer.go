@@ -15,12 +15,45 @@ const (
 	SectionID = "memory"
 )
 
+// Memory scopes supported by context profiles. "project" ("" defaults to it)
+// installs the full protocol; "summary" installs the short stub; "full" adds
+// the librarian/promote workflow paragraph on top of the protocol. Scope
+// "none" disables the component entirely and never reaches this installer.
+const (
+	ScopeNone    = "none"
+	ScopeSummary = "summary"
+	ScopeProject = "project"
+	ScopeFull    = "full"
+)
+
+// ProtocolStub is the condensed memory protocol used for the "summary" memory
+// scope and for budget-fitter summary mode. It intentionally matches the
+// sub-agent stub the agents installer injects into native sub-agent files.
+const ProtocolStub = "## Project Memory Protocol\n\nBefore starting work, search memory: `/memory-search <query>`.\nAfter significant work, capture decisions: `/memory-add <note>`."
+
+// fullScopeExtra is appended to the protocol for the "full" memory scope. It
+// spells out the librarian/promote workflow for teams that lean on memory.
+const fullScopeExtra = "**Full-scope workflow.** Treat memory as a first-class deliverable: delegate\nopen questions to `@librarian` before planning, and after each work session\nreview `docs/memory/_inbox/` and run `/memory-promote` (or\n`squadai memory promote`) so accepted notes graduate into topic folders."
+
+// Options controls optional memory installer behavior.
+type Options struct {
+	// Scope is the context-profile memory scope: "", "project", "summary", or
+	// "full". Empty behaves like "project" (the standard protocol).
+	Scope string
+}
+
 // Installer implements domain.ComponentInstaller for the memory component.
-type Installer struct{}
+type Installer struct {
+	opts Options
+}
 
 // New returns a memory component installer.
-func New() *Installer {
-	return &Installer{}
+func New(opts ...Options) *Installer {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	return &Installer{opts: o}
 }
 
 // ID returns the component identifier.
@@ -53,41 +86,18 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, fmt.Errorf("read system prompt: %w", err)
 	}
 
-	desiredContent := templateForAdapter(adapter)
+	desiredContent := i.ContentForAgentID(adapter.ID(), "")
 
 	sectionID := SectionIDForAgentID(adapter.ID())
 
-	// Check if the adapter-scoped section already matches.
-	if marker.HasSection(string(existing), sectionID) {
-		current := marker.ExtractSection(string(existing), sectionID)
-		if current == desiredContent {
-			return []domain.PlannedAction{
-				{
-					ID:          fmt.Sprintf("%s-%s-memory", adapter.ID(), "prompt"),
-					Agent:       adapter.ID(),
-					Component:   domain.ComponentMemory,
-					Action:      domain.ActionSkip,
-					TargetPath:  promptPath,
-					Description: "memory section already up to date",
-				},
-			}, nil
+	// Check if the adapter-scoped section already matches. Single-adapter
+	// installs may still carry the legacy unscoped marker; a matching legacy
+	// section is treated as current for backward compatibility.
+	for _, sid := range []string{sectionID, SectionID} {
+		if !marker.HasSection(string(existing), sid) {
+			continue
 		}
-		return []domain.PlannedAction{
-			{
-				ID:          fmt.Sprintf("%s-%s-memory", adapter.ID(), "prompt"),
-				Agent:       adapter.ID(),
-				Component:   domain.ComponentMemory,
-				Action:      domain.ActionUpdate,
-				TargetPath:  promptPath,
-				Description: "update memory protocol in system prompt",
-			},
-		}, nil
-	}
-
-	// Backward compatibility: single-adapter installs may still have the
-	// legacy unscoped marker. Treat a matching legacy section as current.
-	if marker.HasSection(string(existing), SectionID) {
-		current := marker.ExtractSection(string(existing), SectionID)
+		current := marker.ExtractSection(string(existing), sid)
 		if current == desiredContent {
 			return []domain.PlannedAction{
 				{
@@ -140,7 +150,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return fmt.Errorf("read target: %w", err)
 	}
 
-	content := templateForAgentID(action.Agent)
+	content := i.ContentForAgentID(action.Agent, action.Mode)
 	updated := InjectContent(string(existing), action.Agent, content)
 
 	_, err = fileutil.WriteAtomic(action.TargetPath, []byte(updated), 0644)
@@ -200,50 +210,71 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	if current == "" {
 		current = marker.ExtractSection(string(content), SectionID)
 	}
-	expected := templateForAdapter(adapter)
-	if current != expected {
+	expected := i.ContentForAgentID(adapter.ID(), "")
+	switch current {
+	case expected:
+		results = append(results, domain.VerifyResult{
+			Check:  "memory-content-current",
+			Passed: true,
+		})
+	case ProtocolStub:
+		// The budget fitter may have degraded the section to the summary
+		// stub — a legitimate installed state, not drift.
+		results = append(results, domain.VerifyResult{
+			Check:    "memory-content-current",
+			Passed:   true,
+			Severity: domain.SeverityWarning,
+			Message:  "memory protocol installed in summary mode (token budget)",
+		})
+	default:
 		results = append(results, domain.VerifyResult{
 			Check:   "memory-content-current",
 			Passed:  false,
 			Message: "memory section content is outdated",
-		})
-	} else {
-		results = append(results, domain.VerifyResult{
-			Check:  "memory-content-current",
-			Passed: true,
 		})
 	}
 
 	return results, nil
 }
 
-// templateForAdapter returns the agent-specific memory protocol template
-// for the given adapter.
-func templateForAdapter(adapter domain.Adapter) string {
-	return templateForAgentID(adapter.ID())
+// ContentForAgentID returns the memory content this installer would write for
+// the given agent under the given action mode ("" or "summary"), honoring the
+// installer's configured memory scope.
+func (i *Installer) ContentForAgentID(agentID domain.AgentID, mode string) string {
+	if mode == "summary" {
+		return ProtocolStub
+	}
+	switch i.opts.Scope {
+	case ScopeSummary:
+		return ProtocolStub
+	case ScopeFull:
+		return templateForAgentID(agentID) + "\n\n" + fullScopeExtra
+	default: // "", ScopeProject
+		return templateForAgentID(agentID)
+	}
 }
 
 // templateForAgentID returns the memory protocol template for a given agent ID.
-// Used by Apply which only has access to the action's Agent field.
 func templateForAgentID(agentID domain.AgentID) string {
 	switch agentID {
 	case domain.AgentOpenCode:
-		return openCodeMemoryTemplate()
+		return assets.MustRead("memory/opencode.md")
 	case domain.AgentClaudeCode:
-		return claudeCodeMemoryTemplate()
+		return assets.MustRead("memory/claude.md")
 	default:
-		return genericMemoryTemplate()
+		return assets.MustRead("memory/generic.md")
 	}
 }
 
 // ProtocolTemplate returns the generic memory protocol template.
 // Kept for backward compatibility with external callers.
 func ProtocolTemplate() string {
-	return genericMemoryTemplate()
+	return assets.MustRead("memory/generic.md")
 }
 
-// TemplateForAgentID returns the agent-specific memory protocol template.
-// Use this to get the expected content for a specific agent in tests and callers.
+// TemplateForAgentID returns the agent-specific memory protocol template
+// (project scope). Use this to get the expected content for a specific agent
+// in tests and callers that don't carry installer options.
 func TemplateForAgentID(agentID domain.AgentID) string {
 	return templateForAgentID(agentID)
 }
@@ -266,16 +297,4 @@ func InjectContent(document string, agentID domain.AgentID, content string) stri
 		document = marker.InjectSection(document, SectionID, "")
 	}
 	return marker.InjectSection(document, SectionIDForAgentID(agentID), content)
-}
-
-func openCodeMemoryTemplate() string {
-	return assets.MustRead("memory/opencode.md")
-}
-
-func claudeCodeMemoryTemplate() string {
-	return assets.MustRead("memory/claude.md")
-}
-
-func genericMemoryTemplate() string {
-	return assets.MustRead("memory/generic.md")
 }

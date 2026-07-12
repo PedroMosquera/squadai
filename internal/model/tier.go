@@ -3,6 +3,8 @@ package model
 import (
 	"fmt"
 	"strings"
+
+	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 // Tier represents an abstract model quality/cost tier used for per-role assignment.
@@ -35,3 +37,34 @@ func (t Tier) String() string { return string(t) }
 
 // DefaultTier returns the default tier for roles that do not specify one.
 func DefaultTier() Tier { return TierStandard }
+
+// TierFromModelTier bridges the project-level domain.ModelTier vocabulary
+// (balanced, performance, starter) to catalog tiers (standard, premium,
+// cheap). Manual and unknown values map to the default tier.
+func TierFromModelTier(t domain.ModelTier) Tier {
+	switch t {
+	case domain.ModelTierPerformance:
+		return TierPremium
+	case domain.ModelTierStarter:
+		return TierCheap
+	case domain.ModelTierBalanced:
+		return TierStandard
+	default:
+		return DefaultTier()
+	}
+}
+
+// TierFromProfile bridges the ModelProfile tier vocabulary (cheap, balanced,
+// premium) to catalog tiers. Unknown values map to the default tier.
+func TierFromProfile(profileTier string) Tier {
+	switch strings.ToLower(profileTier) {
+	case "cheap":
+		return TierCheap
+	case "premium":
+		return TierPremium
+	case "balanced":
+		return TierStandard
+	default:
+		return DefaultTier()
+	}
+}

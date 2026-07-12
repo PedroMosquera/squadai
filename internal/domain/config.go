@@ -50,10 +50,14 @@ type ContextConfig struct {
 }
 
 // ContextProfile controls which local context is assembled for an agent run.
+//
+// MCPServers and SkillScopes deliberately have no omitempty: nil means "no
+// filter" while a present-but-empty list is a strict filter that admits
+// nothing, and that distinction must survive project.json round trips.
 type ContextProfile struct {
 	MemoryScope      string                 `json:"memory_scope,omitempty"`
-	MCPServers       []string               `json:"mcp_servers,omitempty"`
-	SkillScopes      []string               `json:"skill_scopes,omitempty"`
+	MCPServers       []string               `json:"mcp_servers"`
+	SkillScopes      []string               `json:"skill_scopes"`
 	MaxApproxTokens  int                    `json:"max_approx_tokens,omitempty"`
 	Include          []string               `json:"include,omitempty"`
 	Exclude          []string               `json:"exclude,omitempty"`
@@ -315,6 +319,14 @@ type MergedConfig struct {
 	// Violations is populated during merge when user/project values conflicted
 	// with locked policy fields. These are informational — the policy value wins.
 	Violations []string `json:"violations,omitempty"`
+
+	// ActiveContextProfile is the resolved context profile applied for this run.
+	// Runtime-only: set by the CLI after profile resolution so component
+	// installers (memory, agents, skills, mcp) can adjust their output. Never
+	// serialized — the canonical source is Context.Profiles.
+	ActiveContextProfile *ContextProfile `json:"-"`
+	// ActiveProfileName is the name of ActiveContextProfile. Runtime-only.
+	ActiveProfileName string `json:"-"`
 }
 
 // DefaultUserConfig returns a sensible default for first-time users.
@@ -331,6 +343,7 @@ func DefaultUserConfig() *UserConfig {
 			string(ComponentMemory):      {Enabled: true},
 			string(ComponentPermissions): {Enabled: true},
 			string(ComponentBrand):       {Enabled: true},
+			string(ComponentEfficiency):  {Enabled: true},
 		},
 		Paths: PathsConfig{
 			BackupDir: "~/.squadai/backups",
@@ -344,8 +357,9 @@ func DefaultProjectConfig() *ProjectConfig {
 		Version: 1,
 		Preset:  PresetSoloMinimal,
 		Components: map[string]ComponentConfig{
-			string(ComponentMemory): {Enabled: true},
-			string(ComponentBrand):  {Enabled: true},
+			string(ComponentMemory):     {Enabled: true},
+			string(ComponentBrand):      {Enabled: true},
+			string(ComponentEfficiency): {Enabled: true},
 		},
 		Copilot: CopilotConfig{
 			InstructionsTemplate: "standard",
@@ -368,16 +382,25 @@ func DefaultMemoryConfig() MemoryConfig {
 }
 
 // DefaultContextConfig returns the built-in context profiles.
+//
+// The "default" profile is deliberately non-restrictive (no MCP filter, no
+// skill scoping, no token cap): profiles are ACTIVE now, and the baseline
+// profile must reproduce plain-apply behavior exactly. Restrictive setups are
+// an explicit switch away (`squadai profile cheap`, `apply --profile=review`).
+//
+// Profiles with an explicit MCPServers list keep "squadai" so switching
+// profiles never silently removes the agent-console access to SquadAI itself.
+// "review" and "cheap" intentionally keep no MCP servers at all.
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
 		DefaultProfile: "default",
 		Profiles: map[string]ContextProfile{
-			"default":  {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 12000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
-			"debug":    {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 16000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
-			"feature":  {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd", "sdd"}, MaxApproxTokens: 20000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"default":  {MemoryScope: "project", Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"debug":    {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 16000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"feature":  {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared", "tdd", "sdd"}, MaxApproxTokens: 20000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 			"review":   {MemoryScope: "project", MCPServers: []string{}, SkillScopes: []string{"shared/code-review"}, MaxApproxTokens: 10000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
-			"docs":     {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 10000, Include: []string{"docs/**", "README.md", "*.md"}, Exclude: []string{".git/**", "node_modules/**"}},
-			"incident": {MemoryScope: "project", MCPServers: []string{"context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 24000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
+			"docs":     {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared"}, MaxApproxTokens: 10000, Include: []string{"docs/**", "README.md", "*.md"}, Exclude: []string{".git/**", "node_modules/**"}},
+			"incident": {MemoryScope: "project", MCPServers: []string{"squadai", "context7"}, SkillScopes: []string{"shared", "tdd/systematic-debugging"}, MaxApproxTokens: 24000, Include: []string{"**/*"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 			"cheap":    {MemoryScope: "summary", MCPServers: []string{}, SkillScopes: []string{"shared"}, MaxApproxTokens: 6000, Include: []string{"README.md", "docs/**"}, Exclude: []string{".git/**", "node_modules/**", "dist/**"}},
 		},
 	}
@@ -468,6 +491,7 @@ func DefaultTeam(m Methodology) map[string]TeamRole {
 // the init wizard.
 type CuratedMCPServer struct {
 	Name        string   // unique key used in mcpSelections
+	DisplayName string   // optional human-facing name; empty means Name is shown
 	Description string   // human-readable description shown in TUI
 	Type        string   // "remote" or "local"
 	PreChecked  bool     // whether the item starts selected in the TUI
@@ -488,10 +512,25 @@ type CuratedMCPServer struct {
 	MinNodeVersion string // e.g. "20"
 }
 
-// DefaultMCPCatalog returns the 5 curated MCP servers offered during init.
-// Context7 is pre-checked; the others default to unselected.
+// DefaultMCPCatalog returns the 6 curated MCP servers offered during init.
+// The SquadAI control-plane server and Context7 are pre-checked; the others
+// default to unselected. The community knowledge-graph server (config key
+// "memory", kept for compatibility) is intentionally sorted last: it overlaps
+// with SquadAI Project Memory and is de-emphasized in the setup flows.
 func DefaultMCPCatalog() []CuratedMCPServer {
 	return []CuratedMCPServer{
+		{
+			// SquadAI's own stdio MCP server: registered into every
+			// MCP-capable agent so squadai can be driven from inside the
+			// agent console. Command is the bare binary name — after install
+			// "squadai" is on PATH; `squadai doctor` warns when it is not.
+			Name:        "squadai",
+			Description: "SquadAI control plane — plan, apply, verify, status, and project memory from inside your agent",
+			Type:        "local",
+			PreChecked:  true,
+			Command:     "squadai",
+			Args:        []string{"mcp-server"},
+		},
 		{
 			Name:        "context7",
 			Description: "Up-to-date documentation lookup for libraries and frameworks",
@@ -514,14 +553,6 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			SetupHint:       "Create a personal access token with repo scope",
 		},
 		{
-			Name:        "memory",
-			Description: "Persistent knowledge graph across sessions",
-			Type:        "local",
-			PreChecked:  false,
-			Command:     "npx",
-			Args:        []string{"-y", "@modelcontextprotocol/server-memory"},
-		},
-		{
 			Name:            "sentry",
 			Description:     "Error monitoring and issue tracking",
 			Type:            "local",
@@ -542,7 +573,27 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Command:     "npx",
 			Args:        []string{"-y", "@modelcontextprotocol/server-sequential-thinking"},
 		},
+		{
+			// Config key stays "memory" for compatibility (--mcp=memory and
+			// existing project.json entries keep working); only the display
+			// name and description are de-emphasized.
+			Name:        "memory",
+			DisplayName: "knowledge-graph (community)",
+			Description: "Community knowledge-graph MCP server. Overlaps with SquadAI Project Memory — most people should use Project Memory instead.",
+			Type:        "local",
+			PreChecked:  false,
+			Command:     "npx",
+			Args:        []string{"-y", "@modelcontextprotocol/server-memory"},
+		},
 	}
+}
+
+// Display returns the human-facing name for a curated MCP server.
+func (s CuratedMCPServer) Display() string {
+	if s.DisplayName != "" {
+		return s.DisplayName
+	}
+	return s.Name
 }
 
 // DefaultPolicyConfig returns a team policy that locks the baseline.

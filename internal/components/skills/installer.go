@@ -12,6 +12,15 @@ import (
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
+// Options controls optional skills installer behavior.
+type Options struct {
+	// Scopes filters which skills are installed. Nil means no filter (install
+	// everything). A scope matches a skill path either exactly
+	// ("tdd/systematic-debugging") or as a directory prefix ("shared" matches
+	// "shared/code-review"). Paths are relative to the skills directory.
+	Scopes []string
+}
+
 // Installer implements domain.ComponentInstaller for skill definitions.
 // It writes .opencode/skills/<name>/SKILL.md files with YAML frontmatter.
 // When config.Methodology is set, it also installs embedded methodology skills.
@@ -19,11 +28,16 @@ type Installer struct {
 	skills     map[string]domain.SkillDef // custom skills from config
 	config     *domain.MergedConfig       // methodology config (nil = V1 behavior)
 	projectDir string
+	opts       Options
 }
 
 // New returns a skills installer configured from the merged skill definitions.
 // cfg may be nil for backward compatibility (V1 behavior: only custom skills).
-func New(skills map[string]domain.SkillDef, cfg *domain.MergedConfig, projectDir string) *Installer {
+func New(skills map[string]domain.SkillDef, cfg *domain.MergedConfig, projectDir string, opts ...Options) *Installer {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	resolved := make(map[string]domain.SkillDef)
 	for name, def := range skills {
 		// Resolve content from file if needed.
@@ -40,7 +54,27 @@ func New(skills map[string]domain.SkillDef, cfg *domain.MergedConfig, projectDir
 		skills:     resolved,
 		config:     cfg,
 		projectDir: projectDir,
+		opts:       o,
 	}
+}
+
+// inScope reports whether a skill path (relative to the skills dir, e.g.
+// "shared/code-review" or a custom skill name) passes the scope filter.
+// A nil filter admits everything; scopes match exactly or as a directory
+// prefix ("shared" → "shared/...", "tdd" → "tdd/...").
+func (i *Installer) inScope(rel string) bool {
+	if i.opts.Scopes == nil {
+		return true
+	}
+	for _, scope := range i.opts.Scopes {
+		if scope == "" {
+			continue
+		}
+		if rel == scope || strings.HasPrefix(rel, scope+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // ID returns the component identifier.
@@ -88,6 +122,9 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	// Phase 2: Custom skills from config (V1 behavior).
 	names := sortedKeys(i.skills)
 	for _, name := range names {
+		if !i.inScope(name) {
+			continue
+		}
 		def := i.skills[name]
 		targetPath := filepath.Join(skillsDir, name, "SKILL.md")
 		content := renderSkill(name, def)
@@ -132,15 +169,18 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 // assetDir is the directory under assets (e.g., "skills/tdd/brainstorming").
 // skillsDir is the project-level skills directory for the adapter.
 func (i *Installer) planEmbeddedSkill(adapter domain.Adapter, assetDir, skillsDir string) (*domain.PlannedAction, error) {
+	// Target: <skillsDir>/<relative>/SKILL.md
+	// e.g., assetDir = "skills/tdd/brainstorming" → relative = "tdd/brainstorming"
+	relative := strings.TrimPrefix(assetDir, "skills/")
+	if !i.inScope(relative) {
+		return nil, nil
+	}
+
 	assetPath := assetDir + "/SKILL.md"
 	content, err := assets.Read(assetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read embedded skill %s: %w", assetPath, err)
 	}
-
-	// Target: <skillsDir>/<relative>/SKILL.md
-	// e.g., assetDir = "skills/tdd/brainstorming" → relative = "tdd/brainstorming"
-	relative := strings.TrimPrefix(assetDir, "skills/")
 	targetPath := filepath.Join(skillsDir, relative, "SKILL.md")
 	actionID := fmt.Sprintf("skill-embedded-%s", relative)
 	description := fmt.Sprintf("skill:embedded:%s", relative)
@@ -281,6 +321,9 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	}
 
 	for _, name := range sortedKeys(i.skills) {
+		if !i.inScope(name) {
+			continue
+		}
 		def := i.skills[name]
 		targetPath := filepath.Join(skillsDir, name, "SKILL.md")
 		data, err := os.ReadFile(targetPath)
@@ -313,13 +356,16 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 
 // verifyEmbeddedSkill checks that an embedded skill file exists and is current.
 func (i *Installer) verifyEmbeddedSkill(assetDir, skillsDir string) *domain.VerifyResult {
+	relative := strings.TrimPrefix(assetDir, "skills/")
+	if !i.inScope(relative) {
+		return nil // filtered out by the active context profile
+	}
+
 	assetPath := assetDir + "/SKILL.md"
 	expected, err := assets.Read(assetPath)
 	if err != nil {
 		return nil // asset doesn't exist; skip
 	}
-
-	relative := strings.TrimPrefix(assetDir, "skills/")
 	targetPath := filepath.Join(skillsDir, relative, "SKILL.md")
 	checkName := fmt.Sprintf("skill-embedded-%s", relative)
 
@@ -381,8 +427,10 @@ func methodologySkillPaths(m domain.Methodology) []string {
 func sharedSkillPaths() []string {
 	return []string{
 		"skills/shared/code-review",
+		"skills/shared/context-discipline",
 		"skills/shared/find-skills",
 		"skills/shared/pr-description",
+		"skills/shared/squadai-init-playbook",
 		"skills/shared/testing",
 	}
 }

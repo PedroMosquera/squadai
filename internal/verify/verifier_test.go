@@ -43,6 +43,7 @@ func TestVerify_AllPass_AfterFullApply(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{
@@ -75,6 +76,7 @@ func TestVerify_FailsWhenMemoryMissing(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -96,7 +98,9 @@ func TestVerify_FailsWhenCopilotMissing(t *testing.T) {
 	cfg := &domain.MergedConfig{
 		Mode:       domain.ModePersonal,
 		Adapters:   map[string]domain.AdapterConfig{},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 		Copilot: domain.CopilotConfig{
 			InstructionsTemplate: "standard",
 		},
@@ -119,7 +123,9 @@ func TestVerify_IncludesPolicyViolations(t *testing.T) {
 	cfg := &domain.MergedConfig{
 		Mode:       domain.ModeTeam,
 		Adapters:   map[string]domain.AdapterConfig{},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 		Violations: []string{"field X locked to Y, overriding Z"},
 	}
 
@@ -154,6 +160,7 @@ func TestVerify_DisabledComponents_Skipped(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: false},
 		},
 	}
@@ -177,7 +184,9 @@ func TestVerify_EmptyConfig(t *testing.T) {
 	v := New()
 	report, err := v.Verify(&domain.MergedConfig{
 		Adapters:   map[string]domain.AdapterConfig{},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 	}, nil, t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -207,6 +216,7 @@ func TestVerify_RulesPass_AfterApply(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"rules": {Enabled: true},
 		},
 		Rules: domain.RulesConfig{
@@ -249,6 +259,7 @@ func TestVerify_RulesFails_WhenFileMissing(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"rules": {Enabled: true},
 		},
 		Rules: domain.RulesConfig{
@@ -283,6 +294,7 @@ func TestVerify_RulesFails_WhenContentOutdated(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"rules": {Enabled: true},
 		},
 		Rules: domain.RulesConfig{
@@ -310,6 +322,7 @@ func TestVerify_RulesDisabled_Skipped(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"rules": {Enabled: false},
 		},
 		Rules: domain.RulesConfig{
@@ -342,6 +355,7 @@ func TestVerify_RulesEmptyContent_Skipped(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"rules": {Enabled: true},
 		},
 		Rules: domain.RulesConfig{}, // empty content
@@ -376,6 +390,7 @@ func TestVerify_AllPass_MemoryAndRules(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 			"rules":  {Enabled: true},
 		},
@@ -424,6 +439,7 @@ func TestVerify_SettingsPass_AfterApply(t *testing.T) {
 			}},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"settings": {Enabled: true},
 		},
 	}
@@ -464,6 +480,7 @@ func TestVerify_SettingsFails_WhenFileMissing(t *testing.T) {
 			}},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"settings": {Enabled: true},
 		},
 	}
@@ -490,6 +507,7 @@ func TestVerify_SettingsDisabled_Skipped(t *testing.T) {
 			}},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"settings": {Enabled: false},
 		},
 	}
@@ -538,6 +556,7 @@ func TestVerify_ResultsHaveSeverity(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -576,6 +595,7 @@ func TestVerify_ResultsHaveComponent(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -620,6 +640,7 @@ func TestVerify_PassedResultsHaveInfoSeverity(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -648,6 +669,7 @@ func TestVerify_FailedResultsHaveErrorSeverity(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -669,7 +691,9 @@ func TestVerify_PolicyViolationsAreWarnings(t *testing.T) {
 	cfg := &domain.MergedConfig{
 		Mode:       domain.ModeTeam,
 		Adapters:   map[string]domain.AdapterConfig{},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 		Violations: []string{"locked field overridden"},
 	}
 
@@ -703,7 +727,9 @@ func TestVerify_HealthCheck_ConfiguredAndDetected(t *testing.T) {
 		Adapters: map[string]domain.AdapterConfig{
 			"opencode": {Enabled: true},
 		},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 	}
 
 	v := New()
@@ -743,7 +769,9 @@ func TestVerify_HealthCheck_ConfiguredButNotDetected(t *testing.T) {
 			"opencode":    {Enabled: true},
 			"claude-code": {Enabled: true},
 		},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 	}
 
 	// Only opencode is detected.
@@ -790,7 +818,9 @@ func TestVerify_HealthCheck_DetectedButNotConfigured(t *testing.T) {
 	cfg := &domain.MergedConfig{
 		Mode:       domain.ModeTeam,
 		Adapters:   map[string]domain.AdapterConfig{},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 	}
 
 	v := New()
@@ -822,7 +852,9 @@ func TestVerify_HealthCheck_DisabledAdapter_Skipped(t *testing.T) {
 		Adapters: map[string]domain.AdapterConfig{
 			"opencode": {Enabled: false},
 		},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
 	}
 
 	adapter := opencode.New()
@@ -851,6 +883,7 @@ func TestVerify_JSONOutput_HasSeverityAndComponent(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 	}
@@ -894,6 +927,7 @@ func TestVerify_Plugins_FailsWhenSkillFileMissing(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"plugins": {Enabled: true},
 		},
 		Plugins: map[string]domain.PluginDef{
@@ -945,6 +979,7 @@ func TestVerify_Plugins_PassesWhenSkillFilePresent(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"plugins": {Enabled: true},
 		},
 		Plugins: map[string]domain.PluginDef{
@@ -979,6 +1014,7 @@ func TestVerify_Plugins_DisabledComponent_Skipped(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"plugins": {Enabled: false},
 		},
 		Plugins: map[string]domain.PluginDef{
@@ -1017,6 +1053,7 @@ func TestVerify_Workflows_FailsWhenWorkflowFileMissing(t *testing.T) {
 			"windsurf": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"workflows": {Enabled: true},
 		},
 		Methodology: domain.MethodologyTDD,
@@ -1052,6 +1089,7 @@ func TestVerify_Workflows_DisabledComponent_Skipped(t *testing.T) {
 			"windsurf": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"workflows": {Enabled: false},
 		},
 		Methodology: domain.MethodologyTDD,
@@ -1082,6 +1120,7 @@ func TestVerify_Workflows_SkippedForNonWorkflowAdapter(t *testing.T) {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"workflows": {Enabled: true},
 		},
 		Methodology: domain.MethodologyTDD,

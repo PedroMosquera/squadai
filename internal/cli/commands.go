@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/pi"
@@ -22,7 +23,8 @@ var Version = "dev"
 
 // DetectAdapters returns all registered adapters that are installed or have config.
 // OpenCode (team lane) is always included. Personal-lane adapters (Claude Code,
-// VS Code Copilot, Cursor, Windsurf, Pi) are included only when detected on the system.
+// VS Code Copilot, Cursor, Windsurf, Pi, Codex) are included only when detected
+// on the system.
 func DetectAdapters(homeDir string) []domain.Adapter {
 	ctx := context.Background()
 	var adapters []domain.Adapter
@@ -55,6 +57,11 @@ func DetectAdapters(homeDir string) []domain.Adapter {
 	piAgent := pi.New()
 	if installed, configFound, err := piAgent.Detect(ctx, homeDir); err == nil && (installed || configFound) {
 		adapters = append(adapters, piAgent)
+	}
+
+	cx := codex.New()
+	if installed, configFound, err := cx.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+		adapters = append(adapters, cx)
 	}
 
 	return adapters

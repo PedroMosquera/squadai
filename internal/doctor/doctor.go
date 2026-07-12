@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
@@ -99,6 +100,7 @@ type Doctor struct {
 	catalog    []domain.CuratedMCPServer
 	looker     PathLooker
 	runner     CommandRunner
+	now        func() time.Time
 }
 
 // New returns a Doctor with production dependencies.
@@ -110,6 +112,7 @@ func New(homeDir, projectDir string, adapters []domain.Adapter, catalog []domain
 		catalog:    catalog,
 		looker:     pathLookerFunc{fn: exec.LookPath},
 		runner:     defaultCommandRunner{},
+		now:        time.Now,
 	}
 }
 
@@ -128,7 +131,15 @@ func NewWithDeps(
 		catalog:    catalog,
 		looker:     looker,
 		runner:     runner,
+		now:        time.Now,
 	}
+}
+
+// WithClock overrides the Doctor's time source (for testing time-sensitive
+// checks like models catalog freshness). Returns d for chaining.
+func (d *Doctor) WithClock(now func() time.Time) *Doctor {
+	d.now = now
+	return d
 }
 
 // categoryOrder defines the canonical display order for categories.

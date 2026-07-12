@@ -1,10 +1,12 @@
 package mcp
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/managed"
@@ -155,5 +157,44 @@ func TestPreview_OpenCode_UserEditedMCPKey_EmitsConflict(t *testing.T) {
 	}
 	if !strings.Contains(c.IncomingValue, "context7") {
 		t.Errorf("Conflict.IncomingValue should mention context7, got %q", c.IncomingValue)
+	}
+}
+
+// Regression: Codex's MCP config is TOML (~/.codex/config.toml), but conflict
+// detection force-parsed every update target as JSON, so the review preview
+// failed with "read existing JSON: parse JSON: invalid character ..." for any
+// user with pre-existing Codex config. TOML targets are marker-managed —
+// SquadAI owns only its hash-marker block and never touches user TOML outside
+// it — so they are conflict-free by construction and must not be JSON-parsed.
+func TestPreview_Codex_ExistingUserTOML_NoJSONParseError(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Real-world Codex user config: valid TOML, invalid JSON.
+	userTOML := "notify = true\nmodel = \"gpt-5.2\"\n"
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(userTOML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	inst := newTestInstaller()
+	entries, err := inst.Preview(codex.New(), home, project)
+	if err != nil {
+		t.Fatalf("Preview() must not fail on TOML targets, got: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
+	}
+	e := entries[0]
+	if e.Action != domain.ActionUpdate {
+		t.Errorf("Action = %q, want %q (existing file without managed block)", e.Action, domain.ActionUpdate)
+	}
+	if len(e.Conflicts) != 0 {
+		t.Errorf("marker-managed TOML preserves user content; want no conflicts, got %v", e.Conflicts)
+	}
+	if !strings.Contains(e.Diff, "notify = true") {
+		t.Errorf("diff should show the preserved user TOML context, got:\n%s", e.Diff)
 	}
 }

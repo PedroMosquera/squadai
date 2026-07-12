@@ -777,6 +777,7 @@ func fullConfig() *domain.MergedConfig {
 			"opencode": {Enabled: true},
 		},
 		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
 			"memory": {Enabled: true},
 		},
 		Copilot: domain.CopilotConfig{

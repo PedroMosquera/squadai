@@ -137,6 +137,119 @@ func TestRunInitApplyVerifyDiff_OpenCodePiSharedAgentsFileClean(t *testing.T) {
 	}
 }
 
+// TestRunInitApplyVerifyRemove_OpenCodeCodexSharedAgentsFile exercises the
+// full init → apply → verify → remove flow for OpenCode + Codex. Codex shares
+// the repo-root AGENTS.md with OpenCode via adapter-scoped markers, and its
+// MCP servers land in a hash-marker managed TOML block in ~/.codex/config.toml.
+func TestRunInitApplyVerifyRemove_OpenCodeCodexSharedAgentsFile(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Chdir(project)
+
+	// Codex is a personal-lane adapter: apply only configures it when it is
+	// detected. Create its config dir so detection is deterministic and does
+	// not depend on an ambient `codex` binary on the host's PATH.
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o755); err != nil {
+		t.Fatalf("create codex config dir: %v", err)
+	}
+
+	var initOut bytes.Buffer
+	if err := RunInit([]string{"--preset=solo-power", "--agents=opencode,codex", "--mcp=context7", "--json"}, &initOut); err != nil {
+		t.Fatalf("RunInit: %v\n%s", err, initOut.String())
+	}
+
+	var applyOut bytes.Buffer
+	if err := RunApply([]string{"--no-review", "--json"}, &applyOut); err != nil {
+		t.Fatalf("RunApply: %v\n%s", err, applyOut.String())
+	}
+
+	var verifyOut bytes.Buffer
+	if err := RunVerify(nil, &verifyOut); err != nil {
+		t.Fatalf("RunVerify: %v\n%s", err, verifyOut.String())
+	}
+	if strings.Contains(verifyOut.String(), "[FAIL]") {
+		t.Fatalf("verify should not have failures after apply:\n%s", verifyOut.String())
+	}
+
+	// AGENTS.md is shared: both adapters' scoped sections must coexist.
+	agentsPath := filepath.Join(project, "AGENTS.md")
+	content, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	body := string(content)
+	for _, section := range []string{
+		"squadai:memory:opencode",
+		"squadai:memory:codex",
+		"squadai:brand:opencode",
+		"squadai:brand:codex",
+	} {
+		if !strings.Contains(body, section) {
+			t.Fatalf("AGENTS.md missing scoped section %q:\n%s", section, body)
+		}
+	}
+
+	// ~/.codex/config.toml must carry the managed MCP block as TOML tables.
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	tomlData, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read ~/.codex/config.toml: %v", err)
+	}
+	tomlBody := string(tomlData)
+	for _, want := range []string{
+		"# squadai:mcp:start",
+		"[mcp_servers.context7]",
+		`command = "npx"`,
+		"# squadai:mcp:end",
+	} {
+		if !strings.Contains(tomlBody, want) {
+			t.Fatalf("config.toml missing %q:\n%s", want, tomlBody)
+		}
+	}
+
+	// Remove must clean up the managed TOML block (and, since the file was
+	// created by squadai with no user content, the file itself).
+	var removeOut bytes.Buffer
+	if err := RunRemove([]string{"--force"}, &removeOut); err != nil {
+		t.Fatalf("RunRemove: %v\n%s", err, removeOut.String())
+	}
+	if data, err := os.ReadFile(configPath); err == nil {
+		if strings.Contains(string(data), "squadai:mcp") {
+			t.Fatalf("config.toml still contains managed block after remove:\n%s", data)
+		}
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat config.toml after remove: %v", err)
+	}
+	if data, err := os.ReadFile(agentsPath); err == nil {
+		if strings.Contains(string(data), "squadai:memory:codex") {
+			t.Fatalf("AGENTS.md still contains codex sections after remove:\n%s", data)
+		}
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat AGENTS.md after remove: %v", err)
+	}
+}
+
+// TestDetectAdapters_IncludesCodexWhenConfigDirExists verifies detection-gated
+// registration: codex joins the adapter set when ~/.codex exists.
+func TestDetectAdapters_IncludesCodexWhenConfigDirExists(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o755); err != nil {
+		t.Fatalf("create codex config dir: %v", err)
+	}
+
+	adapters := DetectAdapters(home)
+	var found bool
+	for _, a := range adapters {
+		if a.ID() == domain.AgentCodex {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("DetectAdapters should include codex when ~/.codex exists, got %d adapters", len(adapters))
+	}
+}
+
 func TestRunApply_HelpText(t *testing.T) {
 	var buf bytes.Buffer
 	if err := RunApply([]string{"--help"}, &buf); err != nil {
@@ -1637,7 +1750,9 @@ func TestRunDiff_NothingToChange(t *testing.T) {
 		Adapters: map[string]domain.AdapterConfig{
 			"opencode": {Enabled: true},
 		},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			"efficiency": {Enabled: false}, // default-on component; off so nothing changes
+		},
 	}
 	projectPath := filepath.Join(projectDir, config.ProjectConfigDir, "project.json")
 	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
@@ -1670,7 +1785,9 @@ func TestRunDiff_NothingToChange_JSON(t *testing.T) {
 		Adapters: map[string]domain.AdapterConfig{
 			"opencode": {Enabled: true},
 		},
-		Components: map[string]domain.ComponentConfig{},
+		Components: map[string]domain.ComponentConfig{
+			"efficiency": {Enabled: false}, // default-on component; off so nothing changes
+		},
 	}
 	projectPath := filepath.Join(projectDir, config.ProjectConfigDir, "project.json")
 	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {

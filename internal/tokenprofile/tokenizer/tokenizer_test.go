@@ -2,7 +2,6 @@ package tokenizer
 
 import (
 	"math"
-	"strings"
 	"testing"
 
 	"github.com/pkoukk/tiktoken-go"
@@ -20,27 +19,28 @@ func TestForModel_OpenAIModels(t *testing.T) {
 	}
 }
 
-// Claude has no exact tokenizer in tiktoken; it must use the calibrated
-// fallback and be flagged approximate, not silently counted with an
-// OpenAI encoding.
-func TestForModel_ClaudeIsApproximateFallback(t *testing.T) {
-	c := ForModel("claude-sonnet-4-6")
-	fb, ok := c.(FallbackCounter)
-	if !ok {
-		t.Fatalf("ForModel(claude) = %T, want FallbackCounter", c)
+// Claude and Gemini count through the catalog's o200k_base proxy, but no
+// exact tokenizer exists for them: the counter must flag itself
+// approximate so output renders the counts as estimates, never as exact.
+func TestForModel_ProxyEncodingsAreApproximate(t *testing.T) {
+	for _, m := range []string{"claude-fable-5", "claude-sonnet-4-6", "gemini-3-pro"} {
+		c := ForModel(m)
+		if _, ok := c.(FallbackCounter); ok {
+			t.Errorf("ForModel(%q) = FallbackCounter, want the proxy tokenizer", m)
+		}
+		if !c.Approximate() {
+			t.Errorf("ForModel(%q).Approximate() = false, want true (proxy encoding)", m)
+		}
 	}
-	if !c.Approximate() {
-		t.Error("ForModel(claude).Approximate() = false, want true")
-	}
-	if fb.Divisors.Prose != 3.7 {
-		t.Errorf("claude prose divisor = %v, want 3.7", fb.Divisors.Prose)
-	}
-	// Use a length that separates the calibrated divisor from the flat
-	// heuristic: 111 chars -> 30 tokens at 3.7 vs 28 at 4.0.
-	text := strings.Repeat("word and prose text ", 6)[:111]
-	want := int(math.Ceil(111 / 3.7))
-	if got := c.Count(text); got != want {
-		t.Errorf("claude fallback Count = %d, want %d", got, want)
+}
+
+// OpenAI models use their own native encodings: counts are exact.
+func TestForModel_NativeEncodingsAreExact(t *testing.T) {
+	for _, m := range []string{"gpt-4o", "gpt-5-mini", "o4"} {
+		c := ForModel(m)
+		if c.Approximate() {
+			t.Errorf("ForModel(%q).Approximate() = true, want false (native encoding)", m)
+		}
 	}
 }
 
@@ -51,6 +51,37 @@ func TestForModel_UnknownModel(t *testing.T) {
 	}
 	if !c.Approximate() {
 		t.Error("ForModel(unknown).Approximate() = false, want true")
+	}
+}
+
+func TestForModel_CatalogResolvedModels(t *testing.T) {
+	// Current-generation models resolve encodings through the model catalog
+	// (per-model encodings + encoding_prefixes).
+	models := []string{
+		"claude-fable-5",
+		"claude-sonnet-4-6",
+		"gpt-5.2",
+		"gpt-5-mini",
+		"o4",
+		"gemini-3-pro",
+		"gemini-3-flash",
+		"gemini-3-something-new", // prefix match, no exact row
+		"anthropic/claude-fable-5",
+	}
+	for _, m := range models {
+		c := ForModel(m)
+		if _, ok := c.(FallbackCounter); ok {
+			t.Errorf("ForModel(%q) = FallbackCounter, want a real tokenizer", m)
+		}
+	}
+}
+
+func TestForModel_JunkFallsBack(t *testing.T) {
+	for _, m := range []string{"", "totally-made-up", "acme/quantum-brain-7"} {
+		c := ForModel(m)
+		if _, ok := c.(FallbackCounter); !ok {
+			t.Errorf("ForModel(%q) = %T, want FallbackCounter", m, c)
+		}
 	}
 }
 

@@ -12,13 +12,16 @@ import (
 )
 
 // Usage holds aggregated token usage and cost for a single model or
-// for the grand total across all models.
+// for the grand total across all models. Cache counters are populated
+// from Claude Code transcripts; other sources report zero.
 type Usage struct {
-	Model         string  `json:"model"`
-	InputTokens   int     `json:"input_tokens"`
-	OutputTokens  int     `json:"output_tokens"`
-	TotalTokens   int     `json:"total_tokens"`
-	EstimatedCost float64 `json:"estimated_cost_usd"`
+	Model               string  `json:"model"`
+	InputTokens         int     `json:"input_tokens"`
+	OutputTokens        int     `json:"output_tokens"`
+	CacheReadTokens     int     `json:"cache_read_tokens"`
+	CacheCreationTokens int     `json:"cache_creation_tokens"`
+	TotalTokens         int     `json:"total_tokens"`
+	EstimatedCost       float64 `json:"estimated_cost_usd"`
 	// CostKnown is false when no pricing data exists for the model;
 	// EstimatedCost is then 0 and must be rendered as "unknown", never
 	// as $0.00. For the grand total it is false when any model's cost
@@ -28,11 +31,13 @@ type Usage struct {
 }
 
 // Aggregation is the result of Aggregate, broken down per model plus a
-// grand total.
+// grand total. MaxSessionTokens is the largest single-session token count
+// (input+output) seen in the window, used for session-budget checks.
 type Aggregation struct {
-	ByModel map[string]Usage `json:"by_model"`
-	Total   Usage            `json:"total"`
-	Period  string           `json:"period"`
+	ByModel          map[string]Usage `json:"by_model"`
+	Total            Usage            `json:"total"`
+	MaxSessionTokens int              `json:"max_session_tokens,omitempty"`
+	Period           string           `json:"period"`
 }
 
 // AggregateOptions controls filtering of session files.
@@ -77,15 +82,19 @@ func Aggregate(homeDir string, opts AggregateOptions) (*Aggregation, error) {
 	for _, rel := range sessionDirs {
 		walkSessions(filepath.Join(homeDir, rel), cutoff, agg)
 	}
+	scanClaudeSessions(homeDir, cutoff, opts.ProjectDir, agg)
 
 	agg.Total.CostKnown = true
 	for model, u := range agg.ByModel {
 		u.Model = model
 		u.TotalTokens = u.InputTokens + u.OutputTokens
-		u.EstimatedCost, u.CostKnown = pricing.EstimateCost(model, u.InputTokens, u.OutputTokens)
+		u.EstimatedCost, u.CostKnown = pricing.EstimateCostWithCache(model,
+			u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheCreationTokens)
 		agg.ByModel[model] = u
 		agg.Total.InputTokens += u.InputTokens
 		agg.Total.OutputTokens += u.OutputTokens
+		agg.Total.CacheReadTokens += u.CacheReadTokens
+		agg.Total.CacheCreationTokens += u.CacheCreationTokens
 		agg.Total.TotalTokens += u.TotalTokens
 		agg.Total.EstimatedCost += u.EstimatedCost
 		agg.Total.CostKnown = agg.Total.CostKnown && u.CostKnown
@@ -131,6 +140,9 @@ func walkSessions(dir string, cutoff time.Time, agg *Aggregation) {
 		u.OutputTokens += output
 		u.SessionCount++
 		agg.ByModel[model] = u
+		if input+output > agg.MaxSessionTokens {
+			agg.MaxSessionTokens = input + output
+		}
 		return nil
 	})
 }

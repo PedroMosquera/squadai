@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/PedroMosquera/squadai/internal/modelcatalog"
 	"github.com/pkoukk/tiktoken-go"
 
 	"github.com/PedroMosquera/squadai/internal/tokenprofile/pricing"
@@ -85,43 +86,24 @@ func ApproxCount(text string) int {
 // encoderCache caches loaded tiktoken encoders keyed by encoding name.
 var encoderCache sync.Map // map[string]*tiktoken.Tiktoken
 
-// customPrefixEncodings maps OpenAI model prefixes not known to tiktoken
-// to tiktoken encoding names. It is consulted after tiktoken's own model
-// maps. Longer/more-specific prefixes are listed first. Non-OpenAI models
-// (Claude, ...) are intentionally absent: tiktoken only ships OpenAI
-// encodings, so counting them with one would be a silent mis-estimate —
-// they use the calibrated FallbackCounter instead.
-var customPrefixEncodings = []struct {
-	prefix   string
-	encoding string
-}{
-	{"gpt-4.1", tiktoken.MODEL_O200K_BASE},
-	{"gpt-4o", tiktoken.MODEL_O200K_BASE},
-	{"gpt-4", tiktoken.MODEL_CL100K_BASE},
-	{"gpt-3.5", tiktoken.MODEL_CL100K_BASE},
-	{"o1-", tiktoken.MODEL_O200K_BASE},
-	{"o3-", tiktoken.MODEL_O200K_BASE},
-}
-
-// resolveEncodingName maps a model name to a tiktoken encoding name. It
-// consults tiktoken's own model and prefix maps first, then a set of
-// known OpenAI prefixes. It returns "" when no encoding is known, in
-// which case callers should use FallbackCounter.
-func resolveEncodingName(model string) string {
+// resolveEncoding maps a model name to a tiktoken encoding name. It
+// consults tiktoken's own model and prefix maps first, then the unified
+// model catalog (per-model encodings and encoding_prefixes, which cover
+// claude-, gpt-5, o4, gemini-, ...). It returns "" when no encoding is
+// known, in which case callers should use FallbackCounter. The approx
+// result reports that the encoding is a proxy rather than the model's
+// real tokenizer (e.g. o200k_base for Claude): such counts must be
+// presented as estimates.
+func resolveEncoding(model string) (name string, approx bool) {
 	if name, ok := tiktoken.MODEL_TO_ENCODING[model]; ok {
-		return name
+		return name, false
 	}
 	for prefix, name := range tiktoken.MODEL_PREFIX_TO_ENCODING {
 		if strings.HasPrefix(model, prefix) {
-			return name
+			return name, false
 		}
 	}
-	for _, m := range customPrefixEncodings {
-		if strings.HasPrefix(model, m.prefix) {
-			return m.encoding
-		}
-	}
-	return ""
+	return modelcatalog.Default().EncodingApprox(model)
 }
 
 // getEncoder returns a cached tiktoken encoder for the given encoding
@@ -146,9 +128,12 @@ func getEncoder(encodingName string) *tiktoken.Tiktoken {
 
 // tiktokenCounter is a Counter backed by a tiktoken encoder. The BPE
 // ranks are loaded lazily on the first Count call; if they cannot be
-// loaded, it falls back to the calibrated chars/token heuristic.
+// loaded, it falls back to the calibrated chars/token heuristic. proxy
+// marks encodings that stand in for a model's real tokenizer (per the
+// model catalog), so their counts are reported as approximate.
 type tiktokenCounter struct {
 	encodingName string
+	proxy        bool
 	fallback     FallbackCounter
 	once         sync.Once
 	enc          *tiktoken.Tiktoken
@@ -164,25 +149,28 @@ func (c *tiktokenCounter) Count(text string) int {
 	return len(c.enc.EncodeOrdinary(text))
 }
 
-// Approximate reports whether counts come from the heuristic fallback.
-// It forces the lazy encoder load so the answer matches what Count does.
+// Approximate reports whether counts are estimates: either the encoding
+// is a proxy for the model's real tokenizer, or the heuristic fallback
+// is in use. It forces the lazy encoder load so the answer matches what
+// Count does.
 func (c *tiktokenCounter) Approximate() bool {
 	c.once.Do(func() { c.enc = getEncoder(c.encodingName) })
-	return c.enc == nil
+	return c.proxy || c.enc == nil
 }
 
-// ForModel returns a Counter for the given model. OpenAI models (and
-// known prefixes) are backed by tiktoken; all other models — including
-// Claude, for which no exact tokenizer is available — use a
-// FallbackCounter calibrated per model family. The tiktoken encoder is
+// ForModel returns a Counter for the given model. Models with a known
+// encoding (via tiktoken's maps or the model catalog) are backed by
+// tiktoken; encodings the catalog marks as a proxy (e.g. o200k_base for
+// Claude) report Approximate() = true. Models with no known encoding use
+// a FallbackCounter calibrated per model family. The tiktoken encoder is
 // loaded lazily, so ForModel itself never performs network I/O.
 func ForModel(model string) Counter {
 	fb := FallbackCounter{Divisors: pricing.FallbackDivisors(model)}
-	name := resolveEncodingName(model)
+	name, approx := resolveEncoding(model)
 	if name == "" {
 		return fb
 	}
-	return &tiktokenCounter{encodingName: name, fallback: fb}
+	return &tiktokenCounter{encodingName: name, proxy: approx, fallback: fb}
 }
 
 // CountBytes returns the token count for data using the counter for

@@ -6,10 +6,15 @@ import (
 	"os"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
 const catMCP = "MCP Servers"
+
+// selfMCPServerName is the catalog key of SquadAI's own MCP server
+// (`squadai mcp-server`), which gets a warn-only PATH check.
+const selfMCPServerName = "squadai"
 
 // runMCP checks each entry in the MCP catalog.
 func (d *Doctor) runMCP(_ context.Context) []CheckResult {
@@ -21,7 +26,32 @@ func (d *Doctor) runMCP(_ context.Context) []CheckResult {
 	for _, server := range d.catalog {
 		results = append(results, d.checkMCPServer(server))
 	}
+	results = append(results, d.checkConsoleRegistered())
 	return results
+}
+
+// checkConsoleRegistered nudges projects created before the SquadAI MCP
+// server became a default: when the project configures other MCP servers but
+// not squadai's own, agents cannot call SquadAI from their console. Warn-only
+// with the explicit, non-destructive upgrade path — never mutate the
+// project's server list.
+func (d *Doctor) checkConsoleRegistered() CheckResult {
+	proj, err := config.LoadProject(d.projectDir)
+	if err != nil || proj == nil {
+		return skip(catMCP, "console-registered", "no project config — nothing to check")
+	}
+	if len(proj.MCP) == 0 {
+		return skip(catMCP, "console-registered", "project configures no MCP servers")
+	}
+	if _, ok := proj.MCP[selfMCPServerName]; ok {
+		return pass(catMCP, "console-registered",
+			"SquadAI MCP server is registered — agents can call SquadAI from their console",
+			"")
+	}
+	return warn(catMCP, "console-registered",
+		"SquadAI's own MCP server is not in this project's MCP config (project predates the console default)",
+		"agents cannot run plan/apply/verify/status/memory from inside their console",
+		"squadai init --merge && squadai apply")
 }
 
 // checkMCPServer checks a single catalog MCP server entry.
@@ -71,6 +101,17 @@ func (d *Doctor) checkMCPServer(server CuratedMCPServer) CheckResult {
 	// For local servers, check that the command binary is available.
 	if server.Type == "local" && server.Command != "" {
 		if _, err := d.looker.LookPath(server.Command); err != nil {
+			// SquadAI's own MCP server is registered into agent configs by
+			// `squadai apply` as the bare "squadai" binary. When the CLI runs
+			// without being installed on PATH (e.g. via `go run`), the agent
+			// configs reference a binary agents cannot start — warn only,
+			// since squadai itself is obviously working right now.
+			if name == selfMCPServerName {
+				return warn(catMCP, name,
+					fmt.Sprintf("%s — the squadai binary is not on PATH; agents with the SquadAI MCP server configured cannot start it", name),
+					"",
+					"Install the squadai binary on PATH (e.g. 'go install github.com/PedroMosquera/squadai/cmd/squadai@latest')")
+			}
 			return fail(catMCP, name,
 				fmt.Sprintf("%s — %s not found in PATH", name, server.Command),
 				"",

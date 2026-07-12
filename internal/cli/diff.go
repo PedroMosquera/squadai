@@ -138,6 +138,7 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 	if err != nil {
 		return err
 	}
+	applyDefaultProfile(merged)
 
 	adapters := DetectAdapters(homeDir)
 	p := planner.New()

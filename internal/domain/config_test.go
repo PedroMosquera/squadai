@@ -121,14 +121,14 @@ func TestDefaultTeam_AllRolesHaveSubagentMode(t *testing.T) {
 
 // ─── DefaultMCPCatalog ───────────────────────────────────────────────────────
 
-func TestDefaultMCPCatalog_ReturnsFiveServers(t *testing.T) {
+func TestDefaultMCPCatalog_ReturnsSixServers(t *testing.T) {
 	catalog := DefaultMCPCatalog()
-	if len(catalog) != 5 {
-		t.Errorf("DefaultMCPCatalog() len = %d, want 5", len(catalog))
+	if len(catalog) != 6 {
+		t.Errorf("DefaultMCPCatalog() len = %d, want 6", len(catalog))
 	}
 }
 
-func TestDefaultMCPCatalog_ExactlyOnePreChecked(t *testing.T) {
+func TestDefaultMCPCatalog_ExactlyTwoPreChecked(t *testing.T) {
 	catalog := DefaultMCPCatalog()
 	var preChecked []string
 	for _, s := range catalog {
@@ -136,12 +136,12 @@ func TestDefaultMCPCatalog_ExactlyOnePreChecked(t *testing.T) {
 			preChecked = append(preChecked, s.Name)
 		}
 	}
-	if len(preChecked) != 1 {
-		t.Errorf("expected 1 pre-checked server, got %d: %v", len(preChecked), preChecked)
+	if len(preChecked) != 2 {
+		t.Errorf("expected 2 pre-checked servers, got %d: %v", len(preChecked), preChecked)
 	}
 }
 
-func TestDefaultMCPCatalog_PreCheckedIsContext7(t *testing.T) {
+func TestDefaultMCPCatalog_PreCheckedAreSquadaiAndContext7(t *testing.T) {
 	catalog := DefaultMCPCatalog()
 	preChecked := make(map[string]bool)
 	for _, s := range catalog {
@@ -149,9 +149,47 @@ func TestDefaultMCPCatalog_PreCheckedIsContext7(t *testing.T) {
 			preChecked[s.Name] = true
 		}
 	}
+	if !preChecked["squadai"] {
+		t.Error("expected squadai to be pre-checked")
+	}
 	if !preChecked["context7"] {
 		t.Error("expected context7 to be pre-checked")
 	}
+}
+
+// TestDefaultMCPCatalog_SquadaiSelfServer pins the built-in SquadAI
+// control-plane entry: local, pre-checked, and invoking the bare "squadai"
+// binary so the registration keeps working after the CLI is installed on PATH.
+func TestDefaultMCPCatalog_SquadaiSelfServer(t *testing.T) {
+	for _, s := range DefaultMCPCatalog() {
+		if s.Name != "squadai" {
+			continue
+		}
+		tests := []struct {
+			field string
+			got   any
+			want  any
+		}{
+			{"Type", s.Type, "local"},
+			{"PreChecked", s.PreChecked, true},
+			{"Command", s.Command, "squadai"},
+			{"RequiresAuth", s.RequiresAuth, false},
+			{"URL", s.URL, ""},
+		}
+		for _, tc := range tests {
+			if tc.got != tc.want {
+				t.Errorf("squadai server %s = %v, want %v", tc.field, tc.got, tc.want)
+			}
+		}
+		if len(s.Args) != 1 || s.Args[0] != "mcp-server" {
+			t.Errorf("squadai server Args = %v, want [mcp-server]", s.Args)
+		}
+		if !strings.Contains(s.Description, "SquadAI control plane") {
+			t.Errorf("squadai server description should name the control plane, got %q", s.Description)
+		}
+		return
+	}
+	t.Fatal("squadai server not found in catalog")
 }
 
 func TestDefaultMCPCatalog_AllHaveNonEmptyNameAndDescription(t *testing.T) {
@@ -190,6 +228,58 @@ func TestDefaultMCPCatalog_AllRolesHaveSkillRef(t *testing.T) {
 				t.Errorf("methodology %q role %q: missing SkillRef", m, name)
 			}
 		}
+	}
+}
+
+// ─── DefaultContextConfig MCP filters ────────────────────────────────────────
+
+// TestDefaultContextConfig_ProfileMCPFilters pins the profile↔MCP contract:
+// every built-in profile with an explicit MCP filter keeps "squadai" so a
+// profile switch never silently removes agent-console access, while "review"
+// and "cheap" stay MCP-free and "default" applies no filter at all.
+func TestDefaultContextConfig_ProfileMCPFilters(t *testing.T) {
+	profiles := DefaultContextConfig().Profiles
+	tests := []struct {
+		profile     string
+		wantSquadai bool
+		wantEmpty   bool
+		wantNil     bool
+	}{
+		{profile: "default", wantNil: true},
+		{profile: "debug", wantSquadai: true},
+		{profile: "feature", wantSquadai: true},
+		{profile: "docs", wantSquadai: true},
+		{profile: "incident", wantSquadai: true},
+		{profile: "review", wantEmpty: true},
+		{profile: "cheap", wantEmpty: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.profile, func(t *testing.T) {
+			p, ok := profiles[tc.profile]
+			if !ok {
+				t.Fatalf("built-in profile %q missing", tc.profile)
+			}
+			switch {
+			case tc.wantNil:
+				if p.MCPServers != nil {
+					t.Errorf("profile %q MCPServers = %v, want nil (no filter)", tc.profile, p.MCPServers)
+				}
+			case tc.wantEmpty:
+				if p.MCPServers == nil || len(p.MCPServers) != 0 {
+					t.Errorf("profile %q MCPServers = %v, want present-but-empty", tc.profile, p.MCPServers)
+				}
+			case tc.wantSquadai:
+				found := false
+				for _, s := range p.MCPServers {
+					if s == "squadai" {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("profile %q MCPServers = %v, must keep %q", tc.profile, p.MCPServers, "squadai")
+				}
+			}
+		})
 	}
 }
 
@@ -242,7 +332,7 @@ func TestDefaultMCPCatalog_SentryRequiresAuth(t *testing.T) {
 }
 
 func TestDefaultMCPCatalog_NoAuthServersHaveEmptyAuthFields(t *testing.T) {
-	noAuthNames := []string{"context7", "memory", "sequential-thinking"}
+	noAuthNames := []string{"squadai", "context7", "memory", "sequential-thinking"}
 	catalog := DefaultMCPCatalog()
 	byName := make(map[string]CuratedMCPServer, len(catalog))
 	for _, s := range catalog {

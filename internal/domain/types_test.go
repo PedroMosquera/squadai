@@ -621,14 +621,15 @@ func TestAgentIDs_AllV2Defined(t *testing.T) {
 		AgentCursor,
 		AgentWindsurf,
 		AgentPi,
+		AgentCodex,
 	}
 	for _, id := range ids {
 		if id == "" {
 			t.Error("AgentID should not be empty")
 		}
 	}
-	if len(ids) != 6 {
-		t.Errorf("expected 6 agent IDs, got %d", len(ids))
+	if len(ids) != 7 {
+		t.Errorf("expected 7 agent IDs, got %d", len(ids))
 	}
 }
 

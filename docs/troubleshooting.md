@@ -109,7 +109,7 @@ squadai restore <backup-id>
 
 SquadAI detects adapters by looking for agent binaries or config directories on your system. If no agents are found:
 
-- Confirm at least one supported agent is installed (opencode, claude-code, cursor, vscode-copilot, windsurf).
+- Confirm at least one supported agent is installed (opencode, claude-code, cursor, vscode-copilot, windsurf, pi, codex).
 - If an agent is installed but not detected, explicitly enable it in `.squadai/project.json`:
 
 ```json

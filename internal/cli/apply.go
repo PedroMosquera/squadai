@@ -17,7 +17,6 @@ import (
 	"github.com/PedroMosquera/squadai/internal/planner"
 	"github.com/PedroMosquera/squadai/internal/planner/budget"
 	"github.com/PedroMosquera/squadai/internal/state"
-	"github.com/PedroMosquera/squadai/internal/tokenprofile/tokenizer"
 )
 
 // RunPlan computes and displays the action plan.
@@ -70,6 +69,7 @@ func RunPlan(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	applyDefaultProfile(merged)
 
 	adapters := DetectAdapters(homeDir)
 	p := planner.New()
@@ -121,40 +121,6 @@ func RunApplyWithProgress(args []string, stdout io.Writer, sink pipeline.EventSi
 	return runApplyImpl(args, stdout, sink)
 }
 
-func desiredComponentTokens(p *planner.Planner, actions []domain.PlannedAction, homeDir, projectDir, modelName string) (map[domain.ComponentID]int, error) {
-	counter := tokenizer.ForModel(modelName)
-	// Each RenderAction returns the FULL rendered target document. When several
-	// actions of the same component target one file (e.g. the OpenCode and Pi
-	// memory sections both live in a shared AGENTS.md), summing per action would
-	// count that document once per action and overstate the component, which can
-	// make the budget fitter drop a component that actually fits. Keep the
-	// largest render per (component, path) instead.
-	type compPath struct {
-		component domain.ComponentID
-		path      string
-	}
-	tokensByPath := make(map[compPath]int)
-	for _, action := range actions {
-		if action.Action == domain.ActionDelete || action.TargetPath == "" {
-			continue
-		}
-		_, desired, err := p.RenderAction(action, homeDir, projectDir)
-		if err != nil {
-			return nil, fmt.Errorf("render %s: %w", action.ID, err)
-		}
-		tokens := counter.Count(string(desired))
-		key := compPath{component: action.Component, path: action.TargetPath}
-		if tokens > tokensByPath[key] {
-			tokensByPath[key] = tokens
-		}
-	}
-	tokensByComponent := make(map[domain.ComponentID]int)
-	for key, tokens := range tokensByPath {
-		tokensByComponent[key.component] += tokens
-	}
-	return tokensByComponent, nil
-}
-
 // runApplyImpl is the shared implementation for RunApply and RunApplyWithProgress.
 // externalSink is used when non-nil; the --verbose flag creates its own internal sink.
 func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSink) error {
@@ -169,6 +135,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	noBrand := false
 	maxTokens := 0
 	fitModel := ""
+	flagProfile := ""
 	var explicitAgents []string
 	var modelOverrides []string // raw "role=tier" pairs from --model flag
 	for _, arg := range args {
@@ -191,6 +158,8 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			}
 		case strings.HasPrefix(arg, "--fit-model="):
 			fitModel = arg[len("--fit-model="):]
+		case strings.HasPrefix(arg, "--profile="):
+			flagProfile = arg[len("--profile="):]
 		case arg == "--overwrite-unmanaged":
 			overwriteUnmanaged = true
 		case arg == "--set-claude-default-agent":
@@ -215,7 +184,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 				}
 			}
 		case arg == "-h" || arg == "--help":
-			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--verbose] [--model role=tier,...] [--no-brand] [--max-tokens=N] [--fit-model=<name>]")
+			fmt.Fprintln(stdout, "Usage: squadai apply [--dry-run] [--json] [--force] [--respect-state] [--verbose] [--model role=tier,...] [--no-brand] [--profile=<name>] [--max-tokens=N] [--fit-model=<name>]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Apply the planned configuration changes to your project. Creates or updates agent")
 			fmt.Fprintln(stdout, "config files, MCP server settings, skill files, and team definitions for all")
@@ -232,8 +201,13 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			fmt.Fprintln(stdout, "  --verbose           Stream per-step progress to stderr as each action executes.")
 			fmt.Fprintln(stdout, "  --no-review         Skip the pre-apply review screen (non-interactive / CI).")
 			fmt.Fprintln(stdout, "  --no-brand          Skip the brand banner component for this apply (useful in CI).")
+			fmt.Fprintln(stdout, "  --profile=<name>    Context profile for this run (overrides context.default_profile).")
+			fmt.Fprintln(stdout, "                      Profiles filter MCP servers and skills, set the memory scope, and")
+			fmt.Fprintln(stdout, "                      cap tokens. include/exclude/adapter_overrides are not enforced yet.")
 			fmt.Fprintln(stdout, "  --max-tokens=N      Budget cap: fit components within N tokens (drops lowest priority first).")
-			fmt.Fprintln(stdout, "  --fit-model=<name>  Model to use for budget fitting (e.g. claude-sonnet-4, gpt-4o).")
+			fmt.Fprintln(stdout, "                      Defaults to the active profile's max_approx_tokens.")
+			fmt.Fprintln(stdout, "  --fit-model=<name>  Model to use for budget fitting (e.g. claude-sonnet-4-6, gpt-5-mini).")
+			fmt.Fprintln(stdout, "                      Defaults to the profile's usage tier, then the standard-tier model.")
 			fmt.Fprintln(stdout, "  --overwrite-unmanaged  Grant blanket consent to overwrite any user-owned key")
 			fmt.Fprintln(stdout, "                         SquadAI would write. Complements --no-review / CI flows;")
 			fmt.Fprintln(stdout, "                         without this flag non-TTY applies halt on merge conflicts.")
@@ -297,6 +271,13 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 		}
 	}
 
+	// Resolve and apply the active context profile (flag > default profile).
+	profileName, activeProfile, err := resolveActiveProfile(merged, flagProfile)
+	if err != nil {
+		return err
+	}
+	applyProfileToConfig(merged, profileName, activeProfile)
+
 	adapters := DetectAdapters(homeDir)
 
 	// Apply state-based filtering when --respect-state is active (default) and
@@ -313,21 +294,27 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 		return exitcode.ErrPlanFailed(err)
 	}
 
-	if maxTokens > 0 {
-		componentTokens, tokenErr := desiredComponentTokens(p, actions, homeDir, projectDir, fitModel)
+	// Budget fitting: effective cap = --max-tokens flag > profile cap > none.
+	// When fitting runs, token counts always come from a real tokenizer via
+	// resolveFitModel (--fit-model > profile tier > standard-tier default).
+	if cap := effectiveTokenCap(maxTokens, activeProfile); cap > 0 {
+		fitModel = resolveFitModel(merged, profileName, fitModel)
+		componentTokens, nativeAgentsTokens, tokenErr := desiredComponentTokens(p, actions, homeDir, projectDir, fitModel)
 		if tokenErr != nil {
 			return fmt.Errorf("budget token estimate: %w", tokenErr)
 		}
 		fitResult, fitErr := budget.Fit(actions, budget.Options{
-			MaxTokens:       maxTokens,
+			MaxTokens:       cap,
 			Model:           fitModel,
+			Profile:         profileName,
 			ComponentTokens: componentTokens,
+			SummaryTokens:   summaryComponentTokens(actions, fitModel, nativeAgentsTokens),
 		})
 		if fitErr != nil {
 			return fmt.Errorf("budget fit: %w", fitErr)
 		}
 		if !fitResult.FitAchieved {
-			fmt.Fprintf(os.Stderr, "warning: could not fit within %d tokens even with all truncation. Proceeding with minimal set.\n", maxTokens)
+			fmt.Fprintf(os.Stderr, "warning: could not fit within %d tokens even with all truncation. Proceeding with minimal set.\n", cap)
 		}
 		actions = fitResult.Actions
 		if !dryRun {
