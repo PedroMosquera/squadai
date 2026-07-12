@@ -107,6 +107,31 @@ func installHook(hooksDir, name, squadaiCmd string) error {
 	return os.WriteFile(hookPath, []byte(content), 0755)
 }
 
+// hooksInstalled returns true when all three squadai-managed hooks (pre-commit,
+// post-merge, post-checkout) are already installed in the project's .git/hooks
+// directory. Any error during detection causes it to return false so callers
+// can silently skip optional behaviour.
+func hooksInstalled(projectDir string) bool {
+	hooksDir := filepath.Join(projectDir, ".git", "hooks")
+
+	// pre-commit is installed via installHook — presence is detected by the
+	// command string it injects.
+	preCommit, err := os.ReadFile(filepath.Join(hooksDir, "pre-commit"))
+	if err != nil || !strings.Contains(string(preCommit), "squadai verify --strict") {
+		return false
+	}
+
+	// post-merge and post-checkout are installed via installHookWithBody — their
+	// presence is detected by the "# squadai: <name>" marker line.
+	for _, name := range []string{"post-merge", "post-checkout"} {
+		data, err := os.ReadFile(filepath.Join(hooksDir, name))
+		if err != nil || !strings.Contains(string(data), "# squadai: "+name) {
+			return false
+		}
+	}
+	return true
+}
+
 // installHookWithBody writes a hook with a multi-line body, appending to
 // an existing hook if one exists (without duplicating the squadai marker).
 func installHookWithBody(hooksDir, name, body string) error {
@@ -150,6 +175,10 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  /squadai-doctor    — Run diagnostics")
 			fmt.Fprintln(stdout, "  /squadai-context   — Dump config as LLM context")
 			fmt.Fprintln(stdout, "  /squadai-init      — Tune agent roles for this codebase")
+			fmt.Fprintln(stdout, "  /memory-add        — Capture a note into project memory")
+			fmt.Fprintln(stdout, "  /memory-search     — Search project memory")
+			fmt.Fprintln(stdout, "  /memory-promote    — Promote inbox notes to permanent folders")
+			fmt.Fprintln(stdout, "  /memory-reindex    — Rebuild the memory search index")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output result as JSON.")
@@ -188,6 +217,10 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 		"squadai-doctor",
 		"squadai-context",
 		"squadai-init",
+		"memory-add",
+		"memory-search",
+		"memory-promote",
+		"memory-reindex",
 	}
 	for _, name := range commandAssets {
 		content, err := assets.Read("commands/" + name + ".md")
