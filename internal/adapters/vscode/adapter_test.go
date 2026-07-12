@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/paths"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -142,13 +143,7 @@ func TestPaths(t *testing.T) {
 	case "linux":
 		wantConfigDir = "/Users/test/.config/Code/User"
 	case "windows":
-		// On Windows ConfigDir uses %APPDATA%; fall back to the homeDir path
-		// when APPDATA is unset (as it is in this test which passes a fake home).
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			wantConfigDir = filepath.Join(appData, "Code", "User")
-		} else {
-			wantConfigDir = filepath.Join("/Users/test", "AppData", "Roaming", "Code", "User")
-		}
+		wantConfigDir = paths.UserConfigDir(home, runtime.GOOS, "Code")
 	default:
 		wantConfigDir = "/Users/test/Library/Application Support/Code/User"
 	}
@@ -168,6 +163,16 @@ func TestPaths(t *testing.T) {
 		if tt.got != tt.want {
 			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
 		}
+	}
+}
+
+// TestConfigDirAppName proves ConfigDir delegates to the shared helper with
+// app name "Code". Per-OS resolution details are covered by the paths
+// package tests.
+func TestConfigDirAppName(t *testing.T) {
+	home := "/Users/test"
+	if got, want := ConfigDir(home), paths.UserConfigDir(home, runtime.GOOS, "Code"); got != want {
+		t.Errorf("ConfigDir = %q, want %q", got, want)
 	}
 }
 

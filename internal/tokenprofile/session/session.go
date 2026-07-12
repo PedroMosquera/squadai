@@ -19,7 +19,12 @@ type Usage struct {
 	OutputTokens  int     `json:"output_tokens"`
 	TotalTokens   int     `json:"total_tokens"`
 	EstimatedCost float64 `json:"estimated_cost_usd"`
-	SessionCount  int     `json:"session_count"`
+	// CostKnown is false when no pricing data exists for the model;
+	// EstimatedCost is then 0 and must be rendered as "unknown", never
+	// as $0.00. For the grand total it is false when any model's cost
+	// is unknown (EstimatedCost then only sums the known models).
+	CostKnown    bool `json:"cost_known"`
+	SessionCount int  `json:"session_count"`
 }
 
 // Aggregation is the result of Aggregate, broken down per model plus a
@@ -73,15 +78,17 @@ func Aggregate(homeDir string, opts AggregateOptions) (*Aggregation, error) {
 		walkSessions(filepath.Join(homeDir, rel), cutoff, agg)
 	}
 
+	agg.Total.CostKnown = true
 	for model, u := range agg.ByModel {
 		u.Model = model
 		u.TotalTokens = u.InputTokens + u.OutputTokens
-		u.EstimatedCost = pricing.EstimateCost(model, u.InputTokens, u.OutputTokens)
+		u.EstimatedCost, u.CostKnown = pricing.EstimateCost(model, u.InputTokens, u.OutputTokens)
 		agg.ByModel[model] = u
 		agg.Total.InputTokens += u.InputTokens
 		agg.Total.OutputTokens += u.OutputTokens
 		agg.Total.TotalTokens += u.TotalTokens
 		agg.Total.EstimatedCost += u.EstimatedCost
+		agg.Total.CostKnown = agg.Total.CostKnown && u.CostKnown
 		agg.Total.SessionCount += u.SessionCount
 	}
 	agg.Total.Model = "total"

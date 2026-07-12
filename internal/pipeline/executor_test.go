@@ -529,7 +529,7 @@ func TestExecute_ActionCreate_TracksFile(t *testing.T) {
 		}
 	}
 	if len(creates) == 0 {
-		t.Skip("no ActionCreate steps in plan; skip tracking test")
+		t.Fatal("expected plan to produce ActionCreate steps, got none")
 	}
 
 	exec := New(p.ComponentInstallers(), p.CopilotManager(), project, cfg.Copilot, nil)

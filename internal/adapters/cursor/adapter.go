@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/paths"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -181,14 +182,17 @@ func (a *Adapter) RulesFrontmatter() string {
 func (a *Adapter) RulesFileSizeCap() int { return 0 }
 
 // ConfigDir returns the root config directory for Cursor.
-// On Windows it is %APPDATA%\Cursor\User (falling back to homeDir\AppData\Roaming\Cursor\User).
-// On all other platforms it is ~/.cursor.
+// On Windows it is the shared editor user config dir (see paths.UserConfigDir).
+// On all other platforms it is ~/.cursor — Cursor keeps its global config in
+// a dot-directory rather than the Electron user-data dir.
 func ConfigDir(homeDir string) string {
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "Cursor", "User")
-		}
-		return filepath.Join(homeDir, "AppData", "Roaming", "Cursor", "User")
+	return configDir(homeDir, runtime.GOOS)
+}
+
+// configDir is ConfigDir with GOOS injected for cross-platform testing.
+func configDir(homeDir, goos string) string {
+	if goos == "windows" {
+		return paths.UserConfigDir(homeDir, goos, "Cursor")
 	}
 	return filepath.Join(homeDir, ".cursor")
 }

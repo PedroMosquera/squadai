@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/paths"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -187,14 +188,17 @@ func (a *Adapter) RulesFrontmatter() string {
 func (a *Adapter) RulesFileSizeCap() int { return 6000 }
 
 // ConfigDir returns the root config directory for Windsurf.
-// On Windows it is %APPDATA%\Windsurf\User (falling back to homeDir\AppData\Roaming\Windsurf\User).
-// On all other platforms it is ~/.codeium/windsurf.
+// On Windows it is the shared editor user config dir (see paths.UserConfigDir).
+// On all other platforms it is ~/.codeium/windsurf — Windsurf keeps its global
+// config in a dot-directory rather than the Electron user-data dir.
 func ConfigDir(homeDir string) string {
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "Windsurf", "User")
-		}
-		return filepath.Join(homeDir, "AppData", "Roaming", "Windsurf", "User")
+	return configDir(homeDir, runtime.GOOS)
+}
+
+// configDir is ConfigDir with GOOS injected for cross-platform testing.
+func configDir(homeDir, goos string) string {
+	if goos == "windows" {
+		return paths.UserConfigDir(homeDir, goos, "Windsurf")
 	}
 	return filepath.Join(homeDir, ".codeium", "windsurf")
 }

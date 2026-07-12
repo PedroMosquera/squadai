@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/paths"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -140,11 +141,7 @@ func TestPaths(t *testing.T) {
 	// portable across all CI platforms.
 	var wantConfigDir string
 	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			wantConfigDir = filepath.Join(appData, "Windsurf", "User")
-		} else {
-			wantConfigDir = filepath.Join(home, "AppData", "Roaming", "Windsurf", "User")
-		}
+		wantConfigDir = paths.UserConfigDir(home, runtime.GOOS, "Windsurf")
 	} else {
 		wantConfigDir = "/Users/test/.codeium/windsurf"
 	}
@@ -163,6 +160,22 @@ func TestPaths(t *testing.T) {
 	for _, tt := range tests {
 		if tt.got != tt.want {
 			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
+		}
+	}
+}
+
+// TestConfigDirByGOOS proves the adapter passes "Windsurf" to the shared
+// Windows path helper and keeps its dot-directory on other platforms.
+// Per-OS resolution details are covered by the paths package tests.
+func TestConfigDirByGOOS(t *testing.T) {
+	home := "/Users/test"
+
+	if got, want := configDir(home, "windows"), paths.UserConfigDir(home, "windows", "Windsurf"); got != want {
+		t.Errorf("configDir(windows) = %q, want %q", got, want)
+	}
+	for _, goos := range []string{"linux", "darwin"} {
+		if got, want := configDir(home, goos), filepath.Join(home, ".codeium", "windsurf"); got != want {
+			t.Errorf("configDir(%s) = %q, want %q", goos, got, want)
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/planner"
@@ -40,7 +41,8 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --json         Output as JSON")
 			fmt.Fprintln(stdout, "  --planned      Estimate planned rendered content before apply")
 			fmt.Fprintln(stdout, "  --model=<name> Use model-aware tokenizer (e.g. claude-sonnet-4, gpt-4o)")
-			fmt.Fprintln(stdout, "                 Falls back to 4 chars/token heuristic when omitted.")
+			fmt.Fprintln(stdout, "                 Models without an exact tokenizer (and the no-model")
+			fmt.Fprintln(stdout, "                 default) use a chars/token approximation, marked '~'.")
 			return nil
 		}
 	}
@@ -115,6 +117,7 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 			report.TotalTokens += e.Tokens
 		}
 		report.Model = model
+		report.Approximate = counter.Approximate()
 	}
 
 	if jsonOut {
@@ -126,8 +129,9 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 
 func plannedTokenBudgetReport(p *planner.Planner, actions []domain.PlannedAction, homeDir, projectDir, model string) (*tokenprofile.Report, error) {
 	report := &tokenprofile.Report{
-		ByCategory: make(map[string]tokenprofile.CategorySummary),
-		Model:      model,
+		ByCategory:  make(map[string]tokenprofile.CategorySummary),
+		Model:       model,
+		Approximate: true, // heuristic unless a real tokenizer counts below
 	}
 	var counter tokenizer.Counter
 	if model != "" {
@@ -197,6 +201,9 @@ func plannedTokenBudgetReport(p *planner.Planner, actions []domain.PlannedAction
 		report.TotalBytes += len(pe.desired)
 		report.TotalTokens += tokens
 	}
+	if counter != nil {
+		report.Approximate = counter.Approximate()
+	}
 	return report, nil
 }
 
@@ -205,6 +212,7 @@ type tokenBudgetJSON struct {
 	TotalTokens int                                     `json:"total_tokens"`
 	Missing     int                                     `json:"missing_files"`
 	Model       string                                  `json:"model,omitempty"`
+	Approximate bool                                    `json:"approximate"`
 	ByCategory  map[string]tokenprofile.CategorySummary `json:"by_category"`
 }
 
@@ -214,6 +222,7 @@ func printTokenBudgetJSON(w io.Writer, r *tokenprofile.Report) error {
 		TotalTokens: r.TotalTokens,
 		Missing:     r.Missing,
 		Model:       r.Model,
+		Approximate: r.Approximate,
 		ByCategory:  r.ByCategory,
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
@@ -225,13 +234,13 @@ func printTokenBudgetJSON(w io.Writer, r *tokenprofile.Report) error {
 }
 
 func printTokenBudgetHuman(w io.Writer, r *tokenprofile.Report) {
-	method := "approx. 4 chars/token"
+	method := "chars/token approximation"
 	if r.Model != "" {
 		method = "model-aware (" + r.Model + ")"
 	}
 	fmt.Fprintf(w, "Token Budget (%s)\n", method)
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n", "Component", "Files", "Bytes", "~Tokens")
+	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n", "Component", "Files", "Bytes", "Tokens")
 	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n",
 		"────────────────", "─────", "─────────", "────────")
 
@@ -244,12 +253,17 @@ func printTokenBudgetHuman(w io.Writer, r *tokenprofile.Report) {
 
 	for _, cat := range cats {
 		s := r.ByCategory[cat]
-		fmt.Fprintf(w, "%-16s  %5d  %9d  %8d\n", cat, s.Files, s.Bytes, s.Tokens)
+		fmt.Fprintf(w, "%-16s  %5d  %9d  %8s\n", cat, s.Files, s.Bytes, formatTokens(s.Tokens, r.Approximate))
 	}
 	fmt.Fprintf(w, "%-16s  %5s  %9s  %8s\n",
 		"────────────────", "─────", "─────────", "────────")
-	fmt.Fprintf(w, "%-16s  %5d  %9d  %8d\n",
-		"TOTAL", totalFiles(r), r.TotalBytes, r.TotalTokens)
+	fmt.Fprintf(w, "%-16s  %5d  %9d  %8s\n",
+		"TOTAL", totalFiles(r), r.TotalBytes, formatTokens(r.TotalTokens, r.Approximate))
+
+	if r.Approximate {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "~ = character-based approximation; no exact tokenizer available for this model")
+	}
 
 	if r.Missing > 0 {
 		fmt.Fprintln(w)
@@ -259,6 +273,15 @@ func printTokenBudgetHuman(w io.Writer, r *tokenprofile.Report) {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "No installed files found. Run `squadai apply` to install.")
 	}
+}
+
+// formatTokens renders a token count, prefixed with "~" when the count is
+// a heuristic approximation rather than a real tokenizer's output.
+func formatTokens(n int, approx bool) string {
+	if approx {
+		return "~" + strconv.Itoa(n)
+	}
+	return strconv.Itoa(n)
 }
 
 func totalFiles(r *tokenprofile.Report) int {

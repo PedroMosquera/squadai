@@ -308,7 +308,7 @@ func TestRenderAction_Memory_ReturnsMarkersInOutput(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentMemory)
 	if !ok {
-		t.Skip("no memory action produced — skipping render test")
+		t.Fatalf("expected plan to produce a memory action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -336,7 +336,7 @@ func TestRenderAction_Rules_WithContent_ReturnsInjectedSection(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentRules)
 	if !ok {
-		t.Skip("no rules action produced — skipping render test")
+		t.Fatalf("expected plan to produce a rules action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -391,7 +391,7 @@ func TestRenderAction_Rules_Cursor_WritesFrontmatter(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentRules)
 	if !ok {
-		t.Skip("no rules action for cursor — skipping")
+		t.Fatalf("expected plan to produce a rules action for cursor, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -420,7 +420,7 @@ func TestRenderAction_Rules_Windsurf_WritesFrontmatter(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentRules)
 	if !ok {
-		t.Skip("no rules action for windsurf — skipping")
+		t.Fatalf("expected plan to produce a rules action for windsurf, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -451,7 +451,7 @@ func TestRenderAction_Settings_ReturnsJSON(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentSettings)
 	if !ok {
-		t.Skip("no settings action — skipping")
+		t.Fatalf("expected plan to produce a settings action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -485,7 +485,7 @@ func TestRenderAction_MCP_ReturnsServerConfig(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentMCP)
 	if !ok {
-		t.Skip("no MCP action — skipping")
+		t.Fatalf("expected plan to produce an MCP action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -520,7 +520,7 @@ func TestRenderAction_Agents_WithDelegationNative_ReturnsContent(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentAgents)
 	if !ok {
-		t.Skip("no agents action — skipping")
+		t.Fatalf("expected plan to produce an agents action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -553,7 +553,7 @@ func TestRenderAction_Skills_ReturnsContent(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentSkills)
 	if !ok {
-		t.Skip("no skills action — skipping")
+		t.Fatalf("expected plan to produce a skills action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -583,7 +583,7 @@ func TestRenderAction_Commands_ReturnsContent(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentCommands)
 	if !ok {
-		t.Skip("no commands action — skipping")
+		t.Fatalf("expected plan to produce a commands action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -614,7 +614,7 @@ func TestRenderAction_Plugins_ReturnsContent(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentPlugins)
 	if !ok {
-		t.Skip("no plugins action — skipping")
+		t.Fatalf("expected plan to produce a plugins action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -639,7 +639,7 @@ func TestRenderAction_Workflows_ReturnsContent(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentWorkflows)
 	if !ok {
-		t.Skip("no workflows action — skipping")
+		t.Fatalf("expected plan to produce a workflows action, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -712,7 +712,7 @@ func TestRenderAction_ActionSkip_Memory_SameContent(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("no ActionSkip memory action found — skipping")
+	t.Fatalf("expected re-plan to produce an ActionSkip memory action, got none")
 }
 
 // ─── RenderAction: Claude Code (prompt-based delegation) ─────────────────────
@@ -731,7 +731,7 @@ func TestRenderAction_Memory_ClaudeCode_ReturnsMarkers(t *testing.T) {
 
 	action, ok := findAction(actions, domain.ComponentMemory)
 	if !ok {
-		t.Skip("no memory action for claude-code — skipping")
+		t.Fatalf("expected plan to produce a memory action for claude-code, got none")
 	}
 
 	_, newC, err := p.RenderAction(action, home, project)
@@ -788,7 +788,7 @@ func TestRenderAction_Memory_ExistingFile_OldContentMatches(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("no memory action found — skipping")
+	t.Fatalf("expected plan to produce a memory action, got none")
 }
 
 // ─── injectSection helper (same package) ─────────────────────────────────────
