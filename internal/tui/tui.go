@@ -2256,14 +2256,18 @@ func (m Model) viewSkillInstallConfirm() string {
 	return b.String()
 }
 
-// runShellCommand executes a shell command line and returns the combined
-// output as a commandResult, suitable for dispatch into the result screen.
+// runShellCommand executes a skill-install command line and returns the
+// combined output as a commandResult, suitable for dispatch into the result
+// screen.
 func runShellCommand(cmdLine string) commandResult {
-	parts := strings.Fields(cmdLine)
-	if len(parts) == 0 {
-		return commandResult{err: fmt.Errorf("empty command")}
+	parts, err := validateSkillInstallCmd(cmdLine)
+	if err != nil {
+		return commandResult{err: err}
 	}
-	cmd := exec.Command(parts[0], parts[1:]...) //nolint:gosec // command is built from a curated catalog + skill name
+	// Invariant: validateSkillInstallCmd guarantees parts is exactly the
+	// catalog's install command followed by a skill identifier listed in the
+	// embedded catalog — never an arbitrary catalog-supplied string.
+	cmd := exec.Command(parts[0], parts[1:]...) //nolint:gosec // argv validated against the embedded skill catalog allowlist
 	out, err := cmd.CombinedOutput()
 	return commandResult{output: string(out), err: err}
 }
