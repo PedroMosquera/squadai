@@ -155,6 +155,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			return cli.RunPluginsAddGit(args[2:], stdout, stderr)
 		case "remove":
 			return cli.RunPluginsRemove(args[2:], stdout)
+		case "remove-git":
+			return cli.RunPluginsRemoveGit(args[2:], stdout)
 		default:
 			return fmt.Errorf("unknown plugins subcommand %q", args[1])
 		}
@@ -230,8 +232,9 @@ Subcommands:
   sync             Fetch the plugin registry from github.com/wshobson/agents
   list             List available plugins (--json for machine output)
   add <name>       Download and install a marketplace plugin; updates project.json
-  add-git <url>    Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/
+  add-git <url>    Clone a git-based plugin (git:github.com/user/repo[@sha]) into .squadai/plugins/
   remove <name>    Remove an installed plugin's files; updates project.json
+  remove-git <id>  Delete a git-based plugin from .squadai/plugins/
 
 `)
 }
@@ -434,8 +437,9 @@ func buildCommandRegistry() helpOutput {
 					{Name: "sync", Description: "Fetch the plugin registry from github.com/wshobson/agents.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 					{Name: "list", Description: "List available plugins (✓ = installed in this project).", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output list as JSON"}}},
 					{Name: "add", Description: "Download and install a marketplace plugin.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
-					{Name: "add-git", Description: "Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+					{Name: "add-git", Description: "Clone a git-based plugin (git:github.com/user/repo[@sha]) into .squadai/plugins/.", Flags: []cmdFlag{{Name: "--yes", Type: "bool", Description: "Skip the interactive confirmation"}, {Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 					{Name: "remove", Description: "Remove an installed plugin's files.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
+					{Name: "remove-git", Description: "Delete a git-based plugin from .squadai/plugins/.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 				},
 			},
 			{
@@ -560,8 +564,9 @@ Commands:
   plugins sync          Fetch plugin registry from github.com/wshobson/agents
   plugins list          List available plugins (✓ = installed in this project)
   plugins add <name>    Download and install a marketplace plugin
-  plugins add-git <url> Clone a git-based plugin (git:github.com/user/repo) into .squadai/plugins/
+  plugins add-git <url> Clone a git-based plugin (git:github.com/user/repo[@sha]) into .squadai/plugins/
   plugins remove <name> Remove an installed plugin's files
+  plugins remove-git <id> Delete a git-based plugin from .squadai/plugins/
   backup create      Snapshot managed files
   backup list        List available backups
   backup delete <id> Delete a backup snapshot
