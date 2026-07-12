@@ -987,7 +987,7 @@ func TestSkillBrowser_QReturnsToMenu(t *testing.T) {
 func TestSkillBrowser_RightSwitchesCategory(t *testing.T) {
 	m := newSkillBrowserModel(t)
 	if len(m.skillCat.Categories) < 2 {
-		t.Skip("need at least 2 categories to test switching")
+		t.Fatalf("embedded skill catalog must have at least 2 categories to test switching, got %d", len(m.skillCat.Categories))
 	}
 	initialCat := m.skillCatCursor // 0
 
@@ -1027,7 +1027,7 @@ func TestSkillBrowser_RightDoesNotExceedMax(t *testing.T) {
 func TestSkillBrowser_TabWrapsCategories(t *testing.T) {
 	m := newSkillBrowserModel(t)
 	if len(m.skillCat.Categories) == 0 {
-		t.Skip("need at least one category")
+		t.Fatal("embedded skill catalog must have at least one category, got none")
 	}
 	// Move to last category, then tab should wrap to 0.
 	m.skillCatCursor = len(m.skillCat.Categories) - 1
@@ -1043,7 +1043,7 @@ func TestSkillBrowser_TabWrapsCategories(t *testing.T) {
 func TestSkillBrowser_DownScrollsSkills(t *testing.T) {
 	m := newSkillBrowserModel(t)
 	if len(m.skillCat.Categories) == 0 || len(m.skillCat.Categories[0].Skills) < 2 {
-		t.Skip("need at least 2 skills to test scrolling")
+		t.Fatal("embedded skill catalog must have at least 2 skills in the first category to test scrolling")
 	}
 	m.skillScrollIndex = 0
 
@@ -1070,7 +1070,7 @@ func TestSkillBrowser_UpDoesNotGoNegative(t *testing.T) {
 func TestSkillBrowser_CategorySwitch_ResetsScrollIndex(t *testing.T) {
 	m := newSkillBrowserModel(t)
 	if len(m.skillCat.Categories) < 2 {
-		t.Skip("need at least 2 categories")
+		t.Fatalf("embedded skill catalog must have at least 2 categories, got %d", len(m.skillCat.Categories))
 	}
 	m.skillScrollIndex = 3 // simulate having scrolled down
 
