@@ -2460,3 +2460,194 @@ func TestRunApply_HelpText_IncludesModelFlag(t *testing.T) {
 		t.Errorf("help text should mention --model flag")
 	}
 }
+
+// ─── hooksInstalled helper ────────────────────────────────────────────────────
+
+func TestHooksInstalled_NonePresent(t *testing.T) {
+	dir := t.TempDir()
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if hooksInstalled(dir) {
+		t.Error("expected hooksInstalled=false when no hook files exist")
+	}
+}
+
+func TestHooksInstalled_AllPresent(t *testing.T) {
+	dir := t.TempDir()
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Write hook files with the squadai markers.
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/bin/sh\nsquadai verify --strict\n"), 0755); err != nil {
+		t.Fatalf("write pre-commit: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-merge"), []byte("#!/bin/sh\n# squadai: post-merge\necho hi\n"), 0755); err != nil {
+		t.Fatalf("write post-merge: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-checkout"), []byte("#!/bin/sh\n# squadai: post-checkout\necho hi\n"), 0755); err != nil {
+		t.Fatalf("write post-checkout: %v", err)
+	}
+	if !hooksInstalled(dir) {
+		t.Error("expected hooksInstalled=true when all three hook files contain squadai markers")
+	}
+}
+
+func TestHooksInstalled_PartialInstall(t *testing.T) {
+	dir := t.TempDir()
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Only pre-commit installed.
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/bin/sh\nsquadai verify --strict\n"), 0755); err != nil {
+		t.Fatalf("write pre-commit: %v", err)
+	}
+	if hooksInstalled(dir) {
+		t.Error("expected hooksInstalled=false when only one of three hooks is present")
+	}
+}
+
+func TestHooksInstalled_NoGitDir(t *testing.T) {
+	dir := t.TempDir()
+	// No .git directory at all.
+	if hooksInstalled(dir) {
+		t.Error("expected hooksInstalled=false when no .git directory exists")
+	}
+}
+
+// ─── Post-apply nudge ─────────────────────────────────────────────────────────
+
+func TestRunApply_NudgeShown_WhenHooksNotInstalled(t *testing.T) {
+	home := t.TempDir()
+	dir := t.TempDir()
+	t.Setenv("HOME", home)
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Create .git/hooks dir but do NOT install squadai hooks.
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755); err != nil {
+		t.Fatalf("mkdir hooks: %v", err)
+	}
+
+	var buf bytes.Buffer
+	_ = RunApply([]string{"--force"}, &buf)
+	out := buf.String()
+	const wantNudge = "Tip: run 'squadai install-hooks' to auto-verify on commit and re-apply on merge/checkout."
+	if !strings.Contains(out, wantNudge) {
+		t.Errorf("apply output should contain nudge when hooks not installed, got:\n%s", out)
+	}
+}
+
+func TestRunApply_NudgeAbsent_WhenHooksInstalled(t *testing.T) {
+	home := t.TempDir()
+	dir := t.TempDir()
+	t.Setenv("HOME", home)
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Create .git/hooks dir and install all three squadai hooks.
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatalf("mkdir hooks: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/bin/sh\nsquadai verify --strict\n"), 0755); err != nil {
+		t.Fatalf("write pre-commit: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-merge"), []byte("#!/bin/sh\n# squadai: post-merge\necho hi\n"), 0755); err != nil {
+		t.Fatalf("write post-merge: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-checkout"), []byte("#!/bin/sh\n# squadai: post-checkout\necho hi\n"), 0755); err != nil {
+		t.Fatalf("write post-checkout: %v", err)
+	}
+
+	var buf bytes.Buffer
+	_ = RunApply([]string{"--force"}, &buf)
+	out := buf.String()
+	const wantNudge = "Tip: run 'squadai install-hooks'"
+	if strings.Contains(out, wantNudge) {
+		t.Errorf("apply output should NOT contain nudge when hooks are already installed, got:\n%s", out)
+	}
+}
+
+func TestRunApply_NudgeAbsent_InJSONMode(t *testing.T) {
+	home := t.TempDir()
+	dir := t.TempDir()
+	t.Setenv("HOME", home)
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Create .git/hooks dir but do NOT install hooks (nudge would appear without --json).
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755); err != nil {
+		t.Fatalf("mkdir hooks: %v", err)
+	}
+
+	var buf bytes.Buffer
+	_ = RunApply([]string{"--force", "--json"}, &buf)
+	out := buf.String()
+	const wantNudge = "Tip: run 'squadai install-hooks'"
+	if strings.Contains(out, wantNudge) {
+		t.Errorf("apply --json output should NOT contain nudge, got:\n%s", out)
+	}
+}
+
+// ─── install-commands memory slash commands ───────────────────────────────────
+
+func TestRunInstallCommands_WritesMemoryCommands(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RunInstallCommands(nil, &buf); err != nil {
+		t.Fatalf("RunInstallCommands: %v", err)
+	}
+
+	commandsDir := filepath.Join(dir, ".claude", "commands")
+	for _, tc := range []struct {
+		file    string
+		wantRef string
+	}{
+		{"memory-add.md", "squadai memory add"},
+		{"memory-search.md", "squadai memory search"},
+		{"memory-promote.md", "squadai memory promote"},
+		{"memory-reindex.md", "squadai memory reindex"},
+	} {
+		t.Run(tc.file, func(t *testing.T) {
+			path := filepath.Join(commandsDir, tc.file)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("expected %s to be written, got error: %v", tc.file, err)
+			}
+			if !strings.Contains(string(data), tc.wantRef) {
+				t.Errorf("%s should reference %q, content:\n%s", tc.file, tc.wantRef, string(data))
+			}
+		})
+	}
+}

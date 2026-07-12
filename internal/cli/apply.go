@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -489,5 +490,18 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	}
 
 	fmt.Fprintln(stdout, "\nApply complete. Use 'squadai verify' to check.")
+
+	// Show a one-time discoverability nudge when git hooks are not yet set up.
+	// Suppress on any error (no .git dir, permission issue, etc.) so the nudge
+	// never causes apply to fail or produce noise in non-git environments.
+	if !jsonOut {
+		if !hooksInstalled(projectDir) {
+			gitDir := filepath.Join(projectDir, ".git")
+			if _, statErr := os.Stat(gitDir); statErr == nil {
+				fmt.Fprintln(stdout, "Tip: run 'squadai install-hooks' to auto-verify on commit and re-apply on merge/checkout.")
+			}
+		}
+	}
+
 	return nil
 }
