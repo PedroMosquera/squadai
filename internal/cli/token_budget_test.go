@@ -10,6 +10,7 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/tokenprofile"
 )
 
 // writeTDDProjectForBudget writes a minimal .squadai/project.json to dir.
@@ -182,5 +183,80 @@ func TestRunTokenBudget_PlannedDoesNotMultiCountSharedFiles(t *testing.T) {
 	if planned != installed {
 		t.Fatalf("planned total (%v) should equal installed scan total (%v) after apply; "+
 			"a mismatch means shared files are being multi-counted", planned, installed)
+	}
+}
+
+const approxFootnote = "~ = character-based approximation; no exact tokenizer available for this model"
+
+func TestPrintTokenBudgetHuman_ApproximateMarker(t *testing.T) {
+	r := &tokenprofile.Report{
+		ByCategory: map[string]tokenprofile.CategorySummary{
+			"agents": {Files: 2, Bytes: 800, Tokens: 123},
+		},
+		TotalBytes:  800,
+		TotalTokens: 123,
+		Approximate: true,
+	}
+	var buf bytes.Buffer
+	printTokenBudgetHuman(&buf, r)
+	out := buf.String()
+
+	if !strings.Contains(out, "~123") {
+		t.Errorf("approximate counts should carry a '~' prefix:\n%s", out)
+	}
+	if !strings.Contains(out, approxFootnote) {
+		t.Errorf("approximate output should include the footnote:\n%s", out)
+	}
+}
+
+func TestPrintTokenBudgetHuman_ExactCounts_NoMarker(t *testing.T) {
+	r := &tokenprofile.Report{
+		ByCategory: map[string]tokenprofile.CategorySummary{
+			"agents": {Files: 2, Bytes: 800, Tokens: 123},
+		},
+		TotalBytes:  800,
+		TotalTokens: 123,
+		Model:       "gpt-4o",
+		Approximate: false,
+	}
+	var buf bytes.Buffer
+	printTokenBudgetHuman(&buf, r)
+	out := buf.String()
+
+	if strings.Contains(out, "~") {
+		t.Errorf("exact counts must not carry a '~' prefix:\n%s", out)
+	}
+	if strings.Contains(out, approxFootnote) {
+		t.Errorf("exact output must not include the approximation footnote:\n%s", out)
+	}
+}
+
+// A Claude model has no exact tokenizer, so the approximate flag must
+// propagate end-to-end into both human and JSON output.
+func TestRunTokenBudget_ClaudeModel_MarkedApproximate(t *testing.T) {
+	dir := t.TempDir()
+	writeTDDProjectForBudget(t, dir)
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(dir)
+
+	var human bytes.Buffer
+	if err := RunTokenBudget([]string{"--model=claude-sonnet-4-6"}, &human); err != nil {
+		t.Fatalf("RunTokenBudget: %v", err)
+	}
+	if !strings.Contains(human.String(), approxFootnote) {
+		t.Errorf("human output for a Claude model should include the approximation footnote:\n%s", human.String())
+	}
+
+	var raw map[string]interface{}
+	var jsonBuf bytes.Buffer
+	if err := RunTokenBudget([]string{"--model=claude-sonnet-4-6", "--json"}, &jsonBuf); err != nil {
+		t.Fatalf("RunTokenBudget --json: %v", err)
+	}
+	if err := json.Unmarshal(jsonBuf.Bytes(), &raw); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, jsonBuf.String())
+	}
+	approx, ok := raw["approximate"].(bool)
+	if !ok || !approx {
+		t.Errorf("JSON output should carry \"approximate\": true for a Claude model, got %v", raw["approximate"])
 	}
 }
