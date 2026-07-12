@@ -4395,6 +4395,9 @@ func RunPluginsAdd(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("update project.json: %w", err)
 	}
 
+	auditPluginEvent(projectDir, governance.KindPluginInstall, pluginName,
+		fmt.Sprintf("marketplace plugin %q v%s installed", pluginName, plugin.Version))
+
 	if jsonOut {
 		writeJSONResult(stdout, true, map[string]any{
 			"plugin":   pluginName,
@@ -4461,6 +4464,9 @@ func RunPluginsRemove(args []string, stdout io.Writer) error {
 	if err := config.SaveProject(projectDir, proj); err != nil {
 		return fmt.Errorf("update project.json: %w", err)
 	}
+
+	auditPluginEvent(projectDir, governance.KindPluginRemove, pluginName,
+		fmt.Sprintf("marketplace plugin %q removed", pluginName))
 
 	if jsonOut {
 		writeJSONResult(stdout, true, map[string]any{"plugin": pluginName, "removed": true})

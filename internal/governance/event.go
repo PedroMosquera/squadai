@@ -15,6 +15,8 @@ const (
 	KindVerifyFail    EventKind = "verify:fail"
 	KindWatchStart    EventKind = "watch:start"
 	KindWatchStop     EventKind = "watch:stop"
+	KindPluginInstall EventKind = "plugin:install"
+	KindPluginRemove  EventKind = "plugin:remove"
 )
 
 // Event is a single governance event written to the audit log.
