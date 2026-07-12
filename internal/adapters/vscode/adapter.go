@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/paths"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -191,19 +192,8 @@ func (a *Adapter) RulesFrontmatter() string { return "" }
 func (a *Adapter) RulesFileSizeCap() int { return 0 }
 
 // ConfigDir returns the root config directory for VS Code Copilot.
-// On macOS it is ~/Library/Application Support/Code/User.
-// On Linux it is ~/.config/Code/User.
-// On Windows it is %APPDATA%\Code\User (falling back to homeDir\AppData\Roaming\Code\User).
+// VS Code follows the standard Electron user-data convention on every OS,
+// so this delegates fully to paths.UserConfigDir.
 func ConfigDir(homeDir string) string {
-	switch runtime.GOOS {
-	case "linux":
-		return filepath.Join(homeDir, ".config", "Code", "User")
-	case "windows":
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "Code", "User")
-		}
-		return filepath.Join(homeDir, "AppData", "Roaming", "Code", "User")
-	default:
-		return filepath.Join(homeDir, "Library", "Application Support", "Code", "User")
-	}
+	return paths.UserConfigDir(homeDir, runtime.GOOS, "Code")
 }
