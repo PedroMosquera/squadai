@@ -119,18 +119,23 @@ conflicts there, and agent/review tooling degrades badly on files this size.
 
 **Tasks.**
 
-- [ ] Mechanical split of `commands.go` by command family, same package, zero
-      behavior change: `apply.go`, `status.go`, `remove.go`, `init.go`,
-      `doctor.go`, `backup.go`, `policy.go`, `explain.go`, … (group by the
-      `Run*` entrypoints; keep shared helpers in `commands.go` or a
-      `helpers.go`).
-- [ ] Mechanical split of `tui.go`: one file per wizard screen/model, shared
-      styles in `styles.go`.
-- [ ] No function bodies change in the split commits. Verify with
-      `go build ./... && go test -race ./...` after each move; keep moves in
-      small reviewable commits (one command family per commit is ideal).
+- [x] Mechanical split of `commands.go` by command family, same package, zero
+      behavior change: 18 new files (`apply.go`, `status.go`, `remove.go`,
+      `init.go` + `init_config.go`, `doctor.go`, `backup.go`, `policy.go`,
+      `explain.go`, `schema.go`, `context.go`, `diff.go`, `verify.go`,
+      `plugins.go`, `hooks_install.go`, `memory_tools.go`, `watch.go`,
+      `audit.go`); shared helpers stay in a 112-line `commands.go`. Largest
+      new file 522 lines.
+- [x] Mechanical split of `tui.go`: `model.go`, `keys.go` (handleKey),
+      `commands.go` (tea.Cmd runners), `view_menu.go`, `view_init.go`,
+      `view_skill_browser.go`, `view_misc.go`; empty `tui.go` deleted.
+      Largest file 661 lines; styles already lived in `styles.go`.
+- [x] No function bodies change in the split commits — verified by
+      byte-identical sorted function-signature sets plus a line-multiset
+      check (cli) and a go/parser byte-range purity check (tui). One family
+      per commit, build+tests after each.
 - [ ] Follow-up (optional, separate commits): extract obvious duplicated
-      helpers discovered during the split.
+      helpers discovered during the split. (Not done — optional.)
 
 **Acceptance.** No file in `internal/cli/` or `internal/tui/` exceeds ~800
 lines; `git log --stat` shows pure-move commits; full test suite green with
@@ -236,3 +241,5 @@ actual behavior, using audit infrastructure that already exists.
 | 2026-07-12 | WS4 | 1237481, 08ff911 | `internal/adapters/paths.UserConfigDir`; three APPDATA copies deleted; per-OS behavior preserved exactly. Merged at 1312df7. |
 | 2026-07-12 | WS5 | 1e48f4a, 2b80ed3, bb47aef | Staged installs + confirmation/`--yes`, SHA pinning, audit events, `plugins remove-git`, TUI exec validation. Merged at 164e356. |
 | 2026-07-12 | WS1 | e2a777c, eee0c6a, 52c0e8a | Embedded pricing.json (2026 prices + divisors), `Lookup` ok-bool, `~` approx counts in token-budget, stale warning. Merged at 91aa637. |
+| 2026-07-12 | WS3 | 7988b1e, d23f0b5 | Pure-move splits: tui.go → 7 files (max 661 lines), commands.go → 18 files + 112-line helpers (max 522). Purity machine-verified. |
+| 2026-07-12 | ALL | 0034473 | All five workstreams merged to `main`; full `go build`/`vet`/`test -race`/`golangci-lint` green at every merge point. |

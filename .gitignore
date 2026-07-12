@@ -41,6 +41,7 @@ Thumbs.db
 .x9k4v/
 .opencode
 .copilot/
+.claude/worktrees/
 
 # Planning & evaluation docs (local only, not committed)
 EVALUATION.md
