@@ -33,8 +33,11 @@ type Report struct {
 	ByCategory  map[string]CategorySummary
 	TotalBytes  int
 	TotalTokens int
-	Missing     int // count of paths that did not exist on disk
+	Missing     int    // count of paths that did not exist on disk
 	Model       string // model name used for tokenization, empty = heuristic
+	// Approximate is true when token counts come from a character-based
+	// heuristic rather than a real tokenizer; output must mark them "~".
+	Approximate bool
 }
 
 // ScanPaths reads each file in paths (map[filepath]category) from disk,
@@ -42,7 +45,8 @@ type Report struct {
 // Missing files increment Report.Missing but are not an error.
 func ScanPaths(paths map[string]string) (*Report, error) {
 	r := &Report{
-		ByCategory: make(map[string]CategorySummary),
+		ByCategory:  make(map[string]CategorySummary),
+		Approximate: true, // ApproxTokens is a chars/token heuristic
 	}
 	for path, category := range paths {
 		data, err := os.ReadFile(path)

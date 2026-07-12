@@ -1,13 +1,17 @@
 package tokenizer
 
 import (
+	"math"
+	"strings"
 	"testing"
 
 	"github.com/pkoukk/tiktoken-go"
+
+	"github.com/PedroMosquera/squadai/internal/tokenprofile/pricing"
 )
 
-func TestForModel_KnownModels(t *testing.T) {
-	models := []string{"claude-sonnet-4", "gpt-4o", "gpt-4", "gpt-3.5-turbo"}
+func TestForModel_OpenAIModels(t *testing.T) {
+	models := []string{"gpt-4o", "gpt-4", "gpt-3.5-turbo"}
 	for _, m := range models {
 		c := ForModel(m)
 		if _, ok := c.(FallbackCounter); ok {
@@ -16,14 +20,42 @@ func TestForModel_KnownModels(t *testing.T) {
 	}
 }
 
+// Claude has no exact tokenizer in tiktoken; it must use the calibrated
+// fallback and be flagged approximate, not silently counted with an
+// OpenAI encoding.
+func TestForModel_ClaudeIsApproximateFallback(t *testing.T) {
+	c := ForModel("claude-sonnet-4-6")
+	fb, ok := c.(FallbackCounter)
+	if !ok {
+		t.Fatalf("ForModel(claude) = %T, want FallbackCounter", c)
+	}
+	if !c.Approximate() {
+		t.Error("ForModel(claude).Approximate() = false, want true")
+	}
+	if fb.Divisors.Prose != 3.7 {
+		t.Errorf("claude prose divisor = %v, want 3.7", fb.Divisors.Prose)
+	}
+	// Use a length that separates the calibrated divisor from the flat
+	// heuristic: 111 chars -> 30 tokens at 3.7 vs 28 at 4.0.
+	text := strings.Repeat("word and prose text ", 6)[:111]
+	want := int(math.Ceil(111 / 3.7))
+	if got := c.Count(text); got != want {
+		t.Errorf("claude fallback Count = %d, want %d", got, want)
+	}
+}
+
 func TestForModel_UnknownModel(t *testing.T) {
 	c := ForModel("some-unknown-model-xyz")
 	if _, ok := c.(FallbackCounter); !ok {
 		t.Errorf("ForModel(unknown) = %T, want FallbackCounter", c)
 	}
+	if !c.Approximate() {
+		t.Error("ForModel(unknown).Approximate() = false, want true")
+	}
 }
 
 func TestFallbackCounter(t *testing.T) {
+	// The zero value keeps the legacy flat 4 chars/token heuristic.
 	c := FallbackCounter{}
 	if got := c.Count(""); got != 0 {
 		t.Errorf("Count(\"\") = %d, want 0", got)
@@ -31,6 +63,21 @@ func TestFallbackCounter(t *testing.T) {
 	text := "hello world"
 	if got := c.Count(text); got != (len(text)+3)/4 {
 		t.Errorf("Count(%q) = %d, want %d", text, got, (len(text)+3)/4)
+	}
+	if !c.Approximate() {
+		t.Error("FallbackCounter.Approximate() = false, want true")
+	}
+}
+
+func TestFallbackCounter_CodeDivisor(t *testing.T) {
+	c := FallbackCounter{Divisors: pricing.Divisors{Prose: 4.0, Code: 2.0}}
+	code := `func main() { x := map[string]int{"a": 1}; fmt.Println(x); }`
+	prose := "This is a plain English sentence with no symbols in it at all."
+	if got, want := c.Count(code), int(math.Ceil(float64(len(code))/2.0)); got != want {
+		t.Errorf("Count(code) = %d, want %d (code divisor)", got, want)
+	}
+	if got, want := c.Count(prose), int(math.Ceil(float64(len(prose))/4.0)); got != want {
+		t.Errorf("Count(prose) = %d, want %d (prose divisor)", got, want)
 	}
 }
 
