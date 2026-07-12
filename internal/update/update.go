@@ -49,6 +49,10 @@ func Check(ctx context.Context, currentVersion string) (*CheckResult, error) {
 // Run performs a complete update cycle: check → download → notify.
 // progress messages are written to w (typically stderr).
 // Returns ErrDevBuild or ErrUpToDate without error when no action is needed.
+//
+// Updating swaps the whole binary, which also refreshes data embedded at
+// build time — notably the token pricing/divisor table in
+// internal/tokenprofile/pricing (its staleness warning points users here).
 func Run(ctx context.Context, currentVersion string, w io.Writer) error {
 	result, err := Check(ctx, currentVersion)
 	if err != nil {

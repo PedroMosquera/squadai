@@ -74,6 +74,9 @@ func TestAggregate_WithSessions(t *testing.T) {
 	if math.Abs(cs.EstimatedCost-wantCost) > 1e-9 {
 		t.Errorf("claude-sonnet-4 cost = %v, want %v", cs.EstimatedCost, wantCost)
 	}
+	if !cs.CostKnown {
+		t.Error("claude-sonnet-4 CostKnown = false, want true")
+	}
 
 	gp := agg.ByModel["gpt-4o"]
 	if gp.InputTokens != 500 || gp.OutputTokens != 250 || gp.SessionCount != 1 {
@@ -85,6 +88,36 @@ func TestAggregate_WithSessions(t *testing.T) {
 	}
 	if agg.Total.InputTokens != 3500 || agg.Total.OutputTokens != 1750 {
 		t.Errorf("total tokens = in=%d out=%d, want 3500/1750", agg.Total.InputTokens, agg.Total.OutputTokens)
+	}
+	if !agg.Total.CostKnown {
+		t.Error("total CostKnown = false, want true when all models have pricing")
+	}
+}
+
+func TestAggregate_UnknownModelCost(t *testing.T) {
+	home := t.TempDir()
+	writeSession(t, home, "s1.json", `{"model":"mystery-model-9000","usage":{"input_tokens":1000,"output_tokens":500}}`)
+	writeSession(t, home, "s2.json", `{"model":"gpt-4o","usage":{"input_tokens":1000,"output_tokens":0}}`)
+
+	agg, err := Aggregate(home, AggregateOptions{})
+	if err != nil {
+		t.Fatalf("Aggregate: %v", err)
+	}
+
+	u := agg.ByModel["mystery-model-9000"]
+	if u.CostKnown {
+		t.Error("unknown model CostKnown = true, want false")
+	}
+	if u.EstimatedCost != 0 {
+		t.Errorf("unknown model EstimatedCost = %v, want 0", u.EstimatedCost)
+	}
+	if agg.Total.CostKnown {
+		t.Error("total CostKnown = true, want false when any model lacks pricing")
+	}
+	// The total still sums the known models' cost.
+	wantKnown := 1000 * 2.50 / 1e6
+	if math.Abs(agg.Total.EstimatedCost-wantKnown) > 1e-9 {
+		t.Errorf("total EstimatedCost = %v, want %v (known models only)", agg.Total.EstimatedCost, wantKnown)
 	}
 }
 

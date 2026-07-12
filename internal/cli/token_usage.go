@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PedroMosquera/squadai/internal/tokenprofile/pricing"
 	"github.com/PedroMosquera/squadai/internal/tokenprofile/session"
 )
 
@@ -65,6 +66,10 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 
 	agg.Period = sinceStr
 
+	if msg, ok := pricing.StaleWarning(time.Now()); ok {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", msg)
+	}
+
 	if jsonOut {
 		data, err := json.MarshalIndent(agg, "", "  ")
 		if err != nil {
@@ -98,16 +103,48 @@ func printTokenUsageHuman(w io.Writer, agg *session.Aggregation) {
 	}
 	sortModels(models)
 
+	unknownCosts := 0
 	for _, m := range models {
 		u := agg.ByModel[m]
-		fmt.Fprintf(w, "%-24s  %8d  %8d  %8d  %6d  $%9.4f\n",
-			m, u.InputTokens, u.OutputTokens, u.TotalTokens, u.SessionCount, u.EstimatedCost)
+		if !u.CostKnown {
+			unknownCosts++
+		}
+		fmt.Fprintf(w, "%-24s  %8d  %8d  %8d  %6d  %10s\n",
+			m, u.InputTokens, u.OutputTokens, u.TotalTokens, u.SessionCount, costCell(u))
 	}
 	fmt.Fprintf(w, "%-24s  %8s  %8s  %8s  %6s  %10s\n",
 		"────────────────────────", "────────", "────────", "────────", "──────", "──────────")
-	fmt.Fprintf(w, "%-24s  %8d  %8d  %8d  %6d  $%9.4f\n",
+	fmt.Fprintf(w, "%-24s  %8d  %8d  %8d  %6d  %10s\n",
 		"TOTAL", agg.Total.InputTokens, agg.Total.OutputTokens,
-		agg.Total.TotalTokens, agg.Total.SessionCount, agg.Total.EstimatedCost)
+		agg.Total.TotalTokens, agg.Total.SessionCount, totalCostCell(agg.Total))
+
+	if unknownCosts > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "unknown = no pricing data for this model; the total omits %d model(s) with unknown cost\n", unknownCosts)
+	}
+}
+
+// costCell renders a per-model estimated cost, or "unknown" when no
+// pricing data exists for the model — never a misleading $0.00.
+func costCell(u session.Usage) string {
+	if !u.CostKnown {
+		return "unknown"
+	}
+	return fmt.Sprintf("$%9.4f", u.EstimatedCost)
+}
+
+// totalCostCell renders the grand-total cost. When some models have no
+// pricing data, the sum of the known ones is shown as a lower bound; when
+// none are known, it is simply unknown.
+func totalCostCell(total session.Usage) string {
+	switch {
+	case total.CostKnown:
+		return fmt.Sprintf("$%9.4f", total.EstimatedCost)
+	case total.EstimatedCost > 0:
+		return fmt.Sprintf("≥$%8.4f", total.EstimatedCost)
+	default:
+		return "unknown"
+	}
 }
 
 func sortModels(models []string) {
