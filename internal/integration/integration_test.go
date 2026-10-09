@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
 	"github.com/PedroMosquera/squadai/internal/adapters/cursor"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/pi"
 	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/backup"
@@ -16,7 +18,9 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
 	"github.com/PedroMosquera/squadai/internal/config"
+	"github.com/PedroMosquera/squadai/internal/doctor"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/governance"
 	"github.com/PedroMosquera/squadai/internal/marker"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
@@ -2030,4 +2034,160 @@ func filterByComponent(actions []domain.PlannedAction, component domain.Componen
 		}
 	}
 	return result
+}
+
+// ─── Group F: Pi Adapter Integration (apply → verify → doctor) ───────────────
+
+// buildSDDPiConfig writes and loads an SDD methodology config for the Pi adapter.
+// Pi is a personal-lane adapter; opencode is explicitly disabled so the verify
+// health check does not flag an undetected opencode binary.
+func buildSDDPiConfig(t *testing.T, home, project string) *domain.MergedConfig {
+	t.Helper()
+	userCfg := domain.DefaultUserConfig()
+	// Disable opencode so verify doesn't fail on an undetected opencode binary.
+	userCfg.Adapters[string(domain.AgentOpenCode)] = domain.AdapterConfig{Enabled: false}
+	userCfg.Adapters[string(domain.AgentPi)] = domain.AdapterConfig{Enabled: true}
+	if err := config.WriteJSON(config.UserConfigPath(home), userCfg); err != nil {
+		t.Fatalf("write user config: %v", err)
+	}
+
+	projCfg := &domain.ProjectConfig{
+		Version: 1,
+		Adapters: map[string]domain.AdapterConfig{
+			string(domain.AgentPi): {Enabled: true},
+		},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentMemory): {Enabled: true},
+			string(domain.ComponentAgents): {Enabled: true},
+			string(domain.ComponentMCP):    {Enabled: true},
+		},
+		Copilot:     domain.CopilotConfig{InstructionsTemplate: "standard"},
+		Methodology: domain.MethodologySDD,
+		Team:        domain.DefaultTeam(domain.MethodologySDD),
+		MCP:         cli.DefaultMCPServers(),
+	}
+	if err := config.WriteJSON(config.ProjectConfigPath(project), projCfg); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	user, err := config.LoadUser(home)
+	if err != nil {
+		t.Fatalf("load user: %v", err)
+	}
+	proj, err := config.LoadProject(project)
+	if err != nil {
+		t.Fatalf("load project: %v", err)
+	}
+	return config.Merge(user, proj, nil)
+}
+
+// TestFullPipeline_SDD_Pi verifies the Pi adapter full round-trip:
+// apply → verify --strict → doctor (drift checks).
+//
+// Hermetic: does not require the `pi` binary to be installed or ~/.pi to exist.
+// The planner and verifier use the adapters list passed in — they do not call
+// adapter.Detect() for configured adapters during their checks. The doctor's
+// "agents" category would call Detect() and return CheckSkip if the binary is
+// absent, but this test scopes the doctor run to the "drift" category only,
+// which is entirely file-based and deterministic after apply.
+//
+// Doctor categories skipped (with reason):
+//   - "environment": checks system binaries (node, git) — CI-environment-dependent
+//   - "agents":      calls adapter.Detect() / exec.LookPath("pi") — Pi binary absent in CI
+//   - "config":      team-standards.md warns if missing — not Pi-specific
+//   - "mcp":         probes external MCP servers — network-dependent
+//   - "filesystem":  checks ~/.squadai write access — partially deterministic;
+//     we assert only "drift" to keep the test focused and portable
+func TestFullPipeline_SDD_Pi(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+
+	merged := buildSDDPiConfig(t, home, project)
+
+	// Production Pi adapter — no pi binary required for apply/verify.
+	// See test-level doc comment for why agent detection is not exercised here.
+	adapter := pi.New()
+
+	// ── apply ─────────────────────────────────────────────────────────────────
+	report := runPlanExecute(t, merged, adapter, home, project)
+	if !report.Success {
+		for _, s := range report.Steps {
+			if s.Status == domain.StepFailed {
+				t.Errorf("Pi apply step %q failed: %s", s.Action.ID, s.Error)
+			}
+		}
+		t.Fatal("Pi apply should succeed")
+	}
+
+	// ── Pi-specific file assertions ───────────────────────────────────────────
+
+	// AGENTS.md must exist with the Pi-scoped memory marker.
+	agentsMD := filepath.Join(project, "AGENTS.md")
+	assertFileExists(t, agentsMD, "Pi/SDD: AGENTS.md")
+	agentsMDData, err := os.ReadFile(agentsMD)
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	piSectionID := memory.SectionIDForAgentID(domain.AgentPi)
+	if !marker.HasSection(string(agentsMDData), piSectionID) {
+		t.Errorf("Pi/SDD: AGENTS.md missing Pi-scoped memory section %q", piSectionID)
+	}
+
+	// pi.json must exist with the "mcp" key containing context7.
+	piJSON := filepath.Join(project, "pi.json")
+	assertFileExists(t, piJSON, "Pi/SDD: pi.json")
+	assertJSONKey(t, piJSON, "mcp", "Pi/SDD: pi.json has mcp key")
+	assertFileContains(t, piJSON, "context7", "Pi/SDD: pi.json has context7 server")
+
+	// .pi/agents/ must contain the 8 SDD role files (Pi uses DelegationNativeAgents).
+	piAgentsDir := filepath.Join(project, ".pi", "agents")
+	sddRoles := []string{
+		"orchestrator.md", "explorer.md", "proposer.md", "spec-writer.md",
+		"designer.md", "task-planner.md", "implementer.md", "verifier.md",
+	}
+	for _, role := range sddRoles {
+		assertFileExists(t, filepath.Join(piAgentsDir, role), "Pi/SDD: "+role)
+	}
+
+	// ── verify --strict ───────────────────────────────────────────────────────
+	v := verify.New()
+	vReport, err := v.Verify(merged, []domain.Adapter{adapter}, home, project)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !vReport.AllPass {
+		for _, r := range vReport.Results {
+			if !r.Passed {
+				t.Errorf("verify check %q failed: %s", r.Check, r.Message)
+			}
+		}
+	}
+
+	// ── governance drift check (--strict) ─────────────────────────────────────
+	// governance.CheckDrift is the same check run by `squadai verify --strict`.
+	govDrifts, err := governance.CheckDrift(project)
+	if err != nil {
+		t.Fatalf("governance.CheckDrift: %v", err)
+	}
+	for _, r := range govDrifts {
+		if r.Drifted() {
+			t.Errorf("governance drift: %s: %s (%s)", r.Path, r.Detail, r.Kind)
+		}
+	}
+
+	// ── doctor (drift category only) ──────────────────────────────────────────
+	// Run only the "drift" category: it checks that all managed-file marker
+	// blocks written by apply are still intact. This is the most meaningful
+	// Pi-specific doctor assertion and is fully deterministic in a temp project.
+	catalog := domain.DefaultMCPCatalog()
+	d := doctor.New(home, project, []domain.Adapter{adapter}, catalog)
+	driftResults, err := d.Run(context.Background(), doctor.Options{Category: "drift"})
+	if err != nil {
+		t.Fatalf("doctor drift run: %v", err)
+	}
+	for _, r := range driftResults {
+		if r.Status == doctor.CheckFail {
+			t.Errorf("doctor drift check %q failed: %s", r.Name, r.Message)
+		}
+	}
 }
