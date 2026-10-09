@@ -291,7 +291,12 @@ SquadAI uses structured E-xxx error codes with guided remediation hints.
 
 ## E-8xx — Permission errors
 
-  E-801   Permission denied — check file permissions.`, true
+  E-801   Permission denied: check file permissions.
+
+## E-9xx: Budget errors
+
+  E-901   Token budget exceeded under block enforcement (exit code 9).
+          Raised by 'squadai token-usage --against-budget'.`, true
 
 	case "merge":
 		homeDir, _ := os.UserHomeDir()
@@ -474,8 +479,10 @@ target model's context window:
 
   Modes: full, summary, omit
 
-Summary mode is recorded for future summary rendering, but currently skips
-writing that component rather than writing full content over budget.
+Summary mode keeps the component but installs its condensed variant: the
+memory stub instead of the full memory protocol, standards/summary.md instead
+of the full rules, and the orchestrator digest instead of the full
+orchestrator agent.
 
 The chosen layout is persisted to .squadai/.applied-budget.json so that
 'doctor' and 'diff' can detect budget drift (e.g. after swapping agents).
