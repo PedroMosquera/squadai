@@ -265,6 +265,20 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 		adapterByID[adapter.ID()] = adapter
 	}
 
+	// Adapters share files (OpenCode, Pi and Codex all write AGENTS.md), so a
+	// path an enabled adapter still owns must survive cleanup.
+	keep := make(map[string]bool)
+	for adapterKey, adapterCfg := range cfg.Adapters {
+		if !adapterCfg.Enabled {
+			continue
+		}
+		if adapter, ok := adapterByID[domain.AgentID(adapterKey)]; ok {
+			for _, path := range managedFilePaths(adapter, homeDir, projectDir) {
+				keep[path] = true
+			}
+		}
+	}
+
 	var deleteActions []domain.PlannedAction
 
 	for adapterKey, adapterCfg := range cfg.Adapters {
@@ -281,7 +295,7 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 		paths := managedFilePaths(adapter, homeDir, projectDir)
 
 		for _, path := range paths {
-			if path == "" {
+			if path == "" || keep[path] {
 				continue
 			}
 			if _, err := os.Stat(path); err != nil {

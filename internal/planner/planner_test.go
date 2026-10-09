@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
@@ -679,5 +680,59 @@ func TestComponentInstallers_AfterPlan_IncludesNewInstallers(t *testing.T) {
 	}
 	if _, ok := installers[domain.ComponentWorkflows]; !ok {
 		t.Error("expected workflows installer after Plan()")
+	}
+}
+
+// OpenCode, Pi and Codex all write AGENTS.md, so disabling one of them must
+// leave the file in place for the others.
+func TestPlan_DisabledAdapter_KeepsFilesSharedWithEnabledAdapter(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	oc := opencode.New()
+	cx := codex.New()
+
+	shared := oc.ProjectRulesFile(project)
+	if shared != cx.ProjectRulesFile(project) {
+		t.Fatalf("test premise broken: opencode and codex should share %s", shared)
+	}
+	codexOnly := cx.SystemPromptFile(home)
+	for _, path := range []string{shared, codexOnly} {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("managed content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			string(domain.AgentOpenCode): {Enabled: true},
+			string(domain.AgentCodex):    {Enabled: false},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+	}
+	actions, err := New().Plan(cfg, []domain.Adapter{oc, cx}, home, project)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+
+	deletedCodexOnly := false
+	for _, a := range actions {
+		if a.Action != domain.ActionDelete {
+			continue
+		}
+		if a.TargetPath == shared {
+			t.Errorf("cleanup must not delete %s: enabled adapter opencode still owns it", shared)
+		}
+		if a.TargetPath == codexOnly {
+			deletedCodexOnly = true
+		}
+	}
+	if !deletedCodexOnly {
+		t.Errorf("expected cleanup to delete codex-only file %s", codexOnly)
 	}
 }
