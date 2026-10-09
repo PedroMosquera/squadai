@@ -59,6 +59,40 @@ func TestEvaluateBudgets(t *testing.T) {
 	}
 }
 
+// A project.json that sets budgets but omits enforcement replaces the whole
+// usage block on merge, leaving enforcement empty. That must enforce as warn,
+// not silently skip.
+func TestEvaluateBudgets_EmptyEnforcementIsWarn(t *testing.T) {
+	daily := &session.Aggregation{Total: session.Usage{TotalTokens: 200_000}}
+	got := evaluateBudgets(domain.UsageConfig{DailyTokenBudget: 100_000}, daily)
+	if got == nil || got.Enforcement != "warn" {
+		t.Fatalf("enforcement = %+v, want warn", got)
+	}
+	for _, explicit := range []string{"off", "warn", "ask", "block"} {
+		got := evaluateBudgets(domain.UsageConfig{DailyTokenBudget: 100_000, Enforcement: explicit}, daily)
+		if got.Enforcement != explicit {
+			t.Errorf("enforcement %q normalized to %q, want unchanged", explicit, got.Enforcement)
+		}
+	}
+}
+
+func TestRunTokenUsage_EmptyEnforcementReportsWarn(t *testing.T) {
+	setupBudgetEnv(t, map[string]any{"daily_token_budget": 1000})
+	var stdout bytes.Buffer
+	if err := RunTokenUsage([]string{"--json", "--against-budget"}, &stdout); err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Budget *budgetReport `json:"budget"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+	if out.Budget == nil || out.Budget.Enforcement != "warn" {
+		t.Errorf("budget = %+v, want enforcement warn", out.Budget)
+	}
+}
+
 func TestApplyBudgetEnforcement(t *testing.T) {
 	over := []budgetFinding{{Kind: "daily", Used: 200_000, Limit: 100_000, Over: true}}
 	under := []budgetFinding{{Kind: "daily", Used: 50_000, Limit: 100_000, Over: false}}

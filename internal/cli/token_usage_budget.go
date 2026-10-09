@@ -33,7 +33,13 @@ func evaluateBudgets(usage domain.UsageConfig, daily *session.Aggregation) *budg
 	if daily == nil || (usage.DailyTokenBudget <= 0 && usage.SessionTokenBudget <= 0) {
 		return nil
 	}
-	r := &budgetReport{Enforcement: usage.Enforcement, Findings: []budgetFinding{}}
+	// A project.json that sets budgets without enforcement replaces the merged
+	// usage block wholesale, leaving it empty; treat that as the default warn.
+	enforcement := usage.Enforcement
+	if enforcement == "" {
+		enforcement = "warn"
+	}
+	r := &budgetReport{Enforcement: enforcement, Findings: []budgetFinding{}}
 	if usage.DailyTokenBudget > 0 {
 		used := daily.Total.TotalTokens
 		r.Findings = append(r.Findings, budgetFinding{
