@@ -435,7 +435,7 @@ func buildCommandRegistry() helpOutput {
 					{Name: "--verbose", Type: "bool", Description: "Stream step events as they execute"},
 					{Name: "--no-brand", Type: "bool", Description: "Skip brand banner component for this apply"},
 					{Name: "--max-tokens", Type: "int", Description: "Budget cap: fit components within N tokens"},
-					{Name: "--fit-model", Type: "string", Description: "Model name for budget fitting (e.g. claude-sonnet-4-6)"},
+					{Name: "--fit-model", Type: "string", Description: "Model name for budget fitting (e.g. claude-sonnet-5-5)"},
 				},
 			},
 			{
@@ -619,7 +619,7 @@ func buildCommandRegistry() helpOutput {
 				Description: "Estimate per-session token cost of the current squadai install.",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output as JSON"},
-					{Name: "--model", Type: "string", Description: "Model name for tokenizer (e.g. claude-sonnet-4-6, gpt-5-mini)"},
+					{Name: "--model", Type: "string", Description: "Model name for tokenizer (e.g. claude-sonnet-5-5, gpt-5-mini)"},
 				},
 			},
 			{

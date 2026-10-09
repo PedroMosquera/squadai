@@ -17,33 +17,33 @@ func TestResolvers_AllTiers(t *testing.T) {
 		want     string
 	}{
 		// ClaudeResolver
-		{"claude-premium", NewClaudeResolver(), TierPremium, "claude-fable-5"},
-		{"claude-standard", NewClaudeResolver(), TierStandard, "claude-sonnet-4-6"},
-		{"claude-cheap", NewClaudeResolver(), TierCheap, "claude-haiku-4-5"},
+		{"claude-premium", NewClaudeResolver(), TierPremium, "claude-fable-5-1"},
+		{"claude-standard", NewClaudeResolver(), TierStandard, "claude-sonnet-5-5"},
+		{"claude-cheap", NewClaudeResolver(), TierCheap, "claude-haiku-5-5"},
 		// OpenCodeResolver
-		{"opencode-premium", NewOpenCodeResolver(), TierPremium, "anthropic/claude-fable-5"},
-		{"opencode-standard", NewOpenCodeResolver(), TierStandard, "anthropic/claude-sonnet-4-6"},
-		{"opencode-cheap", NewOpenCodeResolver(), TierCheap, "anthropic/claude-haiku-4-5"},
+		{"opencode-premium", NewOpenCodeResolver(), TierPremium, "anthropic/claude-fable-5-1"},
+		{"opencode-standard", NewOpenCodeResolver(), TierStandard, "anthropic/claude-sonnet-5-5"},
+		{"opencode-cheap", NewOpenCodeResolver(), TierCheap, "anthropic/claude-haiku-5-5"},
 		// CursorResolver
-		{"cursor-premium", NewCursorResolver(), TierPremium, "claude-fable-5"},
-		{"cursor-standard", NewCursorResolver(), TierStandard, "claude-sonnet-4-6"},
-		{"cursor-cheap", NewCursorResolver(), TierCheap, "claude-haiku-4-5"},
+		{"cursor-premium", NewCursorResolver(), TierPremium, "claude-fable-5-1"},
+		{"cursor-standard", NewCursorResolver(), TierStandard, "claude-sonnet-5-5"},
+		{"cursor-cheap", NewCursorResolver(), TierCheap, "claude-haiku-5-5"},
 		// WindsurfResolver
-		{"windsurf-premium", NewWindsurfResolver(), TierPremium, "claude-fable-5"},
-		{"windsurf-standard", NewWindsurfResolver(), TierStandard, "claude-sonnet-4-6"},
-		{"windsurf-cheap", NewWindsurfResolver(), TierCheap, "claude-haiku-4-5"},
+		{"windsurf-premium", NewWindsurfResolver(), TierPremium, "claude-fable-5-1"},
+		{"windsurf-standard", NewWindsurfResolver(), TierStandard, "claude-sonnet-5-5"},
+		{"windsurf-cheap", NewWindsurfResolver(), TierCheap, "claude-haiku-5-5"},
 		// VSCodeResolver
-		{"vscode-premium", NewVSCodeResolver(), TierPremium, "gpt-5.2"},
-		{"vscode-standard", NewVSCodeResolver(), TierStandard, "claude-sonnet-4-6"},
-		{"vscode-cheap", NewVSCodeResolver(), TierCheap, "gpt-5-mini"},
+		{"vscode-premium", NewVSCodeResolver(), TierPremium, "gpt-6-astra"},
+		{"vscode-standard", NewVSCodeResolver(), TierStandard, "claude-sonnet-5-5"},
+		{"vscode-cheap", NewVSCodeResolver(), TierCheap, "gpt-6-luna"},
 		// PiResolver
-		{"pi-premium", NewPiResolver(), TierPremium, "anthropic/claude-fable-5"},
-		{"pi-standard", NewPiResolver(), TierStandard, "anthropic/claude-sonnet-4-6"},
-		{"pi-cheap", NewPiResolver(), TierCheap, "anthropic/claude-haiku-4-5"},
+		{"pi-premium", NewPiResolver(), TierPremium, "anthropic/claude-fable-5-1"},
+		{"pi-standard", NewPiResolver(), TierStandard, "anthropic/claude-sonnet-5-5"},
+		{"pi-cheap", NewPiResolver(), TierCheap, "anthropic/claude-haiku-5-5"},
 		// CodexResolver
-		{"codex-premium", NewCodexResolver(), TierPremium, "gpt-5.2"},
-		{"codex-standard", NewCodexResolver(), TierStandard, "gpt-5.2"},
-		{"codex-cheap", NewCodexResolver(), TierCheap, "gpt-5-mini"},
+		{"codex-premium", NewCodexResolver(), TierPremium, "gpt-6-astra"},
+		{"codex-standard", NewCodexResolver(), TierStandard, "gpt-6.1-sol"},
+		{"codex-cheap", NewCodexResolver(), TierCheap, "gpt-6-luna"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,13 +61,13 @@ func TestForAgent_MapsToCorrectResolver(t *testing.T) {
 		tier    Tier
 		want    string
 	}{
-		{domain.AgentClaudeCode, TierPremium, "claude-fable-5"},
-		{domain.AgentOpenCode, TierPremium, "anthropic/claude-fable-5"},
-		{domain.AgentCursor, TierPremium, "claude-fable-5"},
-		{domain.AgentWindsurf, TierPremium, "claude-fable-5"},
-		{domain.AgentVSCodeCopilot, TierPremium, "gpt-5.2"},
-		{domain.AgentPi, TierPremium, "anthropic/claude-fable-5"},
-		{domain.AgentCodex, TierPremium, "gpt-5.2"},
+		{domain.AgentClaudeCode, TierPremium, "claude-fable-5-1"},
+		{domain.AgentOpenCode, TierPremium, "anthropic/claude-fable-5-1"},
+		{domain.AgentCursor, TierPremium, "claude-fable-5-1"},
+		{domain.AgentWindsurf, TierPremium, "claude-fable-5-1"},
+		{domain.AgentVSCodeCopilot, TierPremium, "gpt-6-astra"},
+		{domain.AgentPi, TierPremium, "anthropic/claude-fable-5-1"},
+		{domain.AgentCodex, TierPremium, "gpt-6-astra"},
 	}
 	for _, tc := range cases {
 		got := ForAgent(tc.agentID).Resolve(tc.tier)
@@ -96,7 +96,7 @@ func TestResolveRoleModel_EmptyField_UsesDefault(t *testing.T) {
 
 func TestResolveRoleModel_ValidTier(t *testing.T) {
 	got := ResolveRoleModel("premium", domain.AgentClaudeCode)
-	want := "claude-fable-5"
+	want := "claude-fable-5-1"
 	if got != want {
 		t.Errorf("ResolveRoleModel(\"premium\", claude-code) = %q, want %q", got, want)
 	}
@@ -151,42 +151,42 @@ func TestResolveRoleModelFor_Precedence(t *testing.T) {
 			}),
 			methodology: "tdd", roleName: "planner", roleTier: "cheap",
 			agentID: domain.AgentClaudeCode,
-			want:    "claude-fable-5", // profile tier premium beats role tier cheap
+			want:    "claude-fable-5-1", // profile tier premium beats role tier cheap
 		},
 		{
 			name:        "profile tier beats role tier",
 			cfg:         cfgWith(domain.ModelProfile{Tier: "cheap"}),
 			methodology: "tdd", roleName: "planner", roleTier: "premium",
 			agentID: domain.AgentClaudeCode,
-			want:    "claude-haiku-4-5",
+			want:    "claude-haiku-5-5",
 		},
 		{
 			name:        "no override entry falls back to role tier",
 			cfg:         cfgWith(domain.ModelProfile{Tier: "cheap"}),
 			methodology: "tdd", roleName: "implementer", roleTier: "premium",
 			agentID: domain.AgentClaudeCode,
-			want:    "claude-fable-5",
+			want:    "claude-fable-5-1",
 		},
 		{
 			name:        "override points at missing profile falls back to role tier",
 			cfg:         &domain.MergedConfig{Models: domain.ModelsConfig{Overrides: map[string]string{"tdd.planner": "ghost"}}},
 			methodology: "tdd", roleName: "planner", roleTier: "cheap",
 			agentID: domain.AgentClaudeCode,
-			want:    "claude-haiku-4-5",
+			want:    "claude-haiku-5-5",
 		},
 		{
 			name:        "empty tier everywhere resolves catalog default",
 			cfg:         &domain.MergedConfig{},
 			methodology: "tdd", roleName: "planner", roleTier: "",
 			agentID: domain.AgentClaudeCode,
-			want:    "claude-sonnet-4-6",
+			want:    "claude-sonnet-5-5",
 		},
 		{
 			name:        "nil config degrades to role tier",
 			cfg:         nil,
 			methodology: "tdd", roleName: "planner", roleTier: "premium",
 			agentID: domain.AgentOpenCode,
-			want:    "anthropic/claude-fable-5",
+			want:    "anthropic/claude-fable-5-1",
 		},
 	}
 	for _, tc := range cases {
@@ -226,7 +226,7 @@ func TestResolveRoleModelFor_OverrideFileFlipsResolution(t *testing.T) {
 		t.Errorf("with override file, resolved %q, want %q", got, "claude-flipped-9")
 	}
 	// Sanity: premium tier is untouched by the partial override.
-	if got := ResolveRoleModelFor(nil, "tdd", "planner", "premium", domain.AgentClaudeCode, cat); got != "claude-fable-5" {
-		t.Errorf("premium tier = %q, want %q", got, "claude-fable-5")
+	if got := ResolveRoleModelFor(nil, "tdd", "planner", "premium", domain.AgentClaudeCode, cat); got != "claude-fable-5-1" {
+		t.Errorf("premium tier = %q, want %q", got, "claude-fable-5-1")
 	}
 }

@@ -1,7 +1,55 @@
 {
   "schema_version": 1,
-  "updated": "2026-07-05",
+  "updated": "2026-10-09",
   "models": {
+    "claude-fable-5-1": {
+      "provider": "anthropic",
+      "display": "Claude Fable 5.1",
+      "input_per_mtok": 10,
+      "output_per_mtok": 50,
+      "cache_read_multiplier": 0.025,
+      "context_window": 1000000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
+    "claude-opus-5-5": {
+      "provider": "anthropic",
+      "display": "Claude Opus 5.5",
+      "input_per_mtok": 4,
+      "output_per_mtok": 20,
+      "cache_read_multiplier": 0.05,
+      "context_window": 1000000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
+    "claude-sonnet-5-5": {
+      "provider": "anthropic",
+      "display": "Claude Sonnet 5.5",
+      "input_per_mtok": 2,
+      "output_per_mtok": 10,
+      "cache_read_multiplier": 0.05,
+      "context_window": 1000000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
+    "claude-haiku-5-5": {
+      "provider": "anthropic",
+      "display": "Claude Haiku 5.5 (rate for prompts up to 100K tokens)",
+      "input_per_mtok": 0.1,
+      "output_per_mtok": 0.5,
+      "context_window": 1000000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
+    "claude-opus-5": {
+      "provider": "anthropic",
+      "display": "Claude Opus 5",
+      "input_per_mtok": 5,
+      "output_per_mtok": 25,
+      "context_window": 1000000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
     "claude-fable-5": {
       "provider": "anthropic",
       "display": "Claude Fable 5",
@@ -23,11 +71,39 @@
     "claude-sonnet-5": {
       "provider": "anthropic",
       "display": "Claude Sonnet 5",
-      "input_per_mtok": 3,
-      "output_per_mtok": 15,
+      "input_per_mtok": 2,
+      "output_per_mtok": 10,
       "context_window": 1000000,
-      "max_output": 64000,
+      "max_output": 128000,
       "encoding": "o200k_base"
+    },
+    "claude-opus-4-7": {
+      "provider": "anthropic",
+      "display": "Claude Opus 4.7",
+      "input_per_mtok": 5,
+      "output_per_mtok": 25,
+      "context_window": 1000000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
+    "claude-opus-4-6": {
+      "provider": "anthropic",
+      "display": "Claude Opus 4.6",
+      "input_per_mtok": 5,
+      "output_per_mtok": 25,
+      "context_window": 1000000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
+    "claude-opus-4-5": {
+      "provider": "anthropic",
+      "display": "Claude Opus 4.5",
+      "input_per_mtok": 5,
+      "output_per_mtok": 25,
+      "context_window": 200000,
+      "max_output": 64000,
+      "encoding": "o200k_base",
+      "aliases": ["claude-opus-4-5-20251101"]
     },
     "claude-sonnet-4-6": {
       "provider": "anthropic",
@@ -48,11 +124,53 @@
       "encoding": "o200k_base",
       "aliases": ["claude-haiku-4-5-20251001"]
     },
+    "gpt-6-astra": {
+      "provider": "openai",
+      "display": "GPT-6 Astra (rate for prompts up to 272K tokens)",
+      "input_per_mtok": 10,
+      "output_per_mtok": 50,
+      "context_window": 1050000,
+      "max_output": 128000
+    },
+    "gpt-6.1-sol": {
+      "provider": "openai",
+      "display": "GPT-6.1 Sol (rate for prompts up to 272K tokens)",
+      "input_per_mtok": 2,
+      "output_per_mtok": 10,
+      "cache_read_multiplier": 0.05,
+      "context_window": 1050000,
+      "max_output": 128000
+    },
+    "gpt-6-sol": {
+      "provider": "openai",
+      "display": "GPT-6 Sol (rate for prompts up to 272K tokens)",
+      "input_per_mtok": 2,
+      "output_per_mtok": 10,
+      "context_window": 1050000,
+      "max_output": 128000
+    },
+    "gpt-6-luna": {
+      "provider": "openai",
+      "display": "GPT-6 Luna (rate for prompts up to 272K tokens)",
+      "input_per_mtok": 0.1,
+      "output_per_mtok": 0.5,
+      "context_window": 1050000,
+      "max_output": 128000
+    },
     "gpt-5.2": {
       "provider": "openai",
       "display": "GPT-5.2",
       "input_per_mtok": 1.75,
       "output_per_mtok": 14,
+      "context_window": 400000,
+      "max_output": 128000,
+      "encoding": "o200k_base"
+    },
+    "gpt-5": {
+      "provider": "openai",
+      "display": "GPT-5",
+      "input_per_mtok": 1.25,
+      "output_per_mtok": 10,
       "context_window": 400000,
       "max_output": 128000,
       "encoding": "o200k_base"
@@ -73,8 +191,26 @@
       "output_per_mtok": 8,
       "context_window": 200000,
       "max_output": 100000,
-      "encoding": "o200k_base",
-      "aliases": ["o4-mini"]
+      "encoding": "o200k_base"
+    },
+    "o4-mini": {
+      "provider": "openai",
+      "display": "OpenAI o4-mini",
+      "input_per_mtok": 1.1,
+      "output_per_mtok": 4.4,
+      "cache_read_multiplier": 0.25,
+      "context_window": 200000,
+      "max_output": 100000,
+      "encoding": "o200k_base"
+    },
+    "gemini-3.8-flash": {
+      "provider": "google",
+      "display": "Gemini 3.8 Flash (2026 rate; doubles on 2027-01-01)",
+      "input_per_mtok": 0.75,
+      "output_per_mtok": 3.75,
+      "context_window": 1048576,
+      "max_output": 65536,
+      "encoding": "o200k_base"
     },
     "gemini-3-pro": {
       "provider": "google",
@@ -88,11 +224,12 @@
     "gemini-3-flash": {
       "provider": "google",
       "display": "Gemini 3 Flash",
-      "input_per_mtok": 0.3,
-      "output_per_mtok": 2.5,
-      "context_window": 1000000,
+      "input_per_mtok": 0.5,
+      "output_per_mtok": 3,
+      "context_window": 1048576,
       "max_output": 65536,
-      "encoding": "o200k_base"
+      "encoding": "o200k_base",
+      "aliases": ["gemini-3-flash-preview"]
     },
     "claude-opus-4": {
       "provider": "anthropic",
@@ -142,7 +279,7 @@
       "context_window": 200000,
       "max_output": 8192,
       "encoding": "o200k_base",
-      "aliases": ["claude-haiku-3.5"],
+      "aliases": ["claude-haiku-3.5", "claude-3-5-haiku"],
       "legacy": true
     },
     "gpt-4o": {
@@ -199,6 +336,7 @@
   "encoding_prefixes": [
     {"prefix": "claude-", "encoding": "o200k_base", "approx": true},
     {"prefix": "gemini-", "encoding": "o200k_base", "approx": true},
+    {"prefix": "gpt-6", "encoding": "o200k_base", "approx": true},
     {"prefix": "gpt-5", "encoding": "o200k_base"},
     {"prefix": "gpt-4.1", "encoding": "o200k_base"},
     {"prefix": "gpt-4o", "encoding": "o200k_base"},
@@ -211,86 +349,86 @@
   "adapters": {
     "claude-code": {
       "tiers": {
-        "premium": "claude-fable-5",
-        "standard": "claude-sonnet-4-6",
-        "cheap": "claude-haiku-4-5"
+        "premium": "claude-fable-5-1",
+        "standard": "claude-sonnet-5-5",
+        "cheap": "claude-haiku-5-5"
       },
       "hints": {
-        "premium": "Use Claude Fable 5 for all tasks.",
-        "standard": "Use Claude Sonnet 4.6 for everyday work; escalate to Claude Fable 5 only for hard planning or debugging.",
-        "cheap": "Use Claude Haiku 4.5 for all tasks to minimize cost."
+        "premium": "Use Claude Fable 5.1 for all tasks.",
+        "standard": "Use Claude Sonnet 5.5 for everyday work; escalate to Claude Fable 5.1 only for hard planning or debugging.",
+        "cheap": "Use Claude Haiku 5.5 for all tasks to minimize cost."
       }
     },
     "opencode": {
       "tiers": {
-        "premium": "anthropic/claude-fable-5",
-        "standard": "anthropic/claude-sonnet-4-6",
-        "cheap": "anthropic/claude-haiku-4-5"
+        "premium": "anthropic/claude-fable-5-1",
+        "standard": "anthropic/claude-sonnet-5-5",
+        "cheap": "anthropic/claude-haiku-5-5"
       },
       "hints": {
-        "premium": "Use Claude Fable 5 for all tasks.",
-        "standard": "Use Claude Sonnet 4.6 for everyday work; escalate only for architecture decisions.",
-        "cheap": "Use Claude Haiku 4.5 for all tasks to minimize cost."
+        "premium": "Use Claude Fable 5.1 for all tasks.",
+        "standard": "Use Claude Sonnet 5.5 for everyday work; escalate only for architecture decisions.",
+        "cheap": "Use Claude Haiku 5.5 for all tasks to minimize cost."
       }
     },
     "pi": {
       "tiers": {
-        "premium": "anthropic/claude-fable-5",
-        "standard": "anthropic/claude-sonnet-4-6",
-        "cheap": "anthropic/claude-haiku-4-5"
+        "premium": "anthropic/claude-fable-5-1",
+        "standard": "anthropic/claude-sonnet-5-5",
+        "cheap": "anthropic/claude-haiku-5-5"
       },
       "hints": {
-        "premium": "Use Claude Fable 5 for all tasks.",
-        "standard": "Use Claude Sonnet 4.6 for everyday work; escalate only for architecture decisions.",
-        "cheap": "Use Claude Haiku 4.5 for all tasks to minimize cost."
+        "premium": "Use Claude Fable 5.1 for all tasks.",
+        "standard": "Use Claude Sonnet 5.5 for everyday work; escalate only for architecture decisions.",
+        "cheap": "Use Claude Haiku 5.5 for all tasks to minimize cost."
       }
     },
     "cursor": {
       "tiers": {
-        "premium": "claude-fable-5",
-        "standard": "claude-sonnet-4-6",
-        "cheap": "claude-haiku-4-5"
+        "premium": "claude-fable-5-1",
+        "standard": "claude-sonnet-5-5",
+        "cheap": "claude-haiku-5-5"
       },
       "hints": {
-        "premium": "Use Claude Fable 5 or GPT-5.2 for all tasks.",
-        "standard": "Use Claude Sonnet 4.6 for complex tasks, GPT-5 mini for edits and quick fixes.",
-        "cheap": "Use GPT-5 mini or Claude Haiku 4.5 for all tasks. Avoid premium models to stay within budget."
+        "premium": "Use Claude Fable 5.1 for all tasks.",
+        "standard": "Use Claude Sonnet 5.5 for complex tasks, Claude Haiku 5.5 for edits and quick fixes.",
+        "cheap": "Use Claude Haiku 5.5 for all tasks. Avoid premium models to stay within budget."
       }
     },
     "windsurf": {
       "tiers": {
-        "premium": "claude-fable-5",
-        "standard": "claude-sonnet-4-6",
-        "cheap": "claude-haiku-4-5"
+        "premium": "claude-fable-5-1",
+        "standard": "claude-sonnet-5-5",
+        "cheap": "claude-haiku-5-5"
       },
       "hints": {
-        "premium": "Use the most capable model available (Claude Fable 5).",
+        "premium": "Use the most capable model available (Claude Fable 5.1).",
         "standard": "Use the default Cascade model. Switch to premium only for complex refactors.",
         "cheap": "Use the free/default model tier. Premium models are not needed for most tasks."
       }
     },
     "codex": {
       "tiers": {
-        "premium": "gpt-5.2",
-        "standard": "gpt-5.2",
-        "cheap": "gpt-5-mini"
+        "premium": "gpt-6-astra",
+        "standard": "gpt-6.1-sol",
+        "cheap": "gpt-6-luna"
       },
       "hints": {
-        "premium": "Use GPT-5.2 with high reasoning effort for all tasks.",
-        "standard": "Use GPT-5.2 for everyday work; lower reasoning effort for quick edits.",
-        "cheap": "Use GPT-5 mini for all tasks to minimize cost."
+        "premium": "Use GPT-6 Astra for all tasks.",
+        "standard": "Use GPT-6.1 Sol for everyday work; lower reasoning effort for quick edits.",
+        "cheap": "Use GPT-6 Luna for all tasks to minimize cost."
       }
     },
     "vscode-copilot": {
       "tiers": {
-        "premium": "gpt-5.2",
-        "standard": "claude-sonnet-4-6",
-        "cheap": "gpt-5-mini"
+        "premium": "gpt-6-astra",
+        "standard": "claude-sonnet-5-5",
+        "cheap": "gpt-6-luna"
       },
       "hints": {
-        "premium": "Use Claude Fable 5 or GPT-5.2 for all tasks.",
-        "standard": "Use Claude Sonnet 4.6 or GPT-5 mini. Use flagship models only for architecture decisions.",
-        "cheap": "Use GPT-5 mini or Claude Haiku 4.5 for all tasks to minimize cost."
+        "premium": "Use Claude Fable 5.1 or GPT-6 Astra for all tasks.",
+        "standard": "Use Claude Sonnet 5.5 or GPT-6.1 Sol. Use flagship models only for architecture decisions.",
+        "cheap": "Use GPT-6 Luna or Claude Haiku 5.5 for all tasks to minimize cost."
       }
     }
   }

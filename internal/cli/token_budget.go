@@ -34,7 +34,7 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 			planned = true
 		case arg == "--model":
 			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
-				return fmt.Errorf("--model requires a value (e.g. --model claude-sonnet-4-6)")
+				return fmt.Errorf("--model requires a value (e.g. --model claude-sonnet-5-5)")
 			}
 			i++
 			model = args[i]
@@ -49,7 +49,7 @@ func RunTokenBudget(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json          Output as JSON")
 			fmt.Fprintln(stdout, "  --planned       Estimate planned rendered content before apply")
-			fmt.Fprintln(stdout, "  --model <name>  Use model-aware tokenizer (e.g. claude-sonnet-4-6, gpt-5-mini)")
+			fmt.Fprintln(stdout, "  --model <name>  Use model-aware tokenizer (e.g. claude-sonnet-5-5, gpt-5-mini)")
 			fmt.Fprintln(stdout, "                  Accepts --model <name> or --model=<name>.")
 			fmt.Fprintln(stdout, "                  Models without an exact tokenizer (and the no-model")
 			fmt.Fprintln(stdout, "                  default) use approximate counts, marked '~'.")

@@ -26,13 +26,13 @@ func TestParse_EmbeddedCatalogIsValid(t *testing.T) {
 	if f.Updated == "" {
 		t.Fatal("embedded catalog has no updated date")
 	}
-	// Every adapter tier must reference a model row that exists (after
-	// provider-prefix normalization).
-	cat := FromFile(f, SourceEmbedded)
+	// Tier IDs are written into users' agent configs, so each must be an
+	// exact catalog ID. Known() is not enough: its prefix match would accept
+	// a typo like "claude-sonnet-5-55" by resolving it to claude-sonnet-5-5.
 	for name, a := range f.Adapters {
 		for tier, id := range a.Tiers {
-			if !cat.Known(id) {
-				t.Errorf("adapter %s tier %s references unknown model %q", name, tier, id)
+			if _, ok := f.Models[Normalize(id)]; !ok {
+				t.Errorf("adapter %s tier %s references %q, which is not an exact model ID in the catalog", name, tier, id)
 			}
 		}
 		for _, tier := range []string{"premium", "standard", "cheap"} {
@@ -211,10 +211,10 @@ func TestEncoding_ModelsAndPrefixes(t *testing.T) {
 	}{
 		{"claude-fable-5", "o200k_base"},
 		{"gpt-5.2", "o200k_base"},
-		{"gpt-5-nano-preview", "o200k_base"},   // prefix gpt-5
-		{"gemini-3-ultra", "o200k_base"},       // prefix gemini-
-		{"claude-anything-new", "o200k_base"},  // prefix claude-
-		{"gpt-4-32k-legacy", "cl100k_base"},    // prefix gpt-4 (not gpt-4.1/gpt-4o)
+		{"gpt-5-nano-preview", "o200k_base"},  // prefix gpt-5
+		{"gemini-3-ultra", "o200k_base"},      // prefix gemini-
+		{"claude-anything-new", "o200k_base"}, // prefix claude-
+		{"gpt-4-32k-legacy", "cl100k_base"},   // prefix gpt-4 (not gpt-4.1/gpt-4o)
 		{"anthropic/claude-fable-5", "o200k_base"},
 		{"total-junk-model", ""},
 	}
@@ -225,16 +225,42 @@ func TestEncoding_ModelsAndPrefixes(t *testing.T) {
 	}
 }
 
+// tiktoken publishes no encoding for GPT-6, so counts for it must be
+// labelled estimates even though OpenAI rows are otherwise exact.
+func TestEncodingApprox_HonestFlags(t *testing.T) {
+	cat, err := Load(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cases := []struct {
+		model      string
+		wantApprox bool
+	}{
+		{"gpt-5.2", false},
+		{"gpt-6-astra", true},
+		{"gpt-6.1-sol", true},
+		{"gpt-6-luna", true},
+		{"claude-sonnet-5-5", true},
+		{"gemini-3.8-flash", true},
+	}
+	for _, tc := range cases {
+		enc, approx := cat.EncodingApprox(tc.model)
+		if enc != "o200k_base" || approx != tc.wantApprox {
+			t.Errorf("EncodingApprox(%q) = (%q, %v), want (o200k_base, %v)", tc.model, enc, approx, tc.wantApprox)
+		}
+	}
+}
+
 func TestTierModel_FallbacksAndHints(t *testing.T) {
 	cat, err := Load(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cat.TierModel("claude-code", "standard"); got != "claude-sonnet-4-6" {
+	if got := cat.TierModel("claude-code", "standard"); got != "claude-sonnet-5-5" {
 		t.Errorf("TierModel(claude-code, standard) = %q", got)
 	}
 	// Unknown tier falls back to standard.
-	if got := cat.TierModel("claude-code", "mystery"); got != "claude-sonnet-4-6" {
+	if got := cat.TierModel("claude-code", "mystery"); got != "claude-sonnet-5-5" {
 		t.Errorf("TierModel(claude-code, mystery) = %q, want standard fallback", got)
 	}
 	// Unknown adapter falls back to opencode.

@@ -207,7 +207,7 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 			fmt.Fprintln(stdout, "                      cap tokens. include/exclude/adapter_overrides are not enforced yet.")
 			fmt.Fprintln(stdout, "  --max-tokens=N      Budget cap: fit components within N tokens (drops lowest priority first).")
 			fmt.Fprintln(stdout, "                      Defaults to the active profile's max_approx_tokens.")
-			fmt.Fprintln(stdout, "  --fit-model=<name>  Model to use for budget fitting (e.g. claude-sonnet-4-6, gpt-5-mini).")
+			fmt.Fprintln(stdout, "  --fit-model=<name>  Model to use for budget fitting (e.g. claude-sonnet-5-5, gpt-5-mini).")
 			fmt.Fprintln(stdout, "                      Defaults to the profile's usage tier, then the standard-tier model.")
 			fmt.Fprintln(stdout, "  --overwrite-unmanaged  Grant blanket consent to overwrite any user-owned key")
 			fmt.Fprintln(stdout, "                         SquadAI would write. Complements --no-review / CI flows;")

@@ -45,7 +45,7 @@ func NewVSCodeResolver() Resolver { return ForAgent(domain.AgentVSCodeCopilot) }
 func NewPiResolver() Resolver { return ForAgent(domain.AgentPi) }
 
 // NewCodexResolver returns a Resolver for the OpenAI Codex CLI.
-// Uses bare OpenAI model names (gpt-5.2, gpt-5-mini).
+// Uses bare OpenAI model names (gpt-6.1-sol, gpt-6-luna).
 func NewCodexResolver() Resolver { return ForAgent(domain.AgentCodex) }
 
 // ForAgent returns the Resolver appropriate for the given adapter ID, backed

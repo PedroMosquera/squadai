@@ -460,7 +460,7 @@ token cost of your agent configuration.
 
   squadai token-budget          # human-readable per-component breakdown
   squadai token-budget --json   # machine-readable
-  squadai token-budget --model=claude-sonnet-4-6
+  squadai token-budget --model=claude-sonnet-5-5
 
 This reads the installed agent files and estimates tokens. Without --model it
 uses a chars/4 heuristic; with --model it uses the model-aware tokenizer when
@@ -468,7 +468,7 @@ available. The brand component appears as its own row.
 
 ## Active fitting
 
-  squadai apply --max-tokens=60000 --fit-model=claude-sonnet-4-6
+  squadai apply --max-tokens=60000 --fit-model=claude-sonnet-5-5
 
 This renders the planned output, estimates desired tokens, then orders
 components by priority and omits lowest-priority content to fit within the

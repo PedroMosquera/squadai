@@ -28,7 +28,7 @@ func TestLookup_KnownModels(t *testing.T) {
 		{"claude-fable-5", ModelPricing{InputPerMillion: 10, OutputPerMillion: 50}},
 		{"claude-opus-4-8", ModelPricing{InputPerMillion: 5, OutputPerMillion: 25}},
 		{"claude-opus-4-1", ModelPricing{InputPerMillion: 15, OutputPerMillion: 75}},
-		{"claude-sonnet-5", ModelPricing{InputPerMillion: 3, OutputPerMillion: 15}},
+		{"claude-sonnet-5", ModelPricing{InputPerMillion: 2, OutputPerMillion: 10}},
 		{"claude-sonnet-4-6", ModelPricing{InputPerMillion: 3, OutputPerMillion: 15}},
 		{"claude-haiku-4-5", ModelPricing{InputPerMillion: 1, OutputPerMillion: 5}},
 		{"claude-haiku-3.5", ModelPricing{InputPerMillion: 0.80, OutputPerMillion: 4}},
@@ -60,6 +60,17 @@ func TestLookup_CurrentGenerationModels(t *testing.T) {
 		{"claude-sonnet-4-6", ModelPricing{InputPerMillion: 3, OutputPerMillion: 15}},
 		{"claude-haiku-4-5", ModelPricing{InputPerMillion: 1, OutputPerMillion: 5}},
 		{"gpt-5-mini", ModelPricing{InputPerMillion: 0.25, OutputPerMillion: 2}},
+		{"claude-fable-5-1", ModelPricing{InputPerMillion: 10, OutputPerMillion: 50, CacheReadMultiplier: 0.025}},
+		{"claude-opus-5-5", ModelPricing{InputPerMillion: 4, OutputPerMillion: 20, CacheReadMultiplier: 0.05}},
+		{"claude-sonnet-5-5", ModelPricing{InputPerMillion: 2, OutputPerMillion: 10, CacheReadMultiplier: 0.05}},
+		{"claude-haiku-5-5", ModelPricing{InputPerMillion: 0.10, OutputPerMillion: 0.50}},
+		{"gpt-6-astra", ModelPricing{InputPerMillion: 10, OutputPerMillion: 50}},
+		{"gpt-6.1-sol", ModelPricing{InputPerMillion: 2, OutputPerMillion: 10, CacheReadMultiplier: 0.05}},
+		{"gpt-6-luna", ModelPricing{InputPerMillion: 0.10, OutputPerMillion: 0.50}},
+		{"o4-mini", ModelPricing{InputPerMillion: 1.10, OutputPerMillion: 4.40, CacheReadMultiplier: 0.25}},
+		// Opus 4.7 must not fall through to the $15/$75 legacy claude-opus-4 row.
+		{"claude-opus-4-7", ModelPricing{InputPerMillion: 5, OutputPerMillion: 25}},
+		{"claude-3-5-haiku-20241022", ModelPricing{InputPerMillion: 0.80, OutputPerMillion: 4}},
 		// Provider-qualified names normalize to bare catalog IDs.
 		{"anthropic/claude-fable-5", ModelPricing{InputPerMillion: 10, OutputPerMillion: 50}},
 		// Alias resolution.

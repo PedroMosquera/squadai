@@ -308,8 +308,8 @@ assert_output_contains "$HELP_OUT" "models <subcommand>" "help lists models comm
 # -- models catalog (offline) --
 log "  Testing squadai models list"
 MODELS_OUT=$("$BIN" models list 2>&1) || true
-assert_output_contains "$MODELS_OUT" "claude-fable-5" "models list shows current-gen model"
-assert_output_contains "$MODELS_OUT" "claude-sonnet-4-6" "models list shows standard-tier model"
+assert_output_contains "$MODELS_OUT" "claude-fable-5-1" "models list shows current-gen model"
+assert_output_contains "$MODELS_OUT" "claude-sonnet-5-5" "models list shows standard-tier model"
 assert_output_contains "$MODELS_OUT" "embedded" "models list shows source column"
 assert_output_contains "$MODELS_OUT" "legacy" "models list flags legacy rows"
 

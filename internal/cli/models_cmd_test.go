@@ -115,7 +115,7 @@ func TestRunModelsList_AdapterFilter(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if out.Tiers["standard"] != "claude-sonnet-4-6" {
+	if out.Tiers["standard"] != "claude-sonnet-5-5" {
 		t.Errorf("claude-code standard tier = %q", out.Tiers["standard"])
 	}
 	for _, r := range out.Models {
