@@ -1,14 +1,18 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/exitcode"
 	"github.com/PedroMosquera/squadai/internal/tokenprofile/pricing"
 	"github.com/PedroMosquera/squadai/internal/tokenprofile/session"
 )
@@ -16,7 +20,9 @@ import (
 func RunTokenUsage(args []string, stdout io.Writer) error {
 	jsonOut := false
 	againstBudget := false
+	watch := false
 	sinceStr := "7d"
+	intervalStr := "5s"
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -26,8 +32,15 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 		case arg == "--against-budget":
 			againstBudget = true
 		case arg == "--watch":
-			fmt.Fprintln(stdout, "--watch is not yet implemented")
-			return nil
+			watch = true
+		case arg == "--interval":
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+				return fmt.Errorf("--interval requires a value (e.g. --interval 30s)")
+			}
+			i++
+			intervalStr = args[i]
+		case strings.HasPrefix(arg, "--interval="):
+			intervalStr = arg[len("--interval="):]
 		case arg == "--since":
 			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
 				return fmt.Errorf("--since requires a value (e.g. --since 7d)")
@@ -35,7 +48,7 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 			i++
 			sinceStr = args[i]
 		case arg == "-h", arg == "--help":
-			fmt.Fprintln(stdout, "Usage: squadai token-usage [--since <dur>] [--json] [--against-budget] [--watch]")
+			fmt.Fprintln(stdout, "Usage: squadai token-usage [--since <dur>] [--json] [--against-budget] [--watch [--interval <dur>]]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Aggregate real token usage from agent session transcripts.")
 			fmt.Fprintln(stdout, "Scans Claude Code, OpenCode and Pi session transcripts for token")
@@ -47,11 +60,29 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "  --against-budget")
 			fmt.Fprintln(stdout, "                  Enforce configured token budgets on the last 24h:")
 			fmt.Fprintln(stdout, "                  warn/ask print to stderr, block exits with code 9")
-			fmt.Fprintln(stdout, "  --watch         Tail the latest session (not yet implemented)")
+			fmt.Fprintln(stdout, "  --watch         Re-aggregate every interval and print changes until Ctrl+C")
+			fmt.Fprintln(stdout, "                  (cannot be combined with --json or --against-budget)")
+			fmt.Fprintln(stdout, "  --interval <dur>")
+			fmt.Fprintln(stdout, "                  Poll interval for --watch (default: 5s)")
 			return nil
 		case strings.HasPrefix(arg, "--since="):
 			sinceStr = arg[len("--since="):]
 		}
+	}
+
+	var interval time.Duration
+	if watch {
+		if jsonOut {
+			return exitcode.ErrFlagConflict("--watch, --json")
+		}
+		if againstBudget {
+			return exitcode.ErrFlagConflict("--watch, --against-budget")
+		}
+		d, err := time.ParseDuration(intervalStr)
+		if err != nil || d <= 0 {
+			return fmt.Errorf("invalid --interval %q: want a positive duration such as 5s", intervalStr)
+		}
+		interval = d
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -71,6 +102,24 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 
 	projectDir, _ := os.Getwd()
 
+	if msg, ok := pricing.StaleWarning(time.Now()); ok {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", msg)
+	}
+
+	if watch {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		aggregate := func() (*session.Aggregation, error) {
+			a, err := session.Aggregate(homeDir, session.AggregateOptions{Since: since, ProjectDir: projectDir})
+			if err != nil {
+				return nil, err
+			}
+			a.Period = sinceStr
+			return a, nil
+		}
+		return runTokenUsageWatch(ctx, stdout, aggregate, interval, writerIsTTY(stdout))
+	}
+
 	agg, err := session.Aggregate(homeDir, session.AggregateOptions{
 		Since:      since,
 		ProjectDir: projectDir,
@@ -80,10 +129,6 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 	}
 
 	agg.Period = sinceStr
-
-	if msg, ok := pricing.StaleWarning(time.Now()); ok {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", msg)
-	}
 
 	// One last-24h aggregate feeds both the human footer and --against-budget.
 	// Config or aggregation failures suppress budgets rather than failing the

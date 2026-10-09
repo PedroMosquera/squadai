@@ -482,8 +482,9 @@ The chosen layout is persisted to .squadai/.applied-budget.json so that
 
 ## Per-session telemetry
 
-  squadai token-usage --since 7d   # aggregate real session token usage
-  squadai token-usage --watch      # not yet implemented
+  squadai token-usage --since 7d              # aggregate real session token usage
+  squadai token-usage --watch                 # re-aggregate every 5s, print changes
+  squadai token-usage --watch --interval 30s  # custom poll interval
 
 This will parse agent session transcripts and compute real system+completion
 tokens with per-model pricing.`, true
