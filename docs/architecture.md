@@ -45,10 +45,10 @@ Policy Config (.squadai/policy.json)
 
 Core types and interfaces with no filesystem dependencies. Defines:
 
-- **AgentID** — `opencode`, `claude-code`, `vscode-copilot`, `cursor`, `windsurf`
+- **AgentID**: `opencode`, `claude-code`, `vscode-copilot`, `cursor`, `windsurf`, `pi`, `codex`
 - **AdapterLane** — `team` (required) or `personal` (optional)
 - **Methodology** — `tdd`, `sdd`, `conventional`
-- **DelegationStrategy** — `native` (OpenCode, Cursor), `prompt` (Claude Code), `solo` (VS Code, Windsurf)
+- **DelegationStrategy**: `native` (OpenCode, Claude Code, Cursor, Pi), `solo` (VS Code, Windsurf, Codex); `prompt` is defined but no shipped adapter uses it
 - **ComponentID** — `memory`, `rules`, `settings`, `mcp`, `agents`, `skills`, `commands`, `plugins`, `workflows`
 - **OperationalMode** — `team`, `personal` (`hybrid` is a deprecated alias, resolved at load time)
 - **PlannedAction** — a single step the planner produces
@@ -78,10 +78,12 @@ Three-layer configuration loading and merging.
 Each adapter is isolated in its own package and implements `domain.Adapter`. No path logic exists outside adapter packages.
 
 - `opencode/` — team baseline adapter (always included), native delegation
-- `claude/` — personal-lane adapter, prompt-based delegation
+- `claude/`: personal-lane adapter, native delegation
 - `vscode/` — personal-lane adapter (VS Code Copilot), solo delegation
 - `cursor/` — personal-lane adapter, native delegation
 - `windsurf/` — personal-lane adapter, solo delegation
+- `pi/`: personal-lane adapter, native delegation
+- `codex/`: personal-lane adapter, solo delegation
 
 ### `internal/components`
 
@@ -178,14 +180,14 @@ Delegates to the same command handlers used by CLI.
 
 ---
 
-## Planned subsystems (upcoming phases)
+## Shipped subsystems
 
 ### Squad Refinement (`/squadai-init`)
 An in-agent slash command that reads the repository and refines installed agent/skill/command
-templates per-codebase. State tracked in `.squadai/.squad-refined` (JSON). The `squadrefine`
-package (planned: `internal/squadrefine/`) handles drift detection and nudge throttling.
+templates per-codebase. State is tracked in `.squadai/.squad-refined` (JSON) by the
+`internal/squadrefine/` package, which handles drift detection and nudge throttling.
 
-### Project Memory
-An indexed `docs/memory/` tree with `_inbox/`, `decisions/`, `learnings/`, `incidents/` buckets.
-CLI: `squadai memory add|search|promote|reindex|status`. Librarian agent searches memory before
-planning. Per-adapter protocol injection (`<!-- squadai:memory-protocol -->` marker blocks).
+### Project Memory (`internal/memory/`)
+An indexed `docs/memory/` tree with `_inbox/`, `decisions/`, `learnings/`, and `incidents/`
+buckets. CLI: `squadai memory add|search|promote|reindex|status`. Librarian agent searches memory
+before planning. Per-adapter protocol injection (`<!-- squadai:memory-protocol -->` marker blocks).

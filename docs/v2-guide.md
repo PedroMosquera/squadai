@@ -682,7 +682,7 @@ Compute the action plan without writing files.
 squadai plan [--dry-run] [--json]
 ```
 
-Covers all 9 components (memory, rules, settings, mcp, agents, skills, commands, plugins, workflows) across all 5 supported agents.
+Covers all 9 components (memory, rules, settings, mcp, agents, skills, commands, plugins, workflows) across all 7 supported agents.
 
 ### `squadai apply`
 

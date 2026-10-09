@@ -57,6 +57,9 @@ squadai init --preset=solo-minimal      # lightweight conventional workflow
 squadai init --preset=solo-power        # TDD workflow with local memory/context defaults
 squadai init --preset=team-standard     # shared governance-friendly team baseline
 squadai init --preset=enterprise-locked # strict SDD-oriented baseline
+squadai init --preset=full-squad        # SDD methodology, balanced models, all components
+squadai init --preset=lean              # conventional methodology, starter models, core only
+squadai init --preset=custom            # explicit flags or wizard defaults
 ```
 
 To see what `apply` would change before committing:
@@ -92,7 +95,7 @@ Different agents handle sub-agents differently. squadai adapts:
 | Agent | Config file | Sub-agent strategy |
 |-------|-------------|-------------------|
 | OpenCode | `AGENTS.md` | Native agent files in `.opencode/agents/` |
-| Claude Code | `CLAUDE.md` | Task tool injection (prompt-based delegation) |
+| Claude Code | `CLAUDE.md` | Native agent files in `.claude/agents/` |
 | Cursor | `.cursor/rules/squadai.mdc` | Native agent files in `.cursor/agents/` |
 | Windsurf | `.windsurf/rules/squadai.md` | Solo all-in-one prompt + workflow files |
 | VS Code Copilot | `.github/copilot-instructions.md` | Solo all-in-one prompt |
@@ -103,7 +106,7 @@ Different agents handle sub-agents differently. squadai adapts:
 
 ## SquadAI inside your agent
 
-`squadai apply` registers SquadAI's own MCP server (`squadai mcp-server`) in every enabled agent — Claude Code, OpenCode, Cursor, Windsurf, VS Code Copilot, and Pi. That means your agents can run SquadAI themselves and get the same outcomes everywhere: check `status`, `plan`/`apply`/`verify` config changes, run `doctor`, and search or add project memory — all without leaving the agent console.
+`squadai apply` registers SquadAI's own MCP server (`squadai mcp-server`) in every enabled agent: Claude Code, OpenCode, Cursor, Windsurf, VS Code Copilot, Pi, and Codex. That means your agents can run SquadAI themselves and get the same outcomes everywhere: check `status`, `plan`/`apply`/`verify` config changes, run `doctor`, and search or add project memory, all without leaving the agent console.
 
 It's on by default (the `squadai` entry in the curated MCP catalog is pre-checked). Deselect it in the wizard or pass `--mcp=none` (or an explicit `--mcp=` list without `squadai`) to `squadai init` to opt out. The registration invokes the `squadai` binary from PATH; `squadai doctor` warns if it can't be found.
 
@@ -196,7 +199,7 @@ squadai                     # launch the interactive TUI wizard (first-time setu
 squadai init                # initialize or re-initialize project.json
 squadai apply               # install agent files (idempotent — safe to re-run)
 squadai diff                # preview what apply would change
-squadai doctor              # run ~22 health checks; --fix auto-resolves common issues
+squadai doctor              # run the full health-check suite; --fix auto-resolves common issues
 squadai status              # quick view of adapters, components, managed files
 squadai status --daily      # daily control-plane summary for the current repo
 squadai token-budget        # per-session token cost of the current install

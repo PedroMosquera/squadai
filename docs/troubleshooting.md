@@ -195,6 +195,8 @@ SquadAI detects each agent by looking for its binary on `PATH` or its config dir
 | `cursor` | `cursor` binary on PATH, or `.cursor/` present |
 | `vscode-copilot` | `code` binary on PATH, or `.vscode/` present |
 | `windsurf` | `windsurf` binary on PATH, or `.windsurf/` present |
+| `pi` | `pi` binary on PATH, or `~/.pi/agent/` present |
+| `codex` | `codex` binary on PATH, or `~/.codex/` present |
 
 If an agent is installed but not detected, explicitly enable it in `.squadai/project.json` under `"adapters"`.
 

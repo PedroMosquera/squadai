@@ -1,6 +1,6 @@
 # SquadAI — 5-Minute User Guide
 
-SquadAI is a local-first control plane for AI coding agents. It manages system prompts, sub-agent teams, MCP servers, skills, permissions, memory metadata, context profiles, model routing, usage budgets, and settings for OpenCode, Claude Code, Cursor, VS Code Copilot, Windsurf, and Pi from a single source of truth in `.squadai/`.
+SquadAI is a local-first control plane for AI coding agents. It manages system prompts, sub-agent teams, MCP servers, skills, permissions, memory metadata, context profiles, model routing, usage budgets, and settings for OpenCode, Claude Code, Cursor, VS Code Copilot, Windsurf, Pi, and Codex from a single source of truth in `.squadai/`.
 
 ---
 
