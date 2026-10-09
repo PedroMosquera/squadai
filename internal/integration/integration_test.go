@@ -1287,7 +1287,7 @@ func TestMCPInstallation_ClaudeCode_MCPConfigFile(t *testing.T) {
 	assertJSONKey(t, mcpFile, "mcpServers", "MCP/Claude: .mcp.json has mcpServers key")
 }
 
-// TestMCPInstallation_VSCode_MCPConfigFile verifies VS Code uses .vscode/mcp.json with servers.
+// TestMCPInstallation_VSCode_MCPConfigFile verifies VS Code uses the root .mcp.json with mcpServers.
 func TestMCPInstallation_VSCode_MCPConfigFile(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
@@ -1330,21 +1330,19 @@ func TestMCPInstallation_VSCode_MCPConfigFile(t *testing.T) {
 		t.Fatal("apply should succeed")
 	}
 
-	// .vscode/mcp.json must exist (NOT settings.json).
-	mcpJSON := filepath.Join(project, ".vscode", "mcp.json")
-	assertFileExists(t, mcpJSON, "MCP/VSCode: .vscode/mcp.json")
-	assertJSONKey(t, mcpJSON, "servers", "MCP/VSCode: has 'servers' key")
+	mcpJSON := filepath.Join(project, ".mcp.json")
+	assertFileExists(t, mcpJSON, "MCP/VSCode: .mcp.json")
+	assertJSONKey(t, mcpJSON, "mcpServers", "MCP/VSCode: has 'mcpServers' key")
 
-	// Must NOT use the "mcp" or "mcpServers" key.
 	data, err := os.ReadFile(mcpJSON)
 	if err != nil {
-		t.Fatalf("read mcp.json: %v", err)
+		t.Fatalf("read .mcp.json: %v", err)
 	}
 	if strings.Contains(string(data), `"mcp":`) {
-		t.Error("MCP/VSCode: .vscode/mcp.json must not have 'mcp' key (should be 'servers')")
+		t.Error("MCP/VSCode: .mcp.json must not have 'mcp' key")
 	}
-	if strings.Contains(string(data), `"mcpServers":`) {
-		t.Error("MCP/VSCode: .vscode/mcp.json must not have 'mcpServers' key (should be 'servers')")
+	if strings.Contains(string(data), `"servers":`) {
+		t.Error("MCP/VSCode: .mcp.json must not have the legacy 'servers' key")
 	}
 }
 
@@ -2133,11 +2131,14 @@ func TestFullPipeline_SDD_Pi(t *testing.T) {
 		t.Errorf("Pi/SDD: AGENTS.md missing Pi-scoped memory section %q", piSectionID)
 	}
 
-	// pi.json must exist with the "mcp" key containing context7.
-	piJSON := filepath.Join(project, "pi.json")
-	assertFileExists(t, piJSON, "Pi/SDD: pi.json")
-	assertJSONKey(t, piJSON, "mcp", "Pi/SDD: pi.json has mcp key")
-	assertFileContains(t, piJSON, "context7", "Pi/SDD: pi.json has context7 server")
+	// .pi/mcp.json is the project file Pi's built-in MCP reads.
+	piMCP := filepath.Join(project, ".pi", "mcp.json")
+	assertFileExists(t, piMCP, "Pi/SDD: .pi/mcp.json")
+	assertJSONKey(t, piMCP, "mcpServers", "Pi/SDD: .pi/mcp.json has mcpServers key")
+	assertFileContains(t, piMCP, "context7", "Pi/SDD: .pi/mcp.json has context7 server")
+	if _, err := os.Stat(filepath.Join(project, "pi.json")); err == nil {
+		t.Error("Pi/SDD: MCP must no longer be written to pi.json")
+	}
 
 	// .pi/agents/ must contain the 8 SDD role files (Pi uses DelegationNativeAgents).
 	piAgentsDir := filepath.Join(project, ".pi", "agents")

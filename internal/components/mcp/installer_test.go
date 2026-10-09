@@ -872,8 +872,8 @@ func TestPlan_VSCode_MCPConfigFile_ReturnsCreate(t *testing.T) {
 	if actions[0].Action != domain.ActionCreate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
 	}
-	// VS Code MCP goes to .vscode/mcp.json, NOT .vscode/settings.json.
-	expected := filepath.Join(project, ".vscode", "mcp.json")
+	// VS Code MCP goes to the portable root .mcp.json shared with Claude Code.
+	expected := filepath.Join(project, ".mcp.json")
 	if actions[0].TargetPath != expected {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
 	}
@@ -929,9 +929,9 @@ func TestPlan_VSCode_MCPConfigFile_UpToDate_ReturnsSkip(t *testing.T) {
 	adapter := vscode.New()
 	inst := newTestInstaller()
 
-	targetPath := filepath.Join(project, ".vscode", "mcp.json")
+	targetPath := filepath.Join(project, ".mcp.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"servers": map[string]interface{}{
+		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
 				"type": "http",
 				"url":  "https://mcp.context7.com/mcp",
@@ -956,9 +956,9 @@ func TestPlan_VSCode_MCPConfigFile_Outdated_ReturnsUpdate(t *testing.T) {
 	adapter := vscode.New()
 	inst := newTestInstaller()
 
-	targetPath := filepath.Join(project, ".vscode", "mcp.json")
+	targetPath := filepath.Join(project, ".mcp.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
-		"servers": map[string]interface{}{
+		"mcpServers": map[string]interface{}{
 			"context7": map[string]interface{}{
 				"type": "http",
 				"url":  "https://old-url.com/mcp",
@@ -992,16 +992,17 @@ func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
 	}
 
 	doc := readTestJSON(t, actions[0].TargetPath)
-	// VS Code Copilot MUST use "servers" key, NOT "mcpServers".
-	serversMap, ok := doc["servers"].(map[string]interface{})
+	// The portable .mcp.json format uses "mcpServers"; "servers" is the legacy
+	// .vscode/mcp.json format.
+	serversMap, ok := doc["mcpServers"].(map[string]interface{})
 	if !ok {
-		t.Fatal("servers key should be a map")
+		t.Fatal("mcpServers key should be a map")
 	}
-	if _, hasMCPServers := doc["mcpServers"]; hasMCPServers {
-		t.Error("should NOT have 'mcpServers' key — VS Code uses 'servers'")
+	if _, hasServers := doc["servers"]; hasServers {
+		t.Error("should NOT have 'servers' key in .mcp.json")
 	}
 	if _, hasMCP := doc["mcp"]; hasMCP {
-		t.Error("should NOT have 'mcp' key — MCPConfigFile uses 'servers' for VS Code")
+		t.Error("should NOT have 'mcp' key in .mcp.json")
 	}
 	server, ok := serversMap["context7"].(map[string]interface{})
 	if !ok {
@@ -1021,18 +1022,18 @@ func TestApply_VSCode_MCPConfigFile_CreatesFileWithMcpServers(t *testing.T) {
 	}
 
 	// Check managed keys are written to the sidecar (relative path from project root).
-	sidecarKeys, err := managed.ReadManagedKeys(project, filepath.Join(".vscode", "mcp.json"))
+	sidecarKeys, err := managed.ReadManagedKeys(project, ".mcp.json")
 	if err != nil {
 		t.Fatalf("read sidecar: %v", err)
 	}
 	foundKey := false
 	for _, k := range sidecarKeys {
-		if k == "servers" {
+		if k == "mcpServers" {
 			foundKey = true
 		}
 	}
 	if !foundKey {
-		t.Error("sidecar managed_keys should include 'servers'")
+		t.Error("sidecar managed_keys should include 'mcpServers'")
 	}
 }
 
@@ -1187,9 +1188,9 @@ func TestVerify_Windsurf_MCPConfigFile_FailsWhenOutdated(t *testing.T) {
 	}
 }
 
-// ─── Fix 1: VS Code uses "servers" root key ─────────────────────────────────
+// ─── Fix 1: VS Code uses the portable "mcpServers" root key ──────────────────
 
-func TestApply_VSCode_UsesServersRootKey(t *testing.T) {
+func TestApply_VSCode_UsesMcpServersRootKey(t *testing.T) {
 	project := t.TempDir()
 	adapter := vscode.New()
 	inst := newTestInstaller()
@@ -1200,11 +1201,11 @@ func TestApply_VSCode_UsesServersRootKey(t *testing.T) {
 	}
 
 	doc := readTestJSON(t, actions[0].TargetPath)
-	if _, ok := doc["servers"]; !ok {
-		t.Error("VS Code MUST use 'servers' root key")
+	if _, ok := doc["mcpServers"]; !ok {
+		t.Error("VS Code MUST use 'mcpServers' root key in .mcp.json")
 	}
-	if _, ok := doc["mcpServers"]; ok {
-		t.Error("VS Code MUST NOT use 'mcpServers' root key")
+	if _, ok := doc["servers"]; ok {
+		t.Error("VS Code MUST NOT use the legacy 'servers' root key in .mcp.json")
 	}
 }
 
@@ -1352,8 +1353,8 @@ func TestApply_VSCode_PreservesInputsArray(t *testing.T) {
 	adapter := vscode.New()
 	inst := newTestInstaller()
 
-	// Pre-write mcp.json with an "inputs" array (VS Code credential prompting).
-	targetPath := filepath.Join(project, ".vscode", "mcp.json")
+	// Pre-write .mcp.json with an "inputs" array (VS Code credential prompting).
+	targetPath := filepath.Join(project, ".mcp.json")
 	writeTestJSON(t, targetPath, map[string]interface{}{
 		"inputs": []interface{}{
 			map[string]interface{}{
@@ -1372,9 +1373,8 @@ func TestApply_VSCode_PreservesInputsArray(t *testing.T) {
 
 	doc := readTestJSON(t, actions[0].TargetPath)
 
-	// "servers" key must be present.
-	if _, ok := doc["servers"]; !ok {
-		t.Error("servers key should be written")
+	if _, ok := doc["mcpServers"]; !ok {
+		t.Error("mcpServers key should be written")
 	}
 
 	// "inputs" array must be preserved.
@@ -1416,7 +1416,7 @@ func TestRoundTrip_AllAgents_CorrectFormat(t *testing.T) {
 	}{
 		{"OpenCode", opencode.New(), "mcp", "url", "merge"},
 		{"Claude", claude.New(), "mcpServers", "url", "configfile"},
-		{"VSCode", vscode.New(), "servers", "url", "configfile"},
+		{"VSCode", vscode.New(), "mcpServers", "url", "configfile"},
 		{"Cursor", cursor.New(), "mcpServers", "url", "configfile"},
 		{"Windsurf", windsurf.New(), "mcpServers", "serverUrl", "configfile"},
 	}
@@ -1518,7 +1518,6 @@ func installerWithSchema(adapter domain.Adapter) *Installer {
 	inst.ensureAgentConfig(adapter, "", "")
 	return inst
 }
-
 
 // ─── VS Code inputs preservation ────────────────────────────────────────────
 
@@ -1634,11 +1633,11 @@ func TestApply_SquadaiServer_AllAdapters(t *testing.T) {
 		arrayCmd   bool   // true = single command array, false = split command/args
 	}{
 		{"opencode_merged_config", opencode.New(), "opencode.json", "mcp", "local", true},
-		{"pi_merged_config", pi.New(), "pi.json", "mcp", "local", true},
+		{"pi_mcp_json", pi.New(), filepath.Join(".pi", "mcp.json"), "mcpServers", "", false},
 		{"claude_mcp_json", claude.New(), ".mcp.json", "mcpServers", "", false},
 		{"cursor_mcp_json", cursor.New(), filepath.Join(".cursor", "mcp.json"), "mcpServers", "", false},
 		{"windsurf_mcp_config", windsurf.New(), filepath.Join(".windsurf", "mcp_config.json"), "mcpServers", "", false},
-		{"vscode_mcp_json", vscode.New(), filepath.Join(".vscode", "mcp.json"), "servers", "", false},
+		{"vscode_mcp_json", vscode.New(), ".mcp.json", "mcpServers", "", false},
 	}
 
 	for _, tc := range tests {

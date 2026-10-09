@@ -295,7 +295,7 @@ func TestAdapter_WorkflowsDir(t *testing.T) {
 
 func TestAdapter_MCPRootKey(t *testing.T) {
 	a := New()
-	want := "servers"
+	want := "mcpServers"
 	if got := a.MCPRootKey(); got != want {
 		t.Errorf("MCPRootKey() = %q, want %q", got, want)
 	}
@@ -316,8 +316,8 @@ func TestAdapter_MCPConfigPath(t *testing.T) {
 		projectDir string
 		want       string
 	}{
-		{"with project dir", "/tmp/proj", filepath.Join("/tmp/proj", ".vscode", "mcp.json")},
-		{"empty project dir", "", filepath.Join(".vscode", "mcp.json")},
+		{"with project dir", "/tmp/proj", filepath.Join("/tmp/proj", ".mcp.json")},
+		{"empty project dir", "", ".mcp.json"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -325,6 +325,16 @@ func TestAdapter_MCPConfigPath(t *testing.T) {
 				t.Errorf("MCPConfigPath(%q) = %q, want %q", tt.projectDir, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAdapter_LegacyMCPConfig(t *testing.T) {
+	path, rootKey := New().LegacyMCPConfig("/tmp/proj")
+	if want := filepath.Join("/tmp/proj", ".vscode", "mcp.json"); path != want {
+		t.Errorf("LegacyMCPConfig path = %q, want %q", path, want)
+	}
+	if rootKey != "servers" {
+		t.Errorf("LegacyMCPConfig rootKey = %q, want %q", rootKey, "servers")
 	}
 }
 

@@ -225,6 +225,18 @@ func (o *OverrideAdapter) MCPTOMLConfigPath(homeDir string) string {
 	return t.MCPTOMLConfigPath(homeDir)
 }
 
+// LegacyMCPConfig delegates to the base adapter when it has a previous MCP
+// location to migrate from (VS Code, Pi). Not all adapters implement this.
+func (o *OverrideAdapter) LegacyMCPConfig(projectDir string) (path, rootKey string) {
+	l, ok := o.base.(interface {
+		LegacyMCPConfig(string) (string, string)
+	})
+	if !ok {
+		return "", ""
+	}
+	return l.LegacyMCPConfig(projectDir)
+}
+
 // MCPCommandStyle delegates to the base adapter.
 func (o *OverrideAdapter) MCPCommandStyle() string { return o.base.MCPCommandStyle() }
 

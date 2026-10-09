@@ -518,3 +518,30 @@ func TestListManagedFiles_ReturnsSortedPaths(t *testing.T) {
 		t.Errorf("expected sorted [a-file.md z-file.md], got %v", files)
 	}
 }
+
+// ─── RemoveManagedFile ───────────────────────────────────────────────────────
+
+func TestRemoveManagedFile_DropsOnlyThatEntry(t *testing.T) {
+	root := t.TempDir()
+	if err := WriteManagedKeys(root, "a.json", []string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteManagedKeys(root, "b.json", []string{"y"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RemoveManagedFile(root, "a.json"); err != nil {
+		t.Fatalf("RemoveManagedFile: %v", err)
+	}
+
+	files, err := ListManagedFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "b.json" {
+		t.Errorf("ListManagedFiles = %v, want [b.json]", files)
+	}
+	if err := RemoveManagedFile(root, "missing.json"); err != nil {
+		t.Errorf("RemoveManagedFile on absent entry: %v, want nil", err)
+	}
+}

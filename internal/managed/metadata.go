@@ -89,6 +89,23 @@ func WriteManagedKeys(projectRoot, configFile string, keys []string) error {
 	return writeSidecar(projectRoot, doc)
 }
 
+// RemoveManagedFile drops the managed-keys entry for configFile so drift
+// checks stop expecting the file. No-op if no entry exists.
+func RemoveManagedFile(projectRoot, configFile string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return err
+	}
+	if _, ok := doc.ManagedFiles[configFile]; !ok {
+		return nil
+	}
+	delete(doc.ManagedFiles, configFile)
+	return writeSidecar(projectRoot, doc)
+}
+
 // readSidecar reads the sidecar file. Returns an empty doc if the file does not
 // exist; returns an error for any other I/O or parse failure.
 func readSidecar(projectRoot string) (sidecarDoc, error) {

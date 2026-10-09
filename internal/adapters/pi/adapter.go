@@ -172,23 +172,40 @@ func (a *Adapter) WorkflowsDir(_ string) string {
 	return ""
 }
 
-// MCPRootKey returns "mcp" — Pi merges MCP servers under the "mcp" key.
-func (a *Adapter) MCPRootKey() string { return "mcp" }
+// MCPRootKey returns "mcpServers", the key Pi reads from mcp.json.
+func (a *Adapter) MCPRootKey() string { return "mcpServers" }
 
-// MCPURLKey returns "url" — Pi uses the standard URL key.
+// MCPURLKey returns "url", the key Pi reads for streamable HTTP servers.
 func (a *Adapter) MCPURLKey() string { return "url" }
 
-// MCPConfigPath returns empty string — Pi uses MergeIntoSettings (no separate MCP file).
-func (a *Adapter) MCPConfigPath(_ string) string { return "" }
+// MCPConfigPath returns <projectDir>/.pi/mcp.json. Pi reads it only after the
+// user grants project trust.
+func (a *Adapter) MCPConfigPath(projectDir string) string {
+	return filepath.Join(projectDir, ".pi", "mcp.json")
+}
 
-// MCPCommandStyle returns "array" — Pi encodes the full command in a single array.
-func (a *Adapter) MCPCommandStyle() string { return "array" }
+// LegacyMCPConfig returns where squadai wrote Pi servers before Pi shipped
+// built-in MCP. Pi never read that key, so the installer moves squadai-owned
+// servers out of it.
+func (a *Adapter) LegacyMCPConfig(projectDir string) (path, rootKey string) {
+	return a.ProjectConfigFile(projectDir), "mcp"
+}
 
-// MCPEnvKey returns "env" — Pi uses the standard env key.
+// MCPCommandStyle returns "split": Pi takes one executable plus args.
+func (a *Adapter) MCPCommandStyle() string { return "split" }
+
+// MCPEnvKey returns "env", the key Pi reads for stdio server environment.
 func (a *Adapter) MCPEnvKey() string { return "env" }
 
-// MCPTypeField echoes def.Type — Pi always emits the type field for both stdio and remote.
-func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string { return def.Type }
+// MCPTypeField returns "http" for remote servers and empty for stdio. Pi rejects
+// any type other than stdio, http or streamable-http, so squadai's "local" and
+// "remote" must never be echoed.
+func (a *Adapter) MCPTypeField(def domain.MCPServerDef) string {
+	if def.URL != "" {
+		return "http"
+	}
+	return ""
+}
 
 // RulesFrontmatter returns empty string — Pi uses marker-based injection.
 func (a *Adapter) RulesFrontmatter() string { return "" }

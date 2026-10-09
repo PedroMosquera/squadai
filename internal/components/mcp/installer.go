@@ -28,6 +28,23 @@ type agentMCPConfig struct {
 	// MCP config is TOML (Codex's ~/.codex/config.toml). Empty for JSON
 	// adapters. When set it takes precedence over the JSON strategies.
 	tomlPath string
+	// configPath is the dedicated MCP file (MCPConfigFile strategy). The
+	// legacy migration reads it to confirm servers landed before removing
+	// them from the old location.
+	configPath string
+	projectDir string
+	// legacyPath / legacyRootKey name where this adapter's servers used to
+	// be written. Empty when the adapter never moved.
+	legacyPath    string
+	legacyRootKey string
+}
+
+// legacyMCPConfigurer is the optional adapter capability for adapters whose
+// MCP target moved (VS Code: .vscode/mcp.json, Pi: pi.json). The installer
+// moves squadai-owned servers out of the old location; servers the user added
+// there stay put.
+type legacyMCPConfigurer interface {
+	LegacyMCPConfig(projectDir string) (path, rootKey string)
 }
 
 // tomlMCPConfigurer is the optional adapter capability for TOML-based MCP
@@ -56,14 +73,25 @@ func (i *Installer) ensureAgentConfig(adapter domain.Adapter, homeDir, projectDi
 	if tc, ok := adapter.(tomlMCPConfigurer); ok {
 		tomlPath = tc.MCPTOMLConfigPath(homeDir)
 	}
+	var legacyPath, legacyRootKey string
+	if lc, ok := adapter.(legacyMCPConfigurer); ok && mcpPath != "" {
+		legacyPath, legacyRootKey = lc.LegacyMCPConfig(projectDir)
+		if legacyPath == mcpPath {
+			legacyPath, legacyRootKey = "", ""
+		}
+	}
 	i.agentConfigs[adapter.ID()] = agentMCPConfig{
-		rootKey:      adapter.MCPRootKey(),
-		urlKey:       adapter.MCPURLKey(),
-		envKey:       adapter.MCPEnvKey(),
-		commandStyle: adapter.MCPCommandStyle(),
-		typeFieldFn:  adapter.MCPTypeField,
-		isConfigFile: mcpPath != "",
-		tomlPath:     tomlPath,
+		rootKey:       adapter.MCPRootKey(),
+		urlKey:        adapter.MCPURLKey(),
+		envKey:        adapter.MCPEnvKey(),
+		commandStyle:  adapter.MCPCommandStyle(),
+		typeFieldFn:   adapter.MCPTypeField,
+		isConfigFile:  mcpPath != "",
+		tomlPath:      tomlPath,
+		configPath:    mcpPath,
+		projectDir:    projectDir,
+		legacyPath:    legacyPath,
+		legacyRootKey: legacyRootKey,
 	}
 }
 
@@ -160,7 +188,17 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	// Strategy 1: MCPConfigFile — adapter declares a separate MCP config path.
 	if i.agentConfigs[adapter.ID()].isConfigFile {
-		return i.planMCPConfigFile(adapter, adapter.MCPConfigPath(projectDir))
+		actions, err := i.planMCPConfigFile(adapter, adapter.MCPConfigPath(projectDir))
+		if err != nil {
+			return nil, err
+		}
+		// Order matters: the legacy action runs after the new file is written
+		// and refuses to run if it is not.
+		legacy, err := i.planLegacyMigration(adapter.ID())
+		if err != nil {
+			return nil, err
+		}
+		return append(actions, legacy...), nil
 	}
 
 	// Strategy 2: MergeIntoSettings — adapter merges into its project config file.
@@ -239,6 +277,10 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	// TOMLConfigFile actions have a "mcp:toml:" prefix.
 	if strings.HasPrefix(action.Description, "mcp:toml:") {
 		return i.applyTOMLConfigFile(action)
+	}
+
+	if strings.HasPrefix(action.Description, legacyPrefix) {
+		return i.applyLegacyMigration(action)
 	}
 
 	// MCPConfigFile actions have a "mcp:configfile:" prefix.
@@ -663,7 +705,15 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	}
 
 	if i.agentConfigs[adapter.ID()].isConfigFile {
-		return i.verifyMCPConfigFile(adapter, projectDir)
+		results, err := i.verifyMCPConfigFile(adapter, projectDir)
+		if err != nil {
+			return nil, err
+		}
+		legacy, err := i.verifyLegacyMigration(adapter.ID())
+		if err != nil {
+			return nil, err
+		}
+		return append(results, legacy...), nil
 	}
 
 	return i.verifyMergedConfig(adapter, projectDir)
@@ -717,6 +767,13 @@ func (i *Installer) verifyMergedConfig(adapter domain.Adapter, projectDir string
 func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 	if strings.HasPrefix(action.Description, "mcp:toml:") {
 		return i.renderTOMLConfigContent(action)
+	}
+	if strings.HasPrefix(action.Description, legacyPrefix) {
+		doc, err := i.legacyRemainder(action.Agent)
+		if err != nil || len(doc) == 0 {
+			return nil, err
+		}
+		return marshalJSONDoc(doc)
 	}
 	if strings.HasPrefix(action.Description, "mcp:configfile:") {
 		return i.renderMCPConfigFileContent(action)
@@ -777,7 +834,8 @@ func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]b
 //
 //	OpenCode:    command=array, env="environment", type=def.Type (always)
 //	Claude:      command=split, env="env",         type="http" iff URL set
-//	VS Code:     command=split, env="env",         type="http" iff URL set
+//	VS Code:     command=split, env="env",         type="http" iff URL set (must match Claude: shared .mcp.json)
+//	Pi:          command=split, env="env",         type="http" iff URL set
 //	Cursor:      command=split, env="env",         type omitted
 //	Windsurf:    command=split, env="env",         type omitted (URL key="serverUrl")
 func (i *Installer) serverToMap(def domain.MCPServerDef, agent domain.AgentID) map[string]interface{} {

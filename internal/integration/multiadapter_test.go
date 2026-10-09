@@ -298,8 +298,8 @@ func TestMultiAdapter_ClaudeCode_NodeReact_Reversibility(t *testing.T) {
 
 // ─── VS Code Copilot / Node React ─────────────────────────────────────────────
 
-// TestMultiAdapter_VSCode_NodeReact_MCPFormat verifies VS Code writes .vscode/mcp.json
-// with a "servers" root key for a Node/React project.
+// TestMultiAdapter_VSCode_NodeReact_MCPFormat verifies VS Code writes the
+// portable root .mcp.json with a "mcpServers" root key for a Node/React project.
 func TestMultiAdapter_VSCode_NodeReact_MCPFormat(t *testing.T) {
 	t.Parallel()
 
@@ -319,21 +319,23 @@ func TestMultiAdapter_VSCode_NodeReact_MCPFormat(t *testing.T) {
 		t.Fatal("VSCode/NodeReact/MCPFormat: apply should succeed")
 	}
 
-	// VS Code uses MCPConfigFile strategy: .vscode/mcp.json with "servers" key.
-	mcpJSON := filepath.Join(dir, ".vscode", "mcp.json")
-	assertFileExists(t, mcpJSON, "VSCode/NodeReact: .vscode/mcp.json")
-	assertJSONKey(t, mcpJSON, "servers", "VSCode/NodeReact: .vscode/mcp.json has 'servers' key")
+	mcpJSON := filepath.Join(dir, ".mcp.json")
+	assertFileExists(t, mcpJSON, "VSCode/NodeReact: .mcp.json")
+	assertJSONKey(t, mcpJSON, "mcpServers", "VSCode/NodeReact: .mcp.json has 'mcpServers' key")
 
 	data, err := os.ReadFile(mcpJSON)
 	if err != nil {
-		t.Fatalf("read .vscode/mcp.json: %v", err)
+		t.Fatalf("read .mcp.json: %v", err)
 	}
 	jsonStr := string(data)
-	if strings.Contains(jsonStr, `"mcpServers"`) {
-		t.Error("VSCode/NodeReact: .vscode/mcp.json must not have 'mcpServers' key (should be 'servers')")
+	if strings.Contains(jsonStr, `"servers"`) {
+		t.Error("VSCode/NodeReact: .mcp.json must not have the legacy 'servers' key")
 	}
 	if strings.Contains(jsonStr, `"mcp":`) {
-		t.Error("VSCode/NodeReact: .vscode/mcp.json must not have 'mcp' key (should be 'servers')")
+		t.Error("VSCode/NodeReact: .mcp.json must not have 'mcp' key")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".vscode", "mcp.json")); err == nil {
+		t.Error("VSCode/NodeReact: must not write the deprecated .vscode/mcp.json")
 	}
 }
 
@@ -420,7 +422,7 @@ func TestMultiAdapter_VSCode_NodeReact_Reversibility(t *testing.T) {
 	}
 
 	assertFileExists(t, filepath.Join(dir, ".instructions.md"), "VSCode/NodeReact: .instructions.md before remove")
-	assertFileExists(t, filepath.Join(dir, ".vscode", "mcp.json"), "VSCode/NodeReact: .vscode/mcp.json before remove")
+	assertFileExists(t, filepath.Join(dir, ".mcp.json"), "VSCode/NodeReact: .mcp.json before remove")
 
 	removeReport, err := cli.Remove(cli.RemoveOptions{ProjectDir: dir})
 	if err != nil {

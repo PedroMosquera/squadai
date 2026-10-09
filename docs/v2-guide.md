@@ -196,16 +196,18 @@ Each agent receives MCP configuration through a different mechanism:
 | Strategy | Agent | File | JSON Key |
 |----------|-------|------|----------|
 | MergeIntoSettings | OpenCode | `opencode.json` | `"mcp"` |
-| SeparateMCPFiles | Claude Code | `~/.claude/mcp/<name>.json` | -- (one file per server) |
-| MCPConfigFile | VS Code Copilot | `.vscode/mcp.json` | `"mcpServers"` |
+| MCPConfigFile | Claude Code | `.mcp.json` | `"mcpServers"` |
+| MCPConfigFile | VS Code Copilot | `.mcp.json` | `"mcpServers"` |
 | MCPConfigFile | Cursor | `.cursor/mcp.json` | `"mcpServers"` |
 | MCPConfigFile | Windsurf | `.windsurf/mcp_config.json` | `"mcpServers"` |
+| MCPConfigFile | Pi | `.pi/mcp.json` | `"mcpServers"` |
+| TOMLConfigFile | Codex | `~/.codex/config.toml` | `[mcp_servers.<name>]` |
 
 **MergeIntoSettings (OpenCode):** Servers are merged into the project config file under the `"mcp"` key. Other keys in the file are preserved.
 
-**SeparateMCPFiles (Claude Code):** Each server gets its own JSON file at `~/.claude/mcp/{name}.json`. This matches Claude Code's native MCP directory structure.
+**MCPConfigFile (Claude Code, VS Code, Cursor, Windsurf, Pi):** All servers are written into a dedicated MCP config file under the `"mcpServers"` key. Claude Code and VS Code share the root `.mcp.json` (the portable format VS Code 1.140 recommends, and the only workspace file the VS Code Agent Host reads), so enabling both writes one file with identical entries. Pi reads `.pi/mcp.json` only after you grant project trust.
 
-**MCPConfigFile (VS Code, Cursor, Windsurf):** All servers are written into a dedicated MCP config file under the `"mcpServers"` key.
+**Moved locations:** Earlier releases wrote VS Code servers to `.vscode/mcp.json` (`"servers"` key) and Pi servers to `pi.json` (`"mcp"` key, which Pi never read). On the next `squadai apply`, squadai writes the new file first, then removes the servers it owns from the old location. Servers you added yourself stay where they are, and the old file is deleted only when nothing is left in it. Until that apply runs, `squadai verify` fails the `mcp-legacy-migrated` check.
 
 ### Selecting MCP Servers
 
@@ -330,7 +332,7 @@ Supported components: memory, rules, settings, mcp, agents, skills, commands, pl
 | System prompt | `CLAUDE.md` (project root) |
 | Team (prompt) | `CLAUDE.md` (marker block) |
 | Settings | `.claude/settings.json` |
-| MCP | `~/.claude/mcp/<name>.json` |
+| MCP | `.mcp.json` `"mcpServers"` key (shared with VS Code) |
 | Skills | `.claude/skills/<name>/SKILL.md` |
 
 Supported components: memory, rules, settings, skills, mcp, plugins. Does not support agents (uses prompt delegation instead), commands, or workflows.
@@ -354,7 +356,7 @@ Supported components: memory, rules, settings, mcp, agents, skills, plugins.
 | System prompt | `.instructions.md` (project root) |
 | Team (solo) | `.instructions.md` (marker block) |
 | Settings | `.vscode/settings.json` |
-| MCP | `.vscode/mcp.json` `"mcpServers"` key |
+| MCP | `.mcp.json` `"mcpServers"` key (shared with Claude Code) |
 | Skills | `.copilot/skills/<name>/SKILL.md` |
 
 Supported components: memory, rules, settings, mcp, skills.

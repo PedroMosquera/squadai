@@ -160,15 +160,25 @@ func (a *Adapter) WorkflowsDir(_ string) string {
 	return ""
 }
 
-// MCPRootKey returns "servers" — VS Code Copilot uses the "servers" key.
-func (a *Adapter) MCPRootKey() string { return "servers" }
+// MCPRootKey returns "mcpServers", the key of the portable workspace format
+// that VS Code and the Agent Host both read from <project>/.mcp.json.
+func (a *Adapter) MCPRootKey() string { return "mcpServers" }
 
 // MCPURLKey returns "url" — VS Code Copilot uses the standard URL key.
 func (a *Adapter) MCPURLKey() string { return "url" }
 
-// MCPConfigPath returns <projectDir>/.vscode/mcp.json.
+// MCPConfigPath returns <projectDir>/.mcp.json, the same file and entry shape
+// the Claude Code adapter writes. Both adapters must keep serializing entries
+// identically or a shared apply will flap between them.
 func (a *Adapter) MCPConfigPath(projectDir string) string {
-	return filepath.Join(projectDir, ".vscode", "mcp.json")
+	return filepath.Join(projectDir, ".mcp.json")
+}
+
+// LegacyMCPConfig returns the location squadai wrote before VS Code 1.140. The
+// Agent Host does not read it directly, so the MCP installer moves
+// squadai-owned servers out of it.
+func (a *Adapter) LegacyMCPConfig(projectDir string) (path, rootKey string) {
+	return filepath.Join(projectDir, ".vscode", "mcp.json"), "servers"
 }
 
 // MCPCommandStyle returns "split" — VS Code Copilot uses command + args.

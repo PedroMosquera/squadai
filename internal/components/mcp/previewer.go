@@ -74,6 +74,11 @@ func (i *Installer) detectConflicts(action domain.PlannedAction, projectDir stri
 	if strings.HasPrefix(action.Description, "mcp:toml:") {
 		return nil, nil
 	}
+	// The legacy migration only removes servers squadai owns; it never writes
+	// over a user value.
+	if strings.HasPrefix(action.Description, legacyPrefix) {
+		return nil, nil
+	}
 	existing, err := fileutil.ReadJSONFile(action.TargetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read existing JSON: %w", err)

@@ -9,6 +9,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
 	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -372,6 +373,38 @@ func TestOverrideAdapter_MCPTOMLConfigPath_ConfigDirOverride(t *testing.T) {
 	want := filepath.Join(home, "custom-codex", "config.toml")
 	if got := tc.MCPTOMLConfigPath(home); got != want {
 		t.Errorf("MCPTOMLConfigPath = %q, want %q", got, want)
+	}
+}
+
+func TestOverrideAdapter_LegacyMCPConfig_DelegatesToBase(t *testing.T) {
+	projectDir := t.TempDir()
+	writeOverride(t, projectDir, domain.AgentVSCodeCopilot, OverrideSpec{Delegation: "solo"})
+
+	wrapped, err := ApplyOverride(vscode.New(), projectDir)
+	if err != nil {
+		t.Fatalf("ApplyOverride: %v", err)
+	}
+	lc, ok := wrapped.(interface{ LegacyMCPConfig(string) (string, string) })
+	if !ok {
+		t.Fatal("OverrideAdapter should expose LegacyMCPConfig")
+	}
+	path, rootKey := lc.LegacyMCPConfig(projectDir)
+	if want := filepath.Join(projectDir, ".vscode", "mcp.json"); path != want || rootKey != "servers" {
+		t.Errorf("LegacyMCPConfig = (%q, %q), want (%q, %q)", path, rootKey, want, "servers")
+	}
+}
+
+func TestOverrideAdapter_LegacyMCPConfig_NoLegacyBase_Empty(t *testing.T) {
+	projectDir := t.TempDir()
+	writeOverride(t, projectDir, domain.AgentOpenCode, OverrideSpec{Delegation: "solo"})
+
+	wrapped, err := ApplyOverride(opencode.New(), projectDir)
+	if err != nil {
+		t.Fatalf("ApplyOverride: %v", err)
+	}
+	lc := wrapped.(interface{ LegacyMCPConfig(string) (string, string) })
+	if path, rootKey := lc.LegacyMCPConfig(projectDir); path != "" || rootKey != "" {
+		t.Errorf("LegacyMCPConfig = (%q, %q), want empty for adapter without a legacy location", path, rootKey)
 	}
 }
 

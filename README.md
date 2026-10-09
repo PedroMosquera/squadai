@@ -108,6 +108,8 @@ Different agents handle sub-agents differently. squadai adapts:
 
 `squadai apply` registers SquadAI's own MCP server (`squadai mcp-server`) in every enabled agent: Claude Code, OpenCode, Cursor, Windsurf, VS Code Copilot, Pi, and Codex. That means your agents can run SquadAI themselves and get the same outcomes everywhere: check `status`, `plan`/`apply`/`verify` config changes, run `doctor`, and search or add project memory, all without leaving the agent console.
 
+Project MCP servers land in each agent's native file: `.mcp.json` (Claude Code and VS Code share it), `.cursor/mcp.json`, `.windsurf/mcp_config.json`, `.pi/mcp.json` (Pi reads it once you trust the project), `opencode.json`, and `~/.codex/config.toml`.
+
 It's on by default (the `squadai` entry in the curated MCP catalog is pre-checked). Deselect it in the wizard or pass `--mcp=none` (or an explicit `--mcp=` list without `squadai`) to `squadai init` to opt out. The registration invokes the `squadai` binary from PATH; `squadai doctor` warns if it can't be found.
 
 ---
