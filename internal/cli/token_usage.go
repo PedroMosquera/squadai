@@ -15,6 +15,7 @@ import (
 
 func RunTokenUsage(args []string, stdout io.Writer) error {
 	jsonOut := false
+	againstBudget := false
 	sinceStr := "7d"
 
 	for i := 0; i < len(args); i++ {
@@ -22,6 +23,8 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 		switch {
 		case arg == "--json":
 			jsonOut = true
+		case arg == "--against-budget":
+			againstBudget = true
 		case arg == "--watch":
 			fmt.Fprintln(stdout, "--watch is not yet implemented")
 			return nil
@@ -32,7 +35,7 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 			i++
 			sinceStr = args[i]
 		case arg == "-h", arg == "--help":
-			fmt.Fprintln(stdout, "Usage: squadai token-usage [--since <dur>] [--json] [--watch]")
+			fmt.Fprintln(stdout, "Usage: squadai token-usage [--since <dur>] [--json] [--against-budget] [--watch]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Aggregate real token usage from agent session transcripts.")
 			fmt.Fprintln(stdout, "Scans Claude Code, OpenCode and Pi session transcripts for token")
@@ -41,6 +44,9 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --since <dur>   Time window: 7d, 30d, or all (default: 7d)")
 			fmt.Fprintln(stdout, "  --json          Output as JSON")
+			fmt.Fprintln(stdout, "  --against-budget")
+			fmt.Fprintln(stdout, "                  Enforce configured token budgets on the last 24h:")
+			fmt.Fprintln(stdout, "                  warn/ask print to stderr, block exits with code 9")
 			fmt.Fprintln(stdout, "  --watch         Tail the latest session (not yet implemented)")
 			return nil
 		case strings.HasPrefix(arg, "--since="):
@@ -79,29 +85,44 @@ func RunTokenUsage(args []string, stdout io.Writer) error {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", msg)
 	}
 
+	// One last-24h aggregate feeds both the human footer and --against-budget.
+	// Config or aggregation failures suppress budgets rather than failing the
+	// usage report itself.
+	var usage domain.UsageConfig
+	var daily *session.Aggregation
+	if merged, err := loadAndMerge(homeDir, projectDir); err == nil {
+		usage = merged.Usage
+		if usage.DailyTokenBudget > 0 || usage.SessionTokenBudget > 0 {
+			daily, _ = session.Aggregate(homeDir, session.AggregateOptions{
+				Since:      24 * time.Hour,
+				ProjectDir: projectDir,
+			})
+		}
+	}
+	budget := evaluateBudgets(usage, daily)
+
 	if jsonOut {
-		data, err := json.MarshalIndent(agg, "", "  ")
+		data, err := json.MarshalIndent(tokenUsageJSON{Aggregation: agg, Budget: budget}, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal token usage: %w", err)
 		}
 		fmt.Fprintln(stdout, string(data))
-		return nil
+	} else {
+		printTokenUsageHuman(stdout, agg)
+		printBudgetFooter(stdout, usage, daily)
 	}
 
-	printTokenUsageHuman(stdout, agg)
-
-	// Budget footer (warn-only): compare last-24h usage against the merged
-	// budget config. Config load failures just suppress the footer.
-	if merged, err := loadAndMerge(homeDir, projectDir); err == nil {
-		daily, err := session.Aggregate(homeDir, session.AggregateOptions{
-			Since:      24 * time.Hour,
-			ProjectDir: projectDir,
-		})
-		if err == nil {
-			printBudgetFooter(stdout, merged.Usage, daily)
-		}
+	if againstBudget {
+		return applyBudgetEnforcement(os.Stderr, budget)
 	}
 	return nil
+}
+
+// tokenUsageJSON keeps the Aggregation fields at the top level so the budget
+// field is purely additive for existing --json consumers.
+type tokenUsageJSON struct {
+	*session.Aggregation
+	Budget *budgetReport `json:"budget,omitempty"`
 }
 
 func printTokenUsageHuman(w io.Writer, agg *session.Aggregation) {

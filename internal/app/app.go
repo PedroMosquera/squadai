@@ -629,6 +629,7 @@ func buildCommandRegistry() helpOutput {
 				Flags: []cmdFlag{
 					{Name: "--since", Type: "string", Description: "Time window: 7d, 30d, or all (default: 7d)"},
 					{Name: "--json", Type: "bool", Description: "Output as JSON"},
+					{Name: "--against-budget", Type: "bool", Description: "Enforce configured token budgets on the last 24h (block exits with code 9)"},
 				},
 			},
 			{

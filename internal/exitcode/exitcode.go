@@ -6,15 +6,16 @@ package exitcode
 import "fmt"
 
 const (
-	OK          = 0 // success
-	Unexpected  = 1 // unhandled / internal error
-	Config      = 2 // invalid config, unknown flag, schema violation
-	Policy      = 3 // policy violation, locked field overridden
-	Drift       = 4 // drift detected (verify --strict)
-	NotFound    = 5 // resource not found (plugin, backup ID, agent)
+	OK           = 0 // success
+	Unexpected   = 1 // unhandled / internal error
+	Config       = 2 // invalid config, unknown flag, schema violation
+	Policy       = 3 // policy violation, locked field overridden
+	Drift        = 4 // drift detected (verify --strict)
+	NotFound     = 5 // resource not found (plugin, backup ID, agent)
 	Precondition = 6 // precondition failed (registry not synced, no git repo)
-	Network     = 7 // network / GitHub API error
-	Permission  = 8 // file permission denied or write protected
+	Network      = 7 // network / GitHub API error
+	Permission   = 8 // file permission denied or write protected
+	Budget       = 9 // token budget exceeded under block enforcement
 )
 
 // AppError is returned by CLI functions when the error maps to a known exit
@@ -142,4 +143,13 @@ func ErrNetwork(url string, cause error) *AppError {
 func ErrPermission(path string, cause error) *AppError {
 	return Wrap(Permission, "E-801", "permission denied: "+path,
 		"Check file permissions or run with appropriate privileges.", cause)
+}
+
+// ─── E-9xx: budget errors ─────────────────────────────────────────────────────
+
+// ErrBudgetExceeded reports token budgets exceeded under block enforcement.
+// kinds names the exceeded budgets, e.g. "daily, session".
+func ErrBudgetExceeded(kinds string) *AppError {
+	return New(Budget, "E-901", "token budget exceeded: "+kinds,
+		"Lower usage or raise usage.daily_token_budget / usage.session_token_budget in .squadai/project.json.")
 }
