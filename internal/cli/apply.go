@@ -491,9 +491,8 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 
 	fmt.Fprintln(stdout, "\nApply complete. Use 'squadai verify' to check.")
 
-	// Show a one-time discoverability nudge when git hooks are not yet set up.
-	// Suppress on any error (no .git dir, permission issue, etc.) so the nudge
-	// never causes apply to fail or produce noise in non-git environments.
+	// Repeats on every apply until hooks are installed. Detection errors are
+	// swallowed so the nudge never fails apply or shows outside a git repo.
 	if !jsonOut {
 		if !hooksInstalled(projectDir) {
 			gitDir := filepath.Join(projectDir, ".git")
