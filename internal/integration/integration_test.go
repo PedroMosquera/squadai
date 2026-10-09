@@ -2085,18 +2085,18 @@ func buildSDDPiConfig(t *testing.T, home, project string) *domain.MergedConfig {
 // apply → verify --strict → doctor (drift checks).
 //
 // Hermetic: does not require the `pi` binary to be installed or ~/.pi to exist.
-// The planner and verifier use the adapters list passed in — they do not call
+// The planner and verifier use the adapters list passed in; they do not call
 // adapter.Detect() for configured adapters during their checks. The doctor's
 // "agents" category would call Detect() and return CheckSkip if the binary is
 // absent, but this test scopes the doctor run to the "drift" category only,
 // which is entirely file-based and deterministic after apply.
 //
 // Doctor categories skipped (with reason):
-//   - "environment": checks system binaries (node, git) — CI-environment-dependent
-//   - "agents":      calls adapter.Detect() / exec.LookPath("pi") — Pi binary absent in CI
-//   - "config":      team-standards.md warns if missing — not Pi-specific
-//   - "mcp":         probes external MCP servers — network-dependent
-//   - "filesystem":  checks ~/.squadai write access — partially deterministic;
+//   - "environment": checks system binaries (node, git), CI-environment-dependent
+//   - "agents":      calls adapter.Detect() / exec.LookPath("pi"), Pi binary absent in CI
+//   - "config":      team-standards.md warns if missing, not Pi-specific
+//   - "mcp":         probes external MCP servers, network-dependent
+//   - "filesystem":  checks ~/.squadai write access, partially deterministic;
 //     we assert only "drift" to keep the test focused and portable
 func TestFullPipeline_SDD_Pi(t *testing.T) {
 	home := t.TempDir()
@@ -2104,7 +2104,7 @@ func TestFullPipeline_SDD_Pi(t *testing.T) {
 
 	merged := buildSDDPiConfig(t, home, project)
 
-	// Production Pi adapter — no pi binary required for apply/verify.
+	// Production Pi adapter: no pi binary required for apply/verify.
 	// See test-level doc comment for why agent detection is not exercised here.
 	adapter := pi.New()
 
