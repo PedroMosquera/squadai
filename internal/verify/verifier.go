@@ -3,8 +3,11 @@ package verify
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/components/bundle"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
@@ -145,6 +148,10 @@ func (v *Verifier) VerifyWithSet(set *bundle.Set, cfg *domain.MergedConfig, adap
 			tagResults(results, "efficiency")
 			collectResults(report, results)
 		}
+
+		if adapter.ID() == domain.AgentCodex {
+			collectResults(report, checkCodexProjectDocSize(adapter, homeDir, projectDir))
+		}
 	}
 
 	// Verify copilot instructions.
@@ -172,6 +179,35 @@ func (v *Verifier) VerifyWithSet(set *bundle.Set, cfg *domain.MergedConfig, adap
 	}
 
 	return report, nil
+}
+
+// checkCodexProjectDocSize warns when AGENTS.md is larger than Codex's
+// project_doc_max_bytes. Codex truncates silently (log-level warning only), and
+// the root file is first in the chain, so its size alone is enough to flag.
+// Passed stays true: this is advisory and must not fail verify.
+func checkCodexProjectDocSize(adapter domain.Adapter, homeDir, projectDir string) []domain.VerifyResult {
+	path := adapter.ProjectRulesFile(projectDir)
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	limit := int64(codex.ProjectDocMaxBytes(adapter.SettingsPath(homeDir), projectDir))
+	if info.Size() <= limit {
+		return []domain.VerifyResult{{
+			Check:     "rules-file-size-cap",
+			Passed:    true,
+			Severity:  domain.SeverityInfo,
+			Component: "rules",
+		}}
+	}
+	return []domain.VerifyResult{{
+		Check:     "rules-file-size-cap",
+		Passed:    true,
+		Severity:  domain.SeverityWarning,
+		Component: "rules",
+		Message: fmt.Sprintf("%s is %d bytes, over the %d-byte Codex project_doc_max_bytes cap; the last %d bytes are invisible to Codex (raise project_doc_max_bytes in .codex/config.toml or move content into nested AGENTS.md files)",
+			filepath.Base(path), info.Size(), limit, info.Size()-limit),
+	}}
 }
 
 // checkAgentHealth verifies that configured adapters are detected and reports

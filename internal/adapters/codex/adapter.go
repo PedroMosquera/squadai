@@ -189,8 +189,9 @@ func (a *Adapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
 // RulesFrontmatter returns empty string — Codex uses marker-based injection.
 func (a *Adapter) RulesFrontmatter() string { return "" }
 
-// RulesFileSizeCap returns 0 — Codex has no known rules file size limit.
-func (a *Adapter) RulesFileSizeCap() int { return 0 }
+// RulesFileSizeCap returns Codex's default AGENTS.md byte budget. The value a
+// given project actually gets is ProjectDocMaxBytes, which honors config.toml.
+func (a *Adapter) RulesFileSizeCap() int { return DefaultProjectDocMaxBytes }
 
 // ConfigDir returns the root config directory for Codex.
 func ConfigDir(homeDir string) string {

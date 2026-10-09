@@ -99,9 +99,9 @@ type Adapter interface {
 	// Returns empty string for agents that use marker-based injection.
 	RulesFrontmatter() string
 
-	// RulesFileSizeCap returns the maximum number of characters allowed in the
-	// rules file for this adapter, or 0 if there is no known limit.
-	// Windsurf's global_rules.md has a hard 6,000-character cap.
+	// RulesFileSizeCap returns the maximum size of the rules file the agent
+	// will read, or 0 if there is no known limit. Windsurf's global_rules.md
+	// has a hard 6,000-character cap; Codex reads 32 KiB of AGENTS.md by default.
 	RulesFileSizeCap() int
 }
 

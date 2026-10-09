@@ -323,7 +323,7 @@ func TestAdapter_RulesFrontmatter(t *testing.T) {
 
 func TestAdapter_RulesFileSizeCap(t *testing.T) {
 	a := New()
-	if got := a.RulesFileSizeCap(); got != 0 {
-		t.Errorf("RulesFileSizeCap() = %d, want 0", got)
+	if got := a.RulesFileSizeCap(); got != DefaultProjectDocMaxBytes {
+		t.Errorf("RulesFileSizeCap() = %d, want %d", got, DefaultProjectDocMaxBytes)
 	}
 }

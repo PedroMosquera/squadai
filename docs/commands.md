@@ -227,6 +227,9 @@ Checks include:
 - Memory protocol files exist and contain correct content
 - Copilot instructions file exists and contains managed marker blocks
 - Policy-required values are in effect
+- When Codex is enabled, `AGENTS.md` fits in Codex's `project_doc_max_bytes` budget (`rules-file-size-cap`)
+
+Codex reads at most `project_doc_max_bytes` of `AGENTS.md` (32768 bytes by default) and truncates the rest, so anything past the cap never reaches the model. The budget is shared by the whole chain of `AGENTS.md` files from the repo root down to the working directory, and the root file is read first. Verify compares the root `AGENTS.md` against the cap, using `project_doc_max_bytes` from `.codex/config.toml` in the project, then `~/.codex/config.toml`, then the default. An oversized file is reported as a warning with its size and the cap; it does not fail verify.
 
 **Example:**
 

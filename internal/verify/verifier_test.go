@@ -2,10 +2,13 @@ package verify
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
@@ -1137,5 +1140,68 @@ func TestVerify_Workflows_SkippedForNonWorkflowAdapter(t *testing.T) {
 		if r.Component == "workflows" {
 			t.Errorf("opencode should not produce workflows results, got check %q", r.Check)
 		}
+	}
+}
+
+// ─── Codex AGENTS.md size ───────────────────────────────────────────────────
+
+func runCodexProjectDocVerify(t *testing.T, agentsMDBytes int, codexEnabled bool) *domain.VerifyReport {
+	t.Helper()
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte(strings.Repeat("a", agentsMDBytes)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &domain.MergedConfig{
+		Adapters: map[string]domain.AdapterConfig{
+			"codex": {Enabled: codexEnabled},
+		},
+		Components: map[string]domain.ComponentConfig{
+			string(domain.ComponentEfficiency): {Enabled: false},
+		},
+	}
+	report, err := New().Verify(cfg, []domain.Adapter{codex.New()}, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return report
+}
+
+func findSizeCapWarning(report *domain.VerifyReport) *domain.VerifyResult {
+	for i, r := range report.Results {
+		if r.Check == "rules-file-size-cap" && r.Severity == domain.SeverityWarning {
+			return &report.Results[i]
+		}
+	}
+	return nil
+}
+
+func TestVerify_CodexAgentsMD_UnderCap_NoWarning(t *testing.T) {
+	report := runCodexProjectDocVerify(t, codex.DefaultProjectDocMaxBytes, true)
+	if w := findSizeCapWarning(report); w != nil {
+		t.Errorf("unexpected size-cap warning: %q", w.Message)
+	}
+}
+
+func TestVerify_CodexAgentsMD_OverCap_Warns(t *testing.T) {
+	size := codex.DefaultProjectDocMaxBytes + 100
+	report := runCodexProjectDocVerify(t, size, true)
+	w := findSizeCapWarning(report)
+	if w == nil {
+		t.Fatalf("expected rules-file-size-cap warning, got results %+v", report.Results)
+	}
+	if !w.Passed {
+		t.Error("size-cap warning must not fail verify")
+	}
+	for _, want := range []string{fmt.Sprint(size), fmt.Sprint(codex.DefaultProjectDocMaxBytes), "invisible to Codex"} {
+		if !strings.Contains(w.Message, want) {
+			t.Errorf("message %q missing %q", w.Message, want)
+		}
+	}
+}
+
+func TestVerify_CodexAgentsMD_OverCap_CodexDisabled_NoWarning(t *testing.T) {
+	report := runCodexProjectDocVerify(t, codex.DefaultProjectDocMaxBytes+100, false)
+	if w := findSizeCapWarning(report); w != nil {
+		t.Errorf("unexpected size-cap warning with codex disabled: %q", w.Message)
 	}
 }
