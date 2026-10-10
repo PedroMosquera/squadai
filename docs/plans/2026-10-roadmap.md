@@ -44,7 +44,7 @@ Everything below is ranked by how much it moves that sentence.
 | Runtime profile switch | Done at config time | `squadai profile`, `apply --profile`. Include/exclude globs not enforced. |
 | Context providers | Partial | MCP catalog has context7, github, sentry. No providers component. |
 | Attention events | Partial | `watch` streams governance events, not agent state. |
-| Removal list | Only `enforcement=warn` done | Banner still on by default, `explain` and `install-commands` still exist, per-role files still generated. |
+| Removal list | Only `enforcement=warn` done | Banner still on by default, `explain` still exists, per-role files still generated. |
 
 ## 4. Phase 0: correctness (do first)
 
@@ -85,7 +85,7 @@ Each removal is its own small change. Do them alongside Phase 0.
 |---|---|
 | Banner and `brand` component | Default off in every preset. Keep the flag. |
 | `explain` | Remove. `--help` and docs cover it. |
-| `install-commands` | Fold into `apply` as the commands component for Claude (today Claude's `ProjectCommandsDir` is empty, which is why the separate command exists). |
+| `install-commands` | Fold into `apply` as the commands component for Claude (today Claude's `ProjectCommandsDir` is empty, which is why the separate command exists). Done: the commands component writes the slash commands, the agents component writes `squadai-manager`, and the command is removed. |
 | `plugins sync` from `wshobson/agents` | Replace with declarations in project.json that delegate to each harness (`enabledPlugins` for Claude, marketplace installs for Codex and Pi). |
 
 ## 8. Dropped or deferred

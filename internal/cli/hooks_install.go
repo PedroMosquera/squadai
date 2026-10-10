@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/exitcode"
 )
 
@@ -151,71 +150,6 @@ func installHookWithBody(hooksDir, name, body string) error {
 	}
 
 	return os.WriteFile(hookPath, []byte(content), 0755)
-}
-
-// RunInstallCommands writes the squadai-manager agent to .claude/agents/.
-// Idempotent. The SquadAI slash commands it used to write are now installed
-// by apply through the commands component.
-func RunInstallCommands(args []string, stdout io.Writer) error {
-	jsonOut := false
-	for _, arg := range args {
-		switch arg {
-		case "--json":
-			jsonOut = true
-		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai install-commands [--json]")
-			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Install the squadai-manager agent into .claude/agents/.")
-			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "SquadAI slash commands (/squadai-*, /memory-*) are installed by")
-			fmt.Fprintln(stdout, "'squadai apply' when the commands component is enabled.")
-			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Flags:")
-			fmt.Fprintln(stdout, "  --json  Output result as JSON.")
-			return nil
-		}
-	}
-
-	projectDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("resolve working directory: %w", err)
-	}
-
-	agentsDir := filepath.Join(projectDir, ".claude", "agents")
-	if err := os.MkdirAll(agentsDir, 0755); err != nil {
-		return exitcode.ErrPermission(agentsDir, err)
-	}
-
-	type fileResult struct {
-		Path   string `json:"path"`
-		Status string `json:"status"`
-	}
-
-	var installed []fileResult
-
-	agentContent, err := assets.Read("agents/squadai-manager.md")
-	if err != nil {
-		return fmt.Errorf("read asset squadai-manager.md: %w", err)
-	}
-	agentDest := filepath.Join(agentsDir, "squadai-manager.md")
-	agentStatus := "installed"
-	if _, statErr := os.Stat(agentDest); statErr == nil {
-		agentStatus = "updated"
-	}
-	if err := os.WriteFile(agentDest, []byte(agentContent+"\n"), 0644); err != nil {
-		return exitcode.ErrPermission(agentDest, err)
-	}
-	installed = append(installed, fileResult{Path: agentDest, Status: agentStatus})
-
-	if jsonOut {
-		writeJSONResult(stdout, true, map[string]any{"installed": installed})
-		return nil
-	}
-
-	fmt.Fprintf(stdout, "  [%s] %s\n", agentStatus, agentDest)
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Slash commands are installed by 'squadai apply' (commands component).")
-	return nil
 }
 
 // ─── Plugins marketplace ──────────────────────────────────────────────────────

@@ -2610,29 +2610,3 @@ func TestRunApply_NudgeAbsent_InJSONMode(t *testing.T) {
 		t.Errorf("apply --json output should NOT contain nudge, got:\n%s", out)
 	}
 }
-
-// ─── install-commands ─────────────────────────────────────────────────────────
-
-func TestRunInstallCommands_WritesAgentOnly(t *testing.T) {
-	dir := t.TempDir()
-	orig, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(orig) })
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-
-	var buf bytes.Buffer
-	if err := RunInstallCommands(nil, &buf); err != nil {
-		t.Fatalf("RunInstallCommands: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(dir, ".claude", "agents", "squadai-manager.md")); err != nil {
-		t.Errorf("squadai-manager agent should be written: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, ".claude", "commands")); !os.IsNotExist(err) {
-		t.Errorf("slash commands belong to apply now; install-commands must not write .claude/commands (stat err=%v)", err)
-	}
-}

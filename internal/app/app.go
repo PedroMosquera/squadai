@@ -137,9 +137,6 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "install-hooks":
 		return cli.RunInstallHooks(args[1:], stdout)
 
-	case "install-commands":
-		return cli.RunInstallCommands(args[1:], stdout)
-
 	case "plugins":
 		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" || args[1] == "help" {
 			printPluginsUsage(stdout)
@@ -495,14 +492,6 @@ func buildCommandRegistry() helpOutput {
 				Name:        "install-hooks",
 				Group:       groupAdvanced,
 				Description: "Install Git hooks (pre-commit, post-merge, post-checkout) for squadai.",
-				Flags: []cmdFlag{
-					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
-				},
-			},
-			{
-				Name:        "install-commands",
-				Group:       groupAdvanced,
-				Description: "Install the squadai-manager agent to .claude/agents/ (slash commands come from apply).",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
 				},
