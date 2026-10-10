@@ -212,6 +212,7 @@ Less common but good to know:
 
 ```sh
 squadai verify              # post-apply compliance assertions
+squadai scan                # security scan of hooks and MCP configs (--fail-on, --json)
 squadai plan                # show the action plan without applying
 squadai update              # self-update (--check, --enable-checks, or apply latest)
 squadai remove --force      # remove all managed files

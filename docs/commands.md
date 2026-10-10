@@ -255,6 +255,33 @@ Failed checks include a message explaining what's wrong.
 
 ---
 
+## `squadai scan`
+
+Read-only security scan of the agent config in the current project. Nothing is written or executed.
+
+```sh
+squadai scan [--json] [--fail-on <info|low|medium|high|none>]
+```
+
+It reads the project MCP config of every supported harness, whether or not the harness is installed on this machine (`.mcp.json`, `.cursor/mcp.json`, `.windsurf/mcp_config.json`, `.pi/mcp.json`, the `mcp` block of `opencode.json`, and `[mcp_servers.*]` tables in `.codex/config.toml`), plus hooks, `env` and `permissions` in `.claude/settings.json`. User-level config under your home directory is not scanned.
+
+| Rule | Severity | Flags |
+|------|----------|-------|
+| `SCAN-001` | high | Literal secrets in MCP `env`, headers or args, hook commands, or the settings `env` block: `sk-`, `ghp_`/`gho_`/`ghs_`, `github_pat_`, `xoxb-`/`xoxp-`, AWS `AKIA`, and high-entropy values under `*_TOKEN`/`*_KEY`/`*SECRET*`/`*PASSWORD*` names. `${VAR}`, `$VAR` and `{env:VAR}` references are fine. Messages never print the full value. |
+| `SCAN-002` | high | Code downloaded and executed at runtime: `curl ... \| sh`, `wget ... \| bash`, `bash -c "$(curl ...)"`, `source <(curl ...)`. |
+| `SCAN-003` | medium | `npx -y`, `bunx` or `uvx` running a package without an exact version, including `@latest`. |
+| `SCAN-004` | high / medium | Hook commands that pass `tool_input` to `eval`, `sh -c` or a pipe into a shell (high), or expand it in an unquoted `$(...)` (medium). |
+| `SCAN-005` | low | `permissions.defaultMode: "bypassPermissions"` in project `.claude/settings.json`, which Claude Code has ignored since 2026-09-02. |
+| `SCAN-006` | medium | MCP servers reached over plain `http://` on a host other than localhost or a loopback address. |
+
+Exit codes: `0` when no finding is at or above `--fail-on` (default `high`), `3` (`E-203`) when at least one is, `2` for an invalid flag. `--fail-on none` always exits `0` after a successful scan. A config file that cannot be parsed is listed as skipped and does not stop the scan.
+
+`--json` prints `{"scanned": [...], "skipped": [...], "findings": [...]}`. Each finding has `id`, `severity`, `file` (relative to the project), `line` (omitted when unknown), `subject` and `message`, sorted by severity, then file and line.
+
+The MCP servers in SquadAI's curated catalog launch through `npx -y` without a pinned version, so a default `apply` reports `SCAN-003` at medium. It does not fail the default gate.
+
+---
+
 ## `squadai status`
 
 Show project health: detected adapters, enabled components, and managed file states.

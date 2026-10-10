@@ -95,6 +95,9 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "verify":
 		return cli.RunVerify(args[1:], stdout)
 
+	case "scan":
+		return cli.RunScan(args[1:], stdout)
+
 	case "status":
 		return cli.RunStatus(args[1:], stdout)
 
@@ -442,6 +445,15 @@ func buildCommandRegistry() helpOutput {
 				Flags: []cmdFlag{
 					{Name: "--strict", Type: "bool", Description: "Also fail on drift since last apply"},
 					{Name: "--json", Type: "bool", Description: "Output verify report as JSON"},
+				},
+			},
+			{
+				Name:        "scan",
+				Group:       groupDaily,
+				Description: "Security scan of hooks, MCP configs and project settings (read-only).",
+				Flags: []cmdFlag{
+					{Name: "--json", Type: "bool", Description: "Output findings as JSON"},
+					{Name: "--fail-on", Type: "string", Description: "Exit 3 at or above this severity: info, low, medium, high, none", Default: "high"},
 				},
 			},
 			{
