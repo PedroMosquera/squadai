@@ -469,7 +469,7 @@ func buildCommandRegistry() helpOutput {
 				Group:       groupAdvanced,
 				Description: "Monitor managed files for drift and stream events to stdout.",
 				Flags: []cmdFlag{
-					{Name: "--daemon", Type: "bool", Description: "Run in background (detached mode)"},
+					{Name: "--json", Type: "bool", Description: "Output events as JSON lines"},
 				},
 			},
 			{
