@@ -3,6 +3,7 @@ package agents
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -59,8 +60,8 @@ func buildTemplateData(adapter domain.Adapter, cfg *domain.MergedConfig, homeDir
 		TestCommand:        cfg.Meta.TestCommand,
 		BuildCommand:       cfg.Meta.BuildCommand,
 		LintCommand:        cfg.Meta.LintCommand,
-		SkillsDir:          adapter.ProjectSkillsDir(projectDir),
-		AgentsDir:          adapter.ProjectAgentsDir(projectDir),
+		SkillsDir:          projectRelative(projectDir, adapter.ProjectSkillsDir(projectDir)),
+		AgentsDir:          projectRelative(projectDir, adapter.ProjectAgentsDir(projectDir)),
 		TeamRoles:          cfg.Team,
 		MCPServers:         cfg.MCP,
 		HasContext7:        hasContext7,
@@ -69,6 +70,19 @@ func buildTemplateData(adapter domain.Adapter, cfg *domain.MergedConfig, homeDir
 		ModelTier:          tier,
 		ModelHint:          promptHintForTier(tier),
 	}
+}
+
+// projectRelative returns dir relative to projectDir. Rendered files are
+// committed and verified on other checkouts, so an absolute path would drift.
+func projectRelative(projectDir, dir string) string {
+	if projectDir == "" || dir == "" {
+		return dir
+	}
+	rel, err := filepath.Rel(projectDir, dir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return dir
+	}
+	return filepath.ToSlash(rel)
 }
 
 // promptHintForTier returns a human-readable model recommendation for the given tier.

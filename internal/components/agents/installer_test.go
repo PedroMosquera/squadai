@@ -1125,3 +1125,36 @@ func TestApplyTeamNative_SubagentHasMemoryStub_NotFullProtocol(t *testing.T) {
 		t.Error("subagent should NOT contain full protocol @librarian reference")
 	}
 }
+
+// Generated files are committed and verified on other checkouts, so they must
+// not embed the absolute project path.
+func TestApply_NoAbsoluteProjectPathInGeneratedAgents(t *testing.T) {
+	configs := map[string]func() *domain.MergedConfig{
+		"tdd": tddTeamConfig, "sdd": sddTeamConfig, "conventional": conventionalTeamConfig,
+	}
+	adapters := []domain.Adapter{claude.New(), opencode.New(), cursor.New(), windsurf.New(), vscode.New()}
+	for name, mk := range configs {
+		for _, adapter := range adapters {
+			t.Run(name+"/"+string(adapter.ID()), func(t *testing.T) {
+				project := t.TempDir()
+				inst := New(nil, mk(), project)
+				actions, err := inst.Plan(adapter, t.TempDir(), project)
+				if err != nil {
+					t.Fatalf("plan: %v", err)
+				}
+				for _, a := range actions {
+					if err := inst.Apply(a); err != nil {
+						t.Fatalf("Apply(%q): %v", a.TargetPath, err)
+					}
+					data, err := os.ReadFile(a.TargetPath)
+					if err != nil {
+						continue
+					}
+					if strings.Contains(string(data), project) {
+						t.Errorf("%s embeds the absolute project path %s", a.TargetPath, project)
+					}
+				}
+			})
+		}
+	}
+}
