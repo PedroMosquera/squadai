@@ -490,7 +490,7 @@ func buildCommandRegistry() helpOutput {
 			{
 				Name:        "install-commands",
 				Group:       groupAdvanced,
-				Description: "Install SquadAI slash commands + squadai-manager agent to .claude/.",
+				Description: "Install the squadai-manager agent to .claude/agents/ (slash commands come from apply).",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
 				},

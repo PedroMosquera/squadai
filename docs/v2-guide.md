@@ -334,8 +334,11 @@ Supported components: memory, rules, settings, mcp, agents, skills, commands, pl
 | Settings | `.claude/settings.json` |
 | MCP | `.mcp.json` `"mcpServers"` key (shared with VS Code) |
 | Skills | `.claude/skills/<name>/SKILL.md` |
+| Commands | `.claude/commands/<name>.md` (your `commands` plus SquadAI's `/squadai-*` and `/memory-*`) |
 
-Supported components: memory, rules, settings, skills, mcp, plugins. Does not support agents (uses prompt delegation instead), commands, or workflows.
+Supported components: memory, rules, settings, skills, mcp, plugins, commands. Does not support agents (uses prompt delegation instead) or workflows.
+
+Disabling the commands component (`"commands": {"enabled": false}`) makes the next apply delete the command files it wrote, as long as they are unchanged. Edited files and your own commands in `.claude/commands/` stay.
 
 ### Cursor
 

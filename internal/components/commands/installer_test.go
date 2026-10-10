@@ -105,14 +105,38 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	}
 }
 
-func TestPlan_Claude_ReturnsNil(t *testing.T) {
+func TestPlan_Claude_IncludesBuiltinsAndConfigCommands(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
-	inst := New(testCommands())
+	cmds := testCommands()
+	cmds["memory-search"] = domain.CommandDef{Description: "my override"}
+	inst := New(cmds)
 
-	actions, _ := inst.Plan(adapter, t.TempDir(), project)
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for claude, got %d", len(actions))
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	byName := map[string]domain.PlannedAction{}
+	for _, a := range actions {
+		byName[strings.TrimSuffix(filepath.Base(a.TargetPath), ".md")] = a
+	}
+	for _, name := range []string{"test", "squadai-plan", "memory-add", "memory-search"} {
+		a, ok := byName[name]
+		if !ok {
+			t.Errorf("missing action for %s", name)
+			continue
+		}
+		if want := filepath.Join(project, ".claude", "commands", name+".md"); a.TargetPath != want {
+			t.Errorf("%s TargetPath = %q, want %q", name, a.TargetPath, want)
+		}
+	}
+
+	got, err := inst.RenderContent(byName["memory-search"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "description: my override") {
+		t.Errorf("config command should shadow the built-in of the same name, got:\n%s", got)
 	}
 }
 

@@ -2611,9 +2611,9 @@ func TestRunApply_NudgeAbsent_InJSONMode(t *testing.T) {
 	}
 }
 
-// ─── install-commands memory slash commands ───────────────────────────────────
+// ─── install-commands ─────────────────────────────────────────────────────────
 
-func TestRunInstallCommands_WritesMemoryCommands(t *testing.T) {
+func TestRunInstallCommands_WritesAgentOnly(t *testing.T) {
 	dir := t.TempDir()
 	orig, err := os.Getwd()
 	if err != nil {
@@ -2629,25 +2629,10 @@ func TestRunInstallCommands_WritesMemoryCommands(t *testing.T) {
 		t.Fatalf("RunInstallCommands: %v", err)
 	}
 
-	commandsDir := filepath.Join(dir, ".claude", "commands")
-	for _, tc := range []struct {
-		file    string
-		wantRef string
-	}{
-		{"memory-add.md", "squadai memory add"},
-		{"memory-search.md", "squadai memory search"},
-		{"memory-promote.md", "squadai memory promote"},
-		{"memory-reindex.md", "squadai memory reindex"},
-	} {
-		t.Run(tc.file, func(t *testing.T) {
-			path := filepath.Join(commandsDir, tc.file)
-			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("expected %s to be written, got error: %v", tc.file, err)
-			}
-			if !strings.Contains(string(data), tc.wantRef) {
-				t.Errorf("%s should reference %q, content:\n%s", tc.file, tc.wantRef, string(data))
-			}
-		})
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "agents", "squadai-manager.md")); err != nil {
+		t.Errorf("squadai-manager agent should be written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "commands")); !os.IsNotExist(err) {
+		t.Errorf("slash commands belong to apply now; install-commands must not write .claude/commands (stat err=%v)", err)
 	}
 }

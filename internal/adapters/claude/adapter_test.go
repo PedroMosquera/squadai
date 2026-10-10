@@ -185,8 +185,9 @@ func TestProjectPaths_AgentsDir(t *testing.T) {
 	if got := a.ProjectAgentsDir(project); got != wantAgents {
 		t.Errorf("ProjectAgentsDir = %q, want %q", got, wantAgents)
 	}
-	if a.ProjectCommandsDir(project) != "" {
-		t.Error("ProjectCommandsDir should be empty for Claude")
+	wantCommands := filepath.Join(project, ".claude", "commands")
+	if got := a.ProjectCommandsDir(project); got != wantCommands {
+		t.Errorf("ProjectCommandsDir = %q, want %q", got, wantCommands)
 	}
 }
 

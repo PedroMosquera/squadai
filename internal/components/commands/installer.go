@@ -7,12 +7,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 )
 
 // Installer implements domain.ComponentInstaller for command definitions.
-// It writes .opencode/commands/<name>.md files with YAML frontmatter.
+// It writes <ProjectCommandsDir>/<name>.md files: config-defined commands with
+// YAML frontmatter, plus SquadAI's own slash commands for Claude Code.
 type Installer struct {
 	commands map[string]domain.CommandDef
 }
@@ -42,13 +44,16 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, nil
 	}
 
+	desired, err := i.desired(adapter)
+	if err != nil {
+		return nil, err
+	}
+
 	var actions []domain.PlannedAction
 
-	names := sortedKeys(i.commands)
-	for _, name := range names {
-		def := i.commands[name]
+	for _, name := range sortedNames(desired) {
+		content := desired[name]
 		targetPath := filepath.Join(commandsDir, name+".md")
-		content := renderCommand(name, def)
 		actionID := fmt.Sprintf("%s-command-%s", adapter.ID(), name)
 
 		existing, err := fileutil.ReadFileOrEmpty(targetPath)
@@ -86,6 +91,45 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	return actions, nil
 }
 
+// PlanRemoval returns delete actions for the command files Plan would write
+// for adapter that are still byte-identical to that content. Files the user
+// edited or authored in the same directory are left alone.
+func (i *Installer) PlanRemoval(adapter domain.Adapter, projectDir string) ([]domain.PlannedAction, error) {
+	if !adapter.SupportsComponent(domain.ComponentCommands) {
+		return nil, nil
+	}
+	commandsDir := adapter.ProjectCommandsDir(projectDir)
+	if commandsDir == "" {
+		return nil, nil
+	}
+
+	desired, err := i.desired(adapter)
+	if err != nil {
+		return nil, err
+	}
+
+	var actions []domain.PlannedAction
+	for _, name := range sortedNames(desired) {
+		targetPath := filepath.Join(commandsDir, name+".md")
+		existing, err := fileutil.ReadFileOrEmpty(targetPath)
+		if err != nil {
+			return nil, fmt.Errorf("read command %s: %w", name, err)
+		}
+		if string(existing) != desired[name] {
+			continue
+		}
+		actions = append(actions, domain.PlannedAction{
+			ID:          fmt.Sprintf("%s-command-%s", adapter.ID(), name),
+			Agent:       adapter.ID(),
+			Component:   domain.ComponentCommands,
+			Action:      domain.ActionDelete,
+			TargetPath:  targetPath,
+			Description: fmt.Sprintf("delete command %s (commands component disabled)", name),
+		})
+	}
+	return actions, nil
+}
+
 // Apply executes a single planned action.
 func (i *Installer) Apply(action domain.PlannedAction) error {
 	if action.Action == domain.ActionSkip {
@@ -99,13 +143,10 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return nil
 	}
 
-	name := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
-	def, ok := i.commands[name]
-	if !ok {
-		return fmt.Errorf("command %q not found in config", name)
+	content, err := i.RenderContent(action)
+	if err != nil {
+		return err
 	}
-
-	content := renderCommand(name, def)
 
 	dir := filepath.Dir(action.TargetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -130,14 +171,14 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	if len(i.commands) == 0 {
-		return nil, nil
+	desired, err := i.desired(adapter)
+	if err != nil {
+		return nil, err
 	}
 
 	var results []domain.VerifyResult
 
-	for _, name := range sortedKeys(i.commands) {
-		def := i.commands[name]
+	for _, name := range sortedNames(desired) {
 		targetPath := filepath.Join(commandsDir, name+".md")
 		data, err := os.ReadFile(targetPath)
 		if err != nil {
@@ -149,8 +190,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 			continue
 		}
 
-		expected := renderCommand(name, def)
-		if string(data) == expected {
+		if string(data) == desired[name] {
 			results = append(results, domain.VerifyResult{
 				Check:  fmt.Sprintf("command-%s-current", name),
 				Passed: true,
@@ -194,14 +234,54 @@ func renderCommand(name string, def domain.CommandDef) string {
 // without performing the write. Used by the diff renderer.
 func (i *Installer) RenderContent(action domain.PlannedAction) (string, error) {
 	name := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
-	def, ok := i.commands[name]
-	if !ok {
-		return "", fmt.Errorf("command %q not found in config", name)
+	if def, ok := i.commands[name]; ok {
+		return renderCommand(name, def), nil
 	}
-	return renderCommand(name, def), nil
+	if action.Agent == domain.AgentClaudeCode {
+		if content, err := builtinCommand(name); err == nil {
+			return content, nil
+		}
+	}
+	return "", fmt.Errorf("command %q not found in config", name)
 }
 
-func sortedKeys(m map[string]domain.CommandDef) []string {
+// desired returns the content of every command file this installer manages
+// for adapter, keyed by command name. A config-defined command shadows a
+// built-in of the same name.
+func (i *Installer) desired(adapter domain.Adapter) (map[string]string, error) {
+	out := make(map[string]string, len(i.commands))
+	if adapter.ID() == domain.AgentClaudeCode {
+		entries, err := assets.FS.ReadDir("commands")
+		if err != nil {
+			return nil, fmt.Errorf("list built-in commands: %w", err)
+		}
+		for _, e := range entries {
+			name := strings.TrimSuffix(e.Name(), ".md")
+			content, err := builtinCommand(name)
+			if err != nil {
+				return nil, err
+			}
+			out[name] = content
+		}
+	}
+	for name, def := range i.commands {
+		out[name] = renderCommand(name, def)
+	}
+	return out, nil
+}
+
+// builtinCommand returns a shipped SquadAI slash command. The trailing
+// newline keeps the bytes identical to what the removed install-commands
+// command wrote, so existing installs are adopted as up to date.
+func builtinCommand(name string) (string, error) {
+	content, err := assets.Read("commands/" + name + ".md")
+	if err != nil {
+		return "", fmt.Errorf("read built-in command %s: %w", name, err)
+	}
+	return content + "\n", nil
+}
+
+func sortedNames(m map[string]string) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

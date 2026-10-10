@@ -153,8 +153,9 @@ func installHookWithBody(hooksDir, name, body string) error {
 	return os.WriteFile(hookPath, []byte(content), 0755)
 }
 
-// RunInstallCommands writes SquadAI slash commands to .claude/commands/ and
-// the squadai-manager agent to .claude/agents/. Idempotent.
+// RunInstallCommands writes the squadai-manager agent to .claude/agents/.
+// Idempotent. The SquadAI slash commands it used to write are now installed
+// by apply through the commands component.
 func RunInstallCommands(args []string, stdout io.Writer) error {
 	jsonOut := false
 	for _, arg := range args {
@@ -164,21 +165,10 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: squadai install-commands [--json]")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Install SquadAI slash commands into .claude/commands/ and the")
-			fmt.Fprintln(stdout, "squadai-manager agent into .claude/agents/.")
+			fmt.Fprintln(stdout, "Install the squadai-manager agent into .claude/agents/.")
 			fmt.Fprintln(stdout)
-			fmt.Fprintln(stdout, "Slash commands installed:")
-			fmt.Fprintln(stdout, "  /squadai-plan      Preview planned changes")
-			fmt.Fprintln(stdout, "  /squadai-apply     Apply configuration")
-			fmt.Fprintln(stdout, "  /squadai-verify    Run compliance checks")
-			fmt.Fprintln(stdout, "  /squadai-status    Show health overview")
-			fmt.Fprintln(stdout, "  /squadai-doctor    Run diagnostics")
-			fmt.Fprintln(stdout, "  /squadai-context   Dump config as LLM context")
-			fmt.Fprintln(stdout, "  /squadai-init      Tune agent roles for this codebase")
-			fmt.Fprintln(stdout, "  /memory-add        Capture a note into project memory")
-			fmt.Fprintln(stdout, "  /memory-search     Search project memory")
-			fmt.Fprintln(stdout, "  /memory-promote    Promote inbox notes to permanent folders")
-			fmt.Fprintln(stdout, "  /memory-reindex    Rebuild the memory search index")
+			fmt.Fprintln(stdout, "SquadAI slash commands (/squadai-*, /memory-*) are installed by")
+			fmt.Fprintln(stdout, "'squadai apply' when the commands component is enabled.")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output result as JSON.")
@@ -191,12 +181,7 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
 
-	commandsDir := filepath.Join(projectDir, ".claude", "commands")
 	agentsDir := filepath.Join(projectDir, ".claude", "agents")
-
-	if err := os.MkdirAll(commandsDir, 0755); err != nil {
-		return exitcode.ErrPermission(commandsDir, err)
-	}
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		return exitcode.ErrPermission(agentsDir, err)
 	}
@@ -208,40 +193,6 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 
 	var installed []fileResult
 
-	// Install slash commands.
-	commandAssets := []string{
-		"squadai-plan",
-		"squadai-apply",
-		"squadai-verify",
-		"squadai-status",
-		"squadai-doctor",
-		"squadai-context",
-		"squadai-init",
-		"memory-add",
-		"memory-search",
-		"memory-promote",
-		"memory-reindex",
-	}
-	for _, name := range commandAssets {
-		content, err := assets.Read("commands/" + name + ".md")
-		if err != nil {
-			return fmt.Errorf("read asset %s: %w", name, err)
-		}
-		dest := filepath.Join(commandsDir, name+".md")
-		status := "installed"
-		if _, statErr := os.Stat(dest); statErr == nil {
-			status = "updated"
-		}
-		if err := os.WriteFile(dest, []byte(content+"\n"), 0644); err != nil {
-			return exitcode.ErrPermission(dest, err)
-		}
-		installed = append(installed, fileResult{Path: dest, Status: status})
-		if !jsonOut {
-			fmt.Fprintf(stdout, "  [%s] %s\n", status, dest)
-		}
-	}
-
-	// Install squadai-manager agent.
 	agentContent, err := assets.Read("agents/squadai-manager.md")
 	if err != nil {
 		return fmt.Errorf("read asset squadai-manager.md: %w", err)
@@ -255,17 +206,15 @@ func RunInstallCommands(args []string, stdout io.Writer) error {
 		return exitcode.ErrPermission(agentDest, err)
 	}
 	installed = append(installed, fileResult{Path: agentDest, Status: agentStatus})
-	if !jsonOut {
-		fmt.Fprintf(stdout, "  [%s] %s\n", agentStatus, agentDest)
-	}
 
 	if jsonOut {
 		writeJSONResult(stdout, true, map[string]any{"installed": installed})
 		return nil
 	}
 
+	fmt.Fprintf(stdout, "  [%s] %s\n", agentStatus, agentDest)
 	fmt.Fprintln(stdout)
-	fmt.Fprintf(stdout, "Installed %d slash command(s) and 1 agent.\n", len(commandAssets))
+	fmt.Fprintln(stdout, "Slash commands are installed by 'squadai apply' (commands component).")
 	return nil
 }
 

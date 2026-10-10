@@ -180,6 +180,15 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 				return nil, fmt.Errorf("plan commands for %s: %w", adapter.ID(), err)
 			}
 			actions = append(actions, cmdsActions...)
+		} else if ok {
+			// Only an explicit "enabled": false removes files. With the key
+			// absent, apply never owned them (they may predate it, written by
+			// the old install-commands command).
+			removeActions, err := commands.New(cfg.Commands).PlanRemoval(adapter, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan commands removal for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, removeActions...)
 		}
 
 		// Plugins component.

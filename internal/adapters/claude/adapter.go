@@ -94,7 +94,7 @@ func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentSettings,
 		domain.ComponentSkills, domain.ComponentMCP, domain.ComponentPlugins,
 		domain.ComponentAgents, domain.ComponentPermissions, domain.ComponentHooks,
-		domain.ComponentBrand, domain.ComponentEfficiency:
+		domain.ComponentBrand, domain.ComponentEfficiency, domain.ComponentCommands:
 		return true
 	default:
 		return false
@@ -121,9 +121,9 @@ func (a *Adapter) ProjectSkillsDir(projectDir string) string {
 	return filepath.Join(projectDir, ".claude", "skills")
 }
 
-// ProjectCommandsDir returns empty string — Claude Code does not support project commands.
-func (a *Adapter) ProjectCommandsDir(_ string) string {
-	return ""
+// ProjectCommandsDir returns <projectDir>/.claude/commands.
+func (a *Adapter) ProjectCommandsDir(projectDir string) string {
+	return filepath.Join(projectDir, ".claude", "commands")
 }
 
 // ConfigDir returns the root config directory for Claude Code.
