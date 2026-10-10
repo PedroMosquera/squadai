@@ -1,0 +1,47 @@
+name: squadai verify
+description: Fail the job when committed agent config drifts from .squadai/project.json, or when squadai scan finds risky hooks, MCP servers or settings.
+
+inputs:
+  version:
+    description: squadai version to install with go install, a release tag such as v1.2.3 or latest.
+    required: false
+    default: latest
+  working-directory:
+    description: Directory that holds .squadai/project.json.
+    required: false
+    default: .
+  scan:
+    description: Run squadai scan after verify (true or false).
+    required: false
+    default: 'true'
+  scan-fail-on:
+    description: Lowest scan severity that fails the job (info, low, medium, high or none).
+    required: false
+    default: high
+
+runs:
+  using: composite
+  steps:
+    # Inputs reach the shell through env, never through expression
+    # interpolation in run, so a crafted input cannot inject commands.
+    - name: Install squadai
+      shell: bash
+      env:
+        SQUADAI_VERSION: ${{ inputs.version }}
+        GOTOOLCHAIN: auto
+      run: |
+        go install "github.com/PedroMosquera/squadai/cmd/squadai@${SQUADAI_VERSION}"
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+    - name: squadai verify --ci
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: squadai verify --ci
+
+    - name: squadai scan
+      if: inputs.scan == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SCAN_FAIL_ON: ${{ inputs.scan-fail-on }}
+      run: squadai scan --fail-on "$SCAN_FAIL_ON"

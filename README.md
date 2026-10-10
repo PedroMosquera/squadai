@@ -190,6 +190,25 @@ Fields listed under `locked` can't be overridden by a developer's local `~/.squa
 
 See [`docs/policy.md`](docs/policy.md) for the full reference.
 
+## Verify in CI
+
+Commit the files `squadai apply` writes, then fail pull requests that drift from `.squadai/project.json` or carry risky agent config:
+
+```yaml
+on: pull_request
+jobs:
+  squadai:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PedroMosquera/squadai@main
+        with:
+          version: latest       # or a release tag such as v1.2.3
+          scan-fail-on: high    # scan: false skips the security scan
+```
+
+The action runs `go install github.com/PedroMosquera/squadai/cmd/squadai@<version>` (GitHub-hosted runners ship Go), then `squadai verify --ci` and `squadai scan --fail-on <scan-fail-on>`. Drift shows up as annotations on the changed files. Pin `uses:` to a tag or commit SHA for reproducible runs. `working-directory` points it at a project in a subdirectory.
+
 ---
 
 ## Commands
@@ -211,7 +230,7 @@ squadai memory <subcommand> # manage project memory (search, add, promote, statu
 Less common but good to know:
 
 ```sh
-squadai verify              # post-apply compliance assertions
+squadai verify              # post-apply compliance assertions (--ci for the CI drift gate)
 squadai scan                # security scan of hooks and MCP configs (--fail-on, --json)
 squadai plan                # show the action plan without applying
 squadai update              # self-update (--check, --enable-checks, or apply latest)

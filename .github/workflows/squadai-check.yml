@@ -20,5 +20,8 @@ jobs:
       - name: Validate policy
         if: hashFiles('.squadai/policy.json') != ''
         run: squadai validate-policy
-      - name: Diff check
-        run: squadai diff --exit-code
+      # Same commands as the action.yml at the repo root, which installs a release instead.
+      - name: Verify
+        run: squadai verify --ci
+      - name: Scan
+        run: squadai scan --fail-on high
