@@ -180,6 +180,45 @@ func TestRunInit_SquadaiIncludedByDefault_AllPresets(t *testing.T) {
 	}
 }
 
+// The brand entry stays in project.json, disabled, so users can opt in by
+// flipping one field instead of learning the component name.
+func TestRunInit_BrandOffByDefault_AllPresets(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"no_preset", nil},
+		{"solo_minimal", []string{"--preset=solo-minimal"}},
+		{"solo_power", []string{"--preset=solo-power"}},
+		{"team_standard", []string{"--preset=team-standard"}},
+		{"enterprise_locked", []string{"--preset=enterprise-locked"}},
+		{"full_squad", []string{"--preset=full-squad"}},
+		{"lean", []string{"--preset=lean"}},
+		{"custom", []string{"--preset=custom"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			project := setupInitDir(t)
+
+			var buf bytes.Buffer
+			if err := RunInit(tc.args, &buf); err != nil {
+				t.Fatalf("RunInit %v: %v", tc.args, err)
+			}
+			proj, err := config.LoadProject(project)
+			if err != nil {
+				t.Fatalf("load project config: %v", err)
+			}
+			cc, ok := proj.Components[string(domain.ComponentBrand)]
+			if !ok {
+				t.Fatalf("project.json components should list brand so users can opt in, got: %v", proj.Components)
+			}
+			if cc.Enabled {
+				t.Error("brand component should be disabled by default")
+			}
+		})
+	}
+}
+
 // TestRunInit_MCPSelectionWithoutSquadai_Excluded: an explicit --mcp list that
 // omits squadai must not sneak it back in — the entry stays deselectable.
 func TestRunInit_MCPSelectionWithoutSquadai_Excluded(t *testing.T) {

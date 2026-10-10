@@ -86,7 +86,7 @@ The result is a team where everyone's agents have:
 - **Context profiles** — built-in profiles for default, debug, feature, review, docs, incident, and cheap sessions
 - **Usage controls** — approximate session/daily token budgets and enforcement mode metadata
 - **Model routing metadata** — cheap, balanced, and premium profile labels, plus methodology role overrides
-- **Visual branding** — an ASCII-art banner injected into agent files so devs see SquadAI is active at session start (disable with `squadai apply --no-brand`)
+- **Optional visual branding**: an ASCII-art banner injected into agent files so devs see SquadAI is active at session start. Off by default; opt in with `"brand": {"enabled": true}` under `components` in `.squadai/project.json` (skip it for one run with `squadai apply --no-brand`)
 
 ### Adapters and delegation
 

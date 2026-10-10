@@ -61,14 +61,25 @@ func TestDefaultUserConfig_HasPiDisabled(t *testing.T) {
 	}
 }
 
-func TestDefaultUserConfig_HasBrandEnabled(t *testing.T) {
+func TestDefaultUserConfig_BrandDisabled(t *testing.T) {
 	cfg := DefaultUserConfig()
 	cc, ok := cfg.Components[string(ComponentBrand)]
 	if !ok {
 		t.Fatal("brand component not found in defaults")
 	}
-	if !cc.Enabled {
-		t.Error("brand should be enabled by default")
+	if cc.Enabled {
+		t.Error("brand should be disabled by default")
+	}
+}
+
+func TestDefaultProjectConfig_BrandDisabled(t *testing.T) {
+	cfg := DefaultProjectConfig()
+	cc, ok := cfg.Components[string(ComponentBrand)]
+	if !ok {
+		t.Fatal("brand component not found in defaults")
+	}
+	if cc.Enabled {
+		t.Error("brand should be disabled by default")
 	}
 }
 

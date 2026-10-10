@@ -342,7 +342,7 @@ func DefaultUserConfig() *UserConfig {
 		Components: map[string]ComponentConfig{
 			string(ComponentMemory):      {Enabled: true},
 			string(ComponentPermissions): {Enabled: true},
-			string(ComponentBrand):       {Enabled: true},
+			string(ComponentBrand):       {Enabled: false},
 			string(ComponentEfficiency):  {Enabled: true},
 		},
 		Paths: PathsConfig{
@@ -358,7 +358,7 @@ func DefaultProjectConfig() *ProjectConfig {
 		Preset:  PresetSoloMinimal,
 		Components: map[string]ComponentConfig{
 			string(ComponentMemory):     {Enabled: true},
-			string(ComponentBrand):      {Enabled: true},
+			string(ComponentBrand):      {Enabled: false},
 			string(ComponentEfficiency): {Enabled: true},
 		},
 		Copilot: CopilotConfig{

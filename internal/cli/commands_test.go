@@ -128,8 +128,8 @@ func TestRunInitApplyVerifyDiff_OpenCodePiSharedAgentsFileClean(t *testing.T) {
 	for _, section := range []string{
 		"squadai:memory:opencode",
 		"squadai:memory:pi",
-		"squadai:brand:opencode",
-		"squadai:brand:pi",
+		"squadai:efficiency:opencode",
+		"squadai:efficiency:pi",
 	} {
 		if !strings.Contains(body, section) {
 			t.Fatalf("AGENTS.md missing scoped section %q:\n%s", section, body)
@@ -182,8 +182,8 @@ func TestRunInitApplyVerifyRemove_OpenCodeCodexSharedAgentsFile(t *testing.T) {
 	for _, section := range []string{
 		"squadai:memory:opencode",
 		"squadai:memory:codex",
-		"squadai:brand:opencode",
-		"squadai:brand:codex",
+		"squadai:efficiency:opencode",
+		"squadai:efficiency:codex",
 	} {
 		if !strings.Contains(body, section) {
 			t.Fatalf("AGENTS.md missing scoped section %q:\n%s", section, body)

@@ -50,7 +50,7 @@ func buildSmartProjectConfig(meta domain.ProjectMeta, adapters []domain.Adapter,
 			string(domain.ComponentSkills):      {Enabled: true},
 			string(domain.ComponentWorkflows):   {Enabled: true},
 			string(domain.ComponentPermissions): {Enabled: true},
-			string(domain.ComponentBrand):       {Enabled: true},
+			string(domain.ComponentBrand):       {Enabled: false},
 		},
 		Copilot: domain.CopilotConfig{
 			InstructionsTemplate: "standard",
