@@ -137,9 +137,6 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	case "install-commands":
 		return cli.RunInstallCommands(args[1:], stdout)
 
-	case "explain":
-		return cli.RunExplain(args[1:], stdout)
-
 	case "plugins":
 		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" || args[1] == "help" {
 			printPluginsUsage(stdout)
@@ -497,11 +494,6 @@ func buildCommandRegistry() helpOutput {
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output result as JSON"},
 				},
-			},
-			{
-				Name:        "explain",
-				Group:       groupAdvanced,
-				Description: "Explain a SquadAI concept (config, policy, adapters, error-codes, ...).",
 			},
 			{
 				Name:        "memory",

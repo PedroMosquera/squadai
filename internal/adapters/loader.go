@@ -303,7 +303,7 @@ func ApplyOverrides(adapters []domain.Adapter, projectDir string) ([]domain.Adap
 }
 
 // EffectivePaths returns the effective paths for an adapter after applying
-// any override. Useful for 'squadai explain adapter <id>' and doctor checks.
+// any override.
 func EffectivePaths(adapter domain.Adapter, homeDir, projectDir string) map[string]string {
 	paths := map[string]string{
 		"config_dir":     adapter.GlobalConfigDir(homeDir),

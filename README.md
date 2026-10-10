@@ -205,7 +205,6 @@ squadai doctor              # run the full health-check suite; --fix auto-resolv
 squadai status              # quick view of adapters, components, managed files
 squadai status --daily      # daily control-plane summary for the current repo
 squadai token-budget        # per-session token cost of the current install
-squadai explain <topic>     # explain a config field, error code, or concept
 squadai memory <subcommand> # manage project memory (search, add, promote, status)
 ```
 
