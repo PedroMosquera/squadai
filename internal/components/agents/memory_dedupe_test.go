@@ -95,6 +95,9 @@ func TestTeamMode_MemoryEnabled_MigratesLegacyDuplicate(t *testing.T) {
 	doc := marker.InjectSection("", memory.SectionIDForAgentID(adapter.ID()),
 		memory.TemplateForAgentID(adapter.ID()))
 	doc = marker.InjectSection(doc, memorySectionID, "## Project Memory Protocol\n\nlegacy duplicate")
+	if err := os.MkdirAll(filepath.Dir(rulesPath), 0755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(rulesPath, []byte(doc), 0644); err != nil {
 		t.Fatal(err)
 	}

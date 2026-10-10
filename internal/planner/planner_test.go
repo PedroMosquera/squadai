@@ -7,6 +7,7 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
+	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
@@ -734,5 +735,45 @@ func TestPlan_DisabledAdapter_KeepsFilesSharedWithEnabledAdapter(t *testing.T) {
 	}
 	if !deletedCodexOnly {
 		t.Errorf("expected cleanup to delete codex-only file %s", codexOnly)
+	}
+}
+
+// The copilot instructions template writes the same file VS Code reads its
+// project rules from, so disabling VS Code must not delete it while the
+// template is configured.
+func TestPlan_DisabledVSCode_KeepsCopilotInstructionsWhenTemplateConfigured(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	vs := vscode.New()
+
+	target := filepath.Join(project, copilot.CopilotInstructionsPath)
+	if vs.ProjectRulesFile(project) != target {
+		t.Fatalf("test premise broken: VS Code rules file should be %s", target)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("# Team copilot notes\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &domain.MergedConfig{
+		Mode: domain.ModeTeam,
+		Adapters: map[string]domain.AdapterConfig{
+			string(domain.AgentVSCodeCopilot): {Enabled: false},
+		},
+		Components: map[string]domain.ComponentConfig{
+			"memory": {Enabled: true},
+		},
+		Copilot: domain.CopilotConfig{InstructionsTemplate: "standard"},
+	}
+	actions, err := New().Plan(cfg, []domain.Adapter{vs}, home, project)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	for _, a := range actions {
+		if a.Action == domain.ActionDelete && a.TargetPath == target {
+			t.Errorf("cleanup must not delete %s: the copilot instructions template still writes it", target)
+		}
 	}
 }

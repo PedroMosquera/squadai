@@ -339,7 +339,7 @@ func TestMultiAdapter_VSCode_NodeReact_MCPFormat(t *testing.T) {
 	}
 }
 
-// TestMultiAdapter_VSCode_NodeReact_RulesFormat verifies VS Code writes .instructions.md
+// TestMultiAdapter_VSCode_NodeReact_RulesFormat verifies VS Code writes .github/copilot-instructions.md
 // (plain text, no frontmatter) with a squadai memory marker.
 func TestMultiAdapter_VSCode_NodeReact_RulesFormat(t *testing.T) {
 	t.Parallel()
@@ -355,18 +355,17 @@ func TestMultiAdapter_VSCode_NodeReact_RulesFormat(t *testing.T) {
 		t.Fatal("VSCode/NodeReact/RulesFormat: apply should succeed")
 	}
 
-	// VS Code memory target is .instructions.md at project root (ProjectRulesFile).
-	instructionsMD := filepath.Join(dir, ".instructions.md")
-	assertFileExists(t, instructionsMD, "VSCode/NodeReact: .instructions.md")
-	assertFileContains(t, instructionsMD, "squadai", "VSCode/NodeReact: .instructions.md has squadai marker")
+	instructionsMD := filepath.Join(dir, ".github", "copilot-instructions.md")
+	assertFileExists(t, instructionsMD, "VSCode/NodeReact: copilot-instructions.md")
+	assertFileContains(t, instructionsMD, "squadai", "VSCode/NodeReact: copilot-instructions.md has squadai marker")
 
 	data, err := os.ReadFile(instructionsMD)
 	if err != nil {
-		t.Fatalf("read .instructions.md: %v", err)
+		t.Fatalf("read copilot-instructions.md: %v", err)
 	}
 	// Plain text — must NOT start with YAML frontmatter.
 	if strings.HasPrefix(string(data), "---\n") {
-		t.Error("VSCode/NodeReact: .instructions.md must not have YAML frontmatter (plain text only)")
+		t.Error("VSCode/NodeReact: copilot-instructions.md must not have YAML frontmatter (plain text only)")
 	}
 }
 
@@ -386,22 +385,85 @@ func TestMultiAdapter_VSCode_NodeReact_TemplateRendering(t *testing.T) {
 		t.Fatal("VSCode/NodeReact/TemplateRendering: apply should succeed")
 	}
 
-	instructionsMD := filepath.Join(dir, ".instructions.md")
-	assertFileExists(t, instructionsMD, "VSCode/NodeReact: .instructions.md")
+	instructionsMD := filepath.Join(dir, ".github", "copilot-instructions.md")
+	assertFileExists(t, instructionsMD, "VSCode/NodeReact: copilot-instructions.md")
 
 	data, err := os.ReadFile(instructionsMD)
 	if err != nil {
-		t.Fatalf("read .instructions.md: %v", err)
+		t.Fatalf("read copilot-instructions.md: %v", err)
 	}
 	content := string(data)
 
 	// Must have the agent-manager marker section injected.
 	if !strings.Contains(content, "<!-- squadai:memory") {
-		t.Error("VSCode/NodeReact: .instructions.md missing squadai:memory marker")
+		t.Error("VSCode/NodeReact: copilot-instructions.md missing squadai:memory marker")
 	}
 	// Must not be empty.
 	if len(strings.TrimSpace(content)) == 0 {
-		t.Error("VSCode/NodeReact: .instructions.md must not be empty")
+		t.Error("VSCode/NodeReact: copilot-instructions.md must not be empty")
+	}
+}
+
+// TestMultiAdapter_VSCode_LegacyInstructionsMigrated covers an install made
+// before squadai targeted .github/copilot-instructions.md: apply must move the
+// instructions, strip squadai's blocks from the old root .instructions.md, and
+// keep what the user wrote there.
+func TestMultiAdapter_VSCode_LegacyInstructionsMigrated(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	dir := scaffoldNodeReact(t)
+	meta := cli.DetectProjectMeta(dir)
+	merged := buildVSCodeNodeReactConfig(t, home, dir, meta)
+
+	legacy := filepath.Join(dir, ".instructions.md")
+	userNote := "# Team notes\n\nRun npm test before pushing.\n"
+	seed := userNote + "\n<!-- squadai:memory -->\nold squadai memory block\n<!-- /squadai:memory -->\n"
+	if err := os.WriteFile(legacy, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter := vscode.New()
+	legacyFailures := func() int {
+		t.Helper()
+		vReport, err := verify.New().Verify(merged, []domain.Adapter{adapter}, home, dir)
+		if err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+		n := 0
+		for _, r := range vReport.Results {
+			if r.Check == "instructions-legacy-migrated" && !r.Passed {
+				n++
+			}
+		}
+		return n
+	}
+	if n := legacyFailures(); n != 1 {
+		t.Errorf("verify before apply: %d failing instructions-legacy-migrated checks, want 1", n)
+	}
+
+	report := runPlanExecute(t, merged, adapter, home, dir)
+	if !report.Success {
+		for _, s := range report.Steps {
+			if s.Status == domain.StepFailed {
+				t.Errorf("step %q failed: %s", s.Action.ID, s.Error)
+			}
+		}
+		t.Fatal("VSCode/LegacyInstructions: apply should succeed")
+	}
+
+	data, err := os.ReadFile(legacy)
+	if err != nil {
+		t.Fatalf("legacy file with user content must survive: %v", err)
+	}
+	if string(data) != userNote {
+		t.Errorf("legacy .instructions.md = %q, want only the user note %q", data, userNote)
+	}
+	assertFileContains(t, filepath.Join(dir, ".github", "copilot-instructions.md"), "<!-- squadai:memory",
+		"VSCode/LegacyInstructions: memory block moved to copilot-instructions.md")
+
+	if n := legacyFailures(); n != 0 {
+		t.Errorf("verify after apply: %d failing instructions-legacy-migrated checks, want 0", n)
 	}
 }
 
@@ -421,7 +483,7 @@ func TestMultiAdapter_VSCode_NodeReact_Reversibility(t *testing.T) {
 		t.Fatal("VSCode/NodeReact/Reversibility: apply should succeed before remove test")
 	}
 
-	assertFileExists(t, filepath.Join(dir, ".instructions.md"), "VSCode/NodeReact: .instructions.md before remove")
+	assertFileExists(t, filepath.Join(dir, ".github", "copilot-instructions.md"), "VSCode/NodeReact: copilot-instructions.md before remove")
 	assertFileExists(t, filepath.Join(dir, ".mcp.json"), "VSCode/NodeReact: .mcp.json before remove")
 
 	removeReport, err := cli.Remove(cli.RemoveOptions{ProjectDir: dir})

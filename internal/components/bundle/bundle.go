@@ -18,6 +18,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/efficiency"
 	"github.com/PedroMosquera/squadai/internal/components/hooks"
+	"github.com/PedroMosquera/squadai/internal/components/legacyinstructions"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
 	"github.com/PedroMosquera/squadai/internal/components/permissions"
@@ -38,21 +39,22 @@ type Options struct {
 // Set holds every component installer + copilot manager. Fields are nil when
 // the corresponding component is disabled in the merged config.
 type Set struct {
-	Memory      *memory.Installer
-	Rules       *rules.Installer
-	Settings    *settings.Installer
-	Permissions *permissions.Installer
-	MCP         *mcp.Installer
-	Agents      *agents.Installer
-	Skills      *skills.Installer
-	Commands    *commands.Installer
-	Plugins     *plugins.Installer
-	Workflows   *workflows.Installer
-	AgentTeams  *agent_teams.Installer
-	Hooks       *hooks.Installer
-	Brand       *brand.Installer
-	Efficiency  *efficiency.Installer
-	Copilot     *copilot.Manager
+	Memory             *memory.Installer
+	Rules              *rules.Installer
+	Settings           *settings.Installer
+	Permissions        *permissions.Installer
+	MCP                *mcp.Installer
+	Agents             *agents.Installer
+	Skills             *skills.Installer
+	Commands           *commands.Installer
+	Plugins            *plugins.Installer
+	Workflows          *workflows.Installer
+	AgentTeams         *agent_teams.Installer
+	Hooks              *hooks.Installer
+	Brand              *brand.Installer
+	Efficiency         *efficiency.Installer
+	LegacyInstructions *legacyinstructions.Installer
+	Copilot            *copilot.Manager
 }
 
 // MemoryEnabled reports whether the memory component is enabled in cfg.
@@ -82,11 +84,12 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 	}
 
 	s := &Set{
-		Memory:      memory.New(memOpts),
-		Copilot:     copilot.New(),
-		Permissions: permissions.New(),
-		Brand:       brand.New(),
-		Efficiency:  efficiency.New(efficiency.Options{MemoryEnabled: MemoryEnabled(cfg)}),
+		Memory:             memory.New(memOpts),
+		Copilot:            copilot.New(),
+		Permissions:        permissions.New(),
+		Brand:              brand.New(),
+		Efficiency:         efficiency.New(efficiency.Options{MemoryEnabled: MemoryEnabled(cfg)}),
+		LegacyInstructions: legacyinstructions.New(projectDir),
 	}
 
 	if rulesCfg, ok := cfg.Components[string(domain.ComponentRules)]; ok && rulesCfg.Enabled {

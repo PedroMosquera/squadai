@@ -2,6 +2,7 @@ package planner
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/PedroMosquera/squadai/internal/components/agent_teams"
 	"github.com/PedroMosquera/squadai/internal/components/agents"
@@ -11,6 +12,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/components/efficiency"
 	"github.com/PedroMosquera/squadai/internal/components/hooks"
+	"github.com/PedroMosquera/squadai/internal/components/legacyinstructions"
 	"github.com/PedroMosquera/squadai/internal/components/mcp"
 	"github.com/PedroMosquera/squadai/internal/components/memory"
 	"github.com/PedroMosquera/squadai/internal/components/permissions"
@@ -41,6 +43,7 @@ type Planner struct {
 	hooksInstaller       *hooks.Installer
 	brandInstaller       *brand.Installer
 	efficiencyInstaller  *efficiency.Installer
+	legacyInstructions   *legacyinstructions.Installer
 	copilotManager       *copilot.Manager
 	opts                 Options
 }
@@ -80,6 +83,7 @@ func (p *Planner) loadFromSet(s *bundle.Set) {
 	p.hooksInstaller = s.Hooks
 	p.brandInstaller = s.Brand
 	p.efficiencyInstaller = s.Efficiency
+	p.legacyInstructions = s.LegacyInstructions
 	p.copilotManager = s.Copilot
 }
 
@@ -236,6 +240,14 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 			}
 			actions = append(actions, effActions...)
 		}
+
+		if p.legacyInstructions != nil {
+			legacyActions, err := p.legacyInstructions.Plan(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("plan legacy instructions for %s: %w", adapter.ID(), err)
+			}
+			actions = append(actions, legacyActions...)
+		}
 	}
 
 	// Copilot instructions (project-level, not adapter-specific).
@@ -274,6 +286,11 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 				keep[path] = true
 			}
 		}
+	}
+
+	// VS Code's rules file is also the copilot template's target.
+	if cfg.Copilot.InstructionsTemplate != "" {
+		keep[filepath.Join(projectDir, copilot.CopilotInstructionsPath)] = true
 	}
 
 	var cleanupActions []domain.PlannedAction
@@ -389,6 +406,9 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 	}
 	if p.efficiencyInstaller != nil {
 		installers[domain.ComponentEfficiency] = p.efficiencyInstaller
+	}
+	if p.legacyInstructions != nil {
+		installers[domain.ComponentCleanup] = p.legacyInstructions
 	}
 	return installers
 }

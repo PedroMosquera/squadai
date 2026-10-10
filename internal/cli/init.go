@@ -434,7 +434,7 @@ func RunInit(args []string, stdout io.Writer) error {
 # AGENTS.md                      — agent system prompt
 # CLAUDE.md                      — Claude Code system prompt
 # .cursorrules                   — Cursor rules
-# .instructions.md               — VS Code Copilot instructions
+# .github/copilot-instructions.md (VS Code Copilot instructions)
 `
 	writeInitFile(humanOut, projectDir, filepath.Join(agentManagerDir, ".gitignore-suggestion"), gitignoreSuggestion, force)
 

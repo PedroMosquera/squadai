@@ -394,6 +394,39 @@ func TestOverrideAdapter_LegacyMCPConfig_DelegatesToBase(t *testing.T) {
 	}
 }
 
+func TestOverrideAdapter_LegacyInstructionsFiles_DelegatesToBase(t *testing.T) {
+	projectDir := t.TempDir()
+	writeOverride(t, projectDir, domain.AgentVSCodeCopilot, OverrideSpec{Delegation: "solo"})
+
+	wrapped, err := ApplyOverride(vscode.New(), projectDir)
+	if err != nil {
+		t.Fatalf("ApplyOverride: %v", err)
+	}
+	lc, ok := wrapped.(interface {
+		LegacyInstructionsFiles(string, string) []string
+	})
+	if !ok {
+		t.Fatal("OverrideAdapter should expose LegacyInstructionsFiles")
+	}
+	home := "/Users/test"
+	got := lc.LegacyInstructionsFiles(home, projectDir)
+	want := vscode.New().LegacyInstructionsFiles(home, projectDir)
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("LegacyInstructionsFiles = %q, want %q", got, want)
+	}
+
+	writeOverride(t, projectDir, domain.AgentOpenCode, OverrideSpec{Delegation: "solo"})
+	plain, err := ApplyOverride(opencode.New(), projectDir)
+	if err != nil {
+		t.Fatalf("ApplyOverride: %v", err)
+	}
+	if got := plain.(interface {
+		LegacyInstructionsFiles(string, string) []string
+	}).LegacyInstructionsFiles(home, projectDir); len(got) != 0 {
+		t.Errorf("LegacyInstructionsFiles = %q, want none for adapter without legacy files", got)
+	}
+}
+
 func TestOverrideAdapter_LegacyMCPConfig_NoLegacyBase_Empty(t *testing.T) {
 	projectDir := t.TempDir()
 	writeOverride(t, projectDir, domain.AgentOpenCode, OverrideSpec{Delegation: "solo"})

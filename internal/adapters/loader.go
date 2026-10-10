@@ -237,6 +237,18 @@ func (o *OverrideAdapter) LegacyMCPConfig(projectDir string) (path, rootKey stri
 	return l.LegacyMCPConfig(projectDir)
 }
 
+// LegacyInstructionsFiles delegates to the base adapter when it has previous
+// instructions locations to migrate from (VS Code).
+func (o *OverrideAdapter) LegacyInstructionsFiles(homeDir, projectDir string) []string {
+	l, ok := o.base.(interface {
+		LegacyInstructionsFiles(string, string) []string
+	})
+	if !ok {
+		return nil
+	}
+	return l.LegacyInstructionsFiles(homeDir, projectDir)
+}
+
 // MCPCommandStyle delegates to the base adapter.
 func (o *OverrideAdapter) MCPCommandStyle() string { return o.base.MCPCommandStyle() }
 

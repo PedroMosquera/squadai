@@ -79,11 +79,11 @@ func (a *Adapter) GlobalConfigDir(homeDir string) string {
 	return ConfigDir(homeDir)
 }
 
-// SystemPromptFile returns the path to the Copilot instructions file.
-// macOS: ~/Library/Application Support/Code/User/.instructions.md
-// Linux: ~/.config/Code/User/.instructions.md
+// SystemPromptFile returns ~/.copilot/copilot-instructions.md, the personal
+// always-on instructions file VS Code reads in Copilot Agent Host sessions
+// without any extra setting.
 func (a *Adapter) SystemPromptFile(homeDir string) string {
-	return filepath.Join(ConfigDir(homeDir), ".instructions.md")
+	return filepath.Join(homeDir, ".copilot", "copilot-instructions.md")
 }
 
 // SkillsDir returns ~/.copilot/skills (same on all platforms).
@@ -115,9 +115,11 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, ".vscode", "settings.json")
 }
 
-// ProjectRulesFile returns <projectDir>/.instructions.md.
+// ProjectRulesFile returns <projectDir>/.github/copilot-instructions.md. The
+// copilot instructions template writes its own marker section into the same
+// file; the two coexist because their section IDs differ.
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, ".instructions.md")
+	return filepath.Join(projectDir, ".github", "copilot-instructions.md")
 }
 
 // ProjectAgentsDir returns empty string — VS Code Copilot does not support project agents.
@@ -179,6 +181,16 @@ func (a *Adapter) MCPConfigPath(projectDir string) string {
 // squadai-owned servers out of it.
 func (a *Adapter) LegacyMCPConfig(projectDir string) (path, rootKey string) {
 	return filepath.Join(projectDir, ".vscode", "mcp.json"), "servers"
+}
+
+// LegacyInstructionsFiles returns where squadai wrote instructions before it
+// targeted files VS Code reads. Neither is a documented instructions location,
+// so squadai's marker blocks there are dead weight.
+func (a *Adapter) LegacyInstructionsFiles(homeDir, projectDir string) []string {
+	return []string{
+		filepath.Join(projectDir, ".instructions.md"),
+		filepath.Join(ConfigDir(homeDir), ".instructions.md"),
+	}
 }
 
 // MCPCommandStyle returns "split" — VS Code Copilot uses command + args.

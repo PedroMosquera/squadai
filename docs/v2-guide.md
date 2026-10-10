@@ -146,7 +146,7 @@ No separate sub-agent files are created. All team instructions live in `CLAUDE.m
 
 ### Solo (VS Code Copilot, Windsurf)
 
-Solo agents cannot delegate to sub-agents at all. The orchestrator template is injected into the project rules file (`.instructions.md` for VS Code, `.windsurfrules` for Windsurf) using marker blocks:
+Solo agents cannot delegate to sub-agents at all. The orchestrator template is injected into the project rules file (`.github/copilot-instructions.md` for VS Code, `.windsurfrules` for Windsurf) using marker blocks:
 
 ```markdown
 <!-- squadai:team -->
@@ -164,7 +164,7 @@ The solo template instructs the agent to execute all methodology phases sequenti
 | OpenCode | native | `.opencode/agents/orchestrator.md` | `.opencode/agents/<role>.md` |
 | Cursor | native | `.cursor/agents/orchestrator.md` | `.cursor/agents/<role>.md` |
 | Claude Code | prompt | `CLAUDE.md` (marker block) | None |
-| VS Code Copilot | solo | `.instructions.md` (marker block) | None |
+| VS Code Copilot | solo | `.github/copilot-instructions.md` (marker block) | None |
 | Windsurf | solo | `.windsurfrules` (marker block) | None |
 
 ---
@@ -353,8 +353,8 @@ Supported components: memory, rules, settings, mcp, agents, skills, plugins.
 
 | Component | File Path |
 |-----------|-----------|
-| System prompt | `.instructions.md` (project root) |
-| Team (solo) | `.instructions.md` (marker block) |
+| System prompt | `.github/copilot-instructions.md` |
+| Team (solo) | `.github/copilot-instructions.md` (marker block) |
 | Settings | `.vscode/settings.json` |
 | MCP | `.mcp.json` `"mcpServers"` key (shared with Claude Code) |
 | Skills | `.copilot/skills/<name>/SKILL.md` |

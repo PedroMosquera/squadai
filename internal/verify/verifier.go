@@ -149,6 +149,15 @@ func (v *Verifier) VerifyWithSet(set *bundle.Set, cfg *domain.MergedConfig, adap
 			collectResults(report, results)
 		}
 
+		if set.LegacyInstructions != nil {
+			results, err := set.LegacyInstructions.Verify(adapter, homeDir, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			tagResults(results, "cleanup")
+			collectResults(report, results)
+		}
+
 		if adapter.ID() == domain.AgentCodex {
 			collectResults(report, checkCodexProjectDocSize(adapter, homeDir, projectDir))
 		}

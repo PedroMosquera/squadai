@@ -154,7 +154,10 @@ func TestPaths(t *testing.T) {
 		want string
 	}{
 		{"GlobalConfigDir", a.GlobalConfigDir(home), wantConfigDir},
-		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(wantConfigDir, ".instructions.md")},
+		// Locations from https://code.visualstudio.com/docs/copilot/customization/custom-instructions
+		// (checked 2026-10-10): "For personal, always-on instructions in Copilot Agent Host
+		// sessions, use ~/.copilot/copilot-instructions.md."
+		{"SystemPromptFile", a.SystemPromptFile(home), filepath.Join(home, ".copilot", "copilot-instructions.md")},
 		{"SkillsDir", a.SkillsDir(home), filepath.Join(home, ".copilot", "skills")},
 		{"SettingsPath", a.SettingsPath(home), filepath.Join(wantConfigDir, "settings.json")},
 	}
@@ -186,7 +189,10 @@ func TestProjectPaths(t *testing.T) {
 		want string
 	}{
 		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".vscode", "settings.json")},
-		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".instructions.md")},
+		// VS Code reads .github/copilot-instructions.md for project-wide guidance and
+		// documents no root .instructions.md:
+		// https://code.visualstudio.com/docs/copilot/customization/custom-instructions
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".github", "copilot-instructions.md")},
 		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".copilot", "skills")},
 	}
 
@@ -325,6 +331,23 @@ func TestAdapter_MCPConfigPath(t *testing.T) {
 				t.Errorf("MCPConfigPath(%q) = %q, want %q", tt.projectDir, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAdapter_LegacyInstructionsFiles(t *testing.T) {
+	home, project := "/Users/test", "/Users/test/myproject"
+	got := New().LegacyInstructionsFiles(home, project)
+	want := []string{
+		filepath.Join(project, ".instructions.md"),
+		filepath.Join(ConfigDir(home), ".instructions.md"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("LegacyInstructionsFiles = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("LegacyInstructionsFiles[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 

@@ -72,6 +72,28 @@ func TestRenderAction_ActionDelete_ReturnsOldContentNilNew(t *testing.T) {
 	}
 }
 
+func TestRenderAction_LegacyInstructionsUpdate_ShowsUserContentOnly(t *testing.T) {
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, ".instructions.md")
+	user := "# My notes\n"
+	if err := os.WriteFile(targetPath, []byte(user+"\n<!-- squadai:memory -->\nx\n<!-- /squadai:memory -->\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, newC, err := New().RenderAction(domain.PlannedAction{
+		ID:         "vscode-copilot-legacy-instructions-0",
+		Component:  domain.ComponentCleanup,
+		Action:     domain.ActionUpdate,
+		TargetPath: targetPath,
+	}, dir, dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(newC) != user {
+		t.Errorf("new content = %q, want %q", newC, user)
+	}
+}
+
 func TestRenderAction_ActionDelete_NonexistentFile_NoError(t *testing.T) {
 	dir := t.TempDir()
 	p := New()
