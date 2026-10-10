@@ -106,7 +106,7 @@ You can customize roles by editing the `"team"` key directly. Add roles, change 
 
 The same team definition produces different file structures depending on the agent's delegation strategy. The strategy is determined by the agent, not by configuration.
 
-### Native (OpenCode, Cursor)
+### Native (OpenCode, Cursor, Claude Code, Pi)
 
 Each team role becomes a separate `.md` file in the agent's project agents directory.
 
@@ -121,7 +121,7 @@ Each team role becomes a separate `.md` file in the agent's project agents direc
 ```
 
 ```
-.cursor/agents/
+.cursor/agents/       # also .claude/agents/ and .pi/agents/
   orchestrator.md     # Same templates, different target directory
   brainstormer.md
   ...
@@ -129,24 +129,9 @@ Each team role becomes a separate `.md` file in the agent's project agents direc
 
 Each file contains YAML frontmatter (description, mode) and the rendered template content. The orchestrator template includes delegation rules that reference other agent files by name.
 
-### Prompt (Claude Code)
+### Solo (VS Code Copilot, Windsurf, Codex)
 
-Claude Code does not support named sub-agent files. Instead, the orchestrator template is injected into the project rules file (`CLAUDE.md`) using marker blocks:
-
-```markdown
-<!-- squadai:team -->
-## TDD Orchestrator
-...delegation rules using Task tool...
-<!-- squadai:end:team -->
-```
-
-The orchestrator instructions tell Claude Code to use the Task tool for delegation. Each sub-agent's role and skill are described inline in the prompt, so the Task tool receives the full context when invoked.
-
-No separate sub-agent files are created. All team instructions live in `CLAUDE.md`.
-
-### Solo (VS Code Copilot, Windsurf)
-
-Solo agents cannot delegate to sub-agents at all. The orchestrator template is injected into the project rules file (`.github/copilot-instructions.md` for VS Code, `.windsurfrules` for Windsurf) using marker blocks:
+Solo agents cannot delegate to sub-agents at all. The orchestrator template is injected into the project rules file (`.github/copilot-instructions.md` for VS Code, `.windsurfrules` for Windsurf, `AGENTS.md` for Codex) using marker blocks:
 
 ```markdown
 <!-- squadai:team -->
