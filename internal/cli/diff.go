@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/exitcode"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/model"
 	"github.com/PedroMosquera/squadai/internal/planner"
@@ -110,10 +111,13 @@ func RunDiff(args []string, stdout io.Writer) error {
 // runDiff is the testable core of RunDiff with injected homeDir and projectDir.
 func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error {
 	jsonOut := false
+	exitCode := false
 	for _, arg := range args {
 		switch arg {
 		case "--json":
 			jsonOut = true
+		case "--exit-code":
+			exitCode = true
 		case "-h", "--help":
 			fmt.Fprintln(stdout, "Usage: squadai diff [flags]")
 			fmt.Fprintln(stdout)
@@ -123,10 +127,12 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json        Output planned actions as JSON (for scripting and CI)")
+			fmt.Fprintln(stdout, "  --exit-code   Exit 4 when apply would change any file, 0 when nothing would change")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai diff                  Show what would change")
 			fmt.Fprintln(stdout, "  squadai diff --json           Machine-readable diff output")
+			fmt.Fprintln(stdout, "  squadai diff --exit-code      Fail CI when committed config has drifted")
 			fmt.Fprintln(stdout, "  squadai init && squadai diff    Preview after fresh init")
 			return nil
 		default:
@@ -200,7 +206,7 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 			return fmt.Errorf("marshal diff entries: %w", err)
 		}
 		fmt.Fprintln(stdout, string(data))
-		return nil
+		return diffExitErr(exitCode, len(nonSkip))
 	}
 
 	// Human-readable output.
@@ -246,7 +252,16 @@ func runDiff(args []string, stdout io.Writer, homeDir, projectDir string) error 
 		}
 	}
 
-	return nil
+	return diffExitErr(exitCode, len(nonSkip))
+}
+
+func diffExitErr(exitCode bool, pending int) error {
+	if !exitCode || pending == 0 {
+		return nil
+	}
+	return exitcode.New(exitcode.Drift, "E-401",
+		fmt.Sprintf("%d file(s) differ from what apply would write", pending),
+		"Run 'squadai apply' and commit the result.")
 }
 
 // applyStateFilter restricts adapters to the union of state.InstalledAgents and the

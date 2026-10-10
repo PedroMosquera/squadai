@@ -132,7 +132,7 @@ Returns an array of `PlannedAction` objects.
 Preview what `apply` would change, rendered as unified diffs.
 
 ```sh
-squadai diff [--json]
+squadai diff [--json] [--exit-code]
 ```
 
 Computes the same action plan as `plan`, but instead of listing actions, shows the exact content changes for each file. Useful for reviewing what will be written before committing to `apply`.
@@ -169,6 +169,14 @@ squadai diff --json
 ```
 
 Returns an array of objects with `path`, `action`, and `diff` fields.
+
+**CI drift check:**
+
+```sh
+squadai diff --exit-code
+```
+
+Exits 4 when `apply` would change any file and 0 when nothing would change. The diff is still printed, so the CI log shows what drifted. Combines with `--json`. Only agents detected on the machine running the check are compared, and a CI runner usually has none installed besides the always-on OpenCode baseline.
 
 ---
 

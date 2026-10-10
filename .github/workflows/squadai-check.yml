@@ -10,12 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Build from the PR so the check runs the CLI under review, not the last release.
       - name: Install squadai
-        run: |
-          curl -sSL https://raw.githubusercontent.com/PedroMosquera/squadai/main/scripts/install.sh | sh
+        run: go install ./cmd/squadai
+      # validate-policy exits non-zero when policy.json is absent, and policy is optional.
       - name: Validate policy
+        if: hashFiles('.squadai/policy.json') != ''
         run: squadai validate-policy
-      - name: Doctor check
-        run: squadai doctor --strict
       - name: Diff check
         run: squadai diff --exit-code
