@@ -431,3 +431,64 @@ func TestOwnership_ClaudeAndVSCodeShareOwnershipOfRootMCPFile(t *testing.T) {
 		t.Fatalf("user server changed:\nwant %s\ngot  %s", want, got)
 	}
 }
+
+func TestOwnership_ReapplyUpdatesOwnedServerToPinnedCommand(t *testing.T) {
+	servers := func(spec string) map[string]domain.MCPServerDef {
+		return map[string]domain.MCPServerDef{
+			"context7": {Type: "local", Command: []string{"npx", "-y", spec}, Enabled: true},
+		}
+	}
+	const unpinned, pinned = "@upstash/context7-mcp@latest", "@upstash/context7-mcp@4.3.0"
+	for _, adapter := range append(ownershipAdapters(), codex.New()) {
+		t.Run(string(adapter.ID()), func(t *testing.T) {
+			home := t.TempDir()
+			project := t.TempDir()
+			apply := func(spec string) {
+				inst := New(servers(spec))
+				actions, err := inst.Plan(adapter, home, project)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, a := range actions {
+					if err := inst.Apply(a); err != nil {
+						t.Fatalf("apply %s: %v", a.ID, err)
+					}
+				}
+			}
+			isCodex := adapter.ID() == domain.AgentCodex
+			path := mcpTarget(adapter, project)
+			if isCodex {
+				path = filepath.Join(home, ".codex", "config.toml")
+			}
+
+			apply(unpinned)
+			var mine []byte
+			if !isCodex {
+				mine = addUserServer(t, path, adapter.MCPRootKey(), "mine")
+			}
+			apply(pinned)
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(data), pinned) || strings.Contains(string(data), unpinned) {
+				t.Fatalf("owned server not updated to %s:\n%s", pinned, data)
+			}
+			if mine != nil {
+				if got := rawServer(t, path, adapter.MCPRootKey(), "mine"); string(got) != string(mine) {
+					t.Fatalf("user server changed:\nwant %s\ngot  %s", mine, got)
+				}
+			}
+			results, err := New(servers(pinned)).Verify(adapter, home, project)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, r := range results {
+				if !r.Passed {
+					t.Errorf("verify %s failed after the pinned re-apply: %s", r.Check, r.Message)
+				}
+			}
+		})
+	}
+}

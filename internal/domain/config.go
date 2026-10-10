@@ -537,15 +537,16 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:        "local",
 			PreChecked:  true,
 			Command:     "npx",
-			Args:        []string{"-y", "@upstash/context7-mcp@latest"},
+			Args:        []string{"-y", "@upstash/context7-mcp@4.3.0"},
 		},
 		{
+			// Deprecated on npm; 2025.4.8 is its final release.
 			Name:            "github",
 			Description:     "Issues, PRs, code search",
 			Type:            "local",
 			PreChecked:      false,
 			Command:         "npx",
-			Args:            []string{"-y", "@modelcontextprotocol/server-github"},
+			Args:            []string{"-y", "@modelcontextprotocol/server-github@2025.4.8"},
 			RequiresAuth:    true,
 			AuthEnvVars:     []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
 			RequiredEnvVars: []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
@@ -558,7 +559,7 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:            "local",
 			PreChecked:      false,
 			Command:         "npx",
-			Args:            []string{"-y", "@sentry/mcp-server"},
+			Args:            []string{"-y", "@sentry/mcp-server@0.42.0"},
 			RequiresAuth:    true,
 			AuthEnvVars:     []string{"SENTRY_AUTH_TOKEN"},
 			RequiredEnvVars: []string{"SENTRY_AUTH_TOKEN"},
@@ -571,7 +572,7 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:        "local",
 			PreChecked:  false,
 			Command:     "npx",
-			Args:        []string{"-y", "@modelcontextprotocol/server-sequential-thinking"},
+			Args:        []string{"-y", "@modelcontextprotocol/server-sequential-thinking@2026.8.31"},
 		},
 		{
 			// Config key stays "memory" for compatibility (--mcp=memory and
@@ -583,7 +584,7 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Type:        "local",
 			PreChecked:  false,
 			Command:     "npx",
-			Args:        []string{"-y", "@modelcontextprotocol/server-memory"},
+			Args:        []string{"-y", "@modelcontextprotocol/server-memory@2026.8.31"},
 		},
 	}
 }

@@ -145,7 +145,7 @@ func TestRunScan_HumanTable(t *testing.T) {
 // Apply output must pass its own gate: every preset, every harness, no high
 // findings. Medium findings are allowed and logged so a regression in what the
 // defaults emit is visible in -v output.
-func TestRunScan_DefaultApplyHasNoHighFindings(t *testing.T) {
+func TestRunScan_DefaultApplyHasNoHighOrUnpinnedFindings(t *testing.T) {
 	presets := []domain.SetupPreset{
 		domain.PresetSoloMinimal, domain.PresetSoloPower, domain.PresetTeamStandard,
 		domain.PresetEnterpriseLock, domain.PresetFullSquad, domain.PresetLean,
@@ -190,6 +190,9 @@ func TestRunScan_DefaultApplyHasNoHighFindings(t *testing.T) {
 			for _, f := range report.Findings {
 				if f.Severity >= scan.SeverityHigh {
 					t.Errorf("high finding on generated config: %+v", f)
+				}
+				if f.ID == "SCAN-003" {
+					t.Errorf("unpinned package launcher in generated config: %+v", f)
 				}
 				byRule[f.ID+"/"+f.Severity.String()]++
 			}
