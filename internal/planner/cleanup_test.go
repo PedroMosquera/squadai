@@ -311,3 +311,34 @@ func TestStaleCleanup_PlannedDelete_UserEditsBeforeApply_FileKept(t *testing.T) 
 		t.Errorf("expected file kept with only the late note; got %q, err %v", got, err)
 	}
 }
+
+func TestStaleCleanup_DisabledClaude_KeepsUserMCPServers(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	cl := claude.New()
+	mcpPath := cl.MCPConfigPath(project)
+
+	writeFile(t, mcpPath, `{"mcpServers": {"context7": {"command": "npx"}, "mine": {"command": "my-server"}}}`)
+	if err := managed.WriteManagedEntries(project, ".mcp.json", "mcpServers", []string{"context7"}); err != nil {
+		t.Fatal(err)
+	}
+
+	planAndApply(t, cleanupCfg(map[string]bool{"claude-code": false}), []domain.Adapter{cl}, home, project)
+
+	data, err := os.ReadFile(mcpPath)
+	if err != nil {
+		t.Fatalf("user .mcp.json must survive disabling claude: %v", err)
+	}
+	var got struct {
+		MCPServers map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, ok := got.MCPServers["mine"]; !ok {
+		t.Errorf("user server lost; got %s", data)
+	}
+	if _, ok := got.MCPServers["context7"]; ok {
+		t.Errorf("squadai-owned server still present; got %s", data)
+	}
+}

@@ -61,8 +61,8 @@ func InspectStale(projectRoot, path string) (stale StaleContent, exists bool, er
 	}
 
 	if strings.EqualFold(filepath.Ext(path), ".json") {
-		owned := doc.ManagedFiles[rel].ManagedKeys
-		stale.Stripped, stale.Found, stale.OnlySquadAI = stripOwnedJSON(data, owned)
+		entry := doc.ManagedFiles[rel]
+		stale.Stripped, stale.Found, stale.OnlySquadAI = stripOwnedJSON(data, entry.ManagedKeys, entry.ManagedEntries)
 		return stale, true, nil
 	}
 
@@ -73,19 +73,38 @@ func InspectStale(projectRoot, path string) (stale StaleContent, exists bool, er
 	return stale, true, nil
 }
 
-// stripOwnedJSON removes the owned top-level keys from a JSON object. owned
-// is whatever the sidecar records for the file; this is the single place that
-// interprets it for removal, so a change in how ownership is recorded only
-// needs to touch this function. Output matches MergeAndWriteJSON's format.
-func stripOwnedJSON(data []byte, owned []string) (out []byte, found, empty bool) {
+// stripOwnedJSON removes SquadAI's content from a JSON object: the named
+// children for keys with per-entry ownership (MCP servers), otherwise the
+// whole owned top-level key. This is the single place that interprets the
+// sidecar for removal. Output matches MergeAndWriteJSON's format.
+func stripOwnedJSON(data []byte, owned []string, entries map[string][]string) (out []byte, found, empty bool) {
 	var obj map[string]any
 	if err := json.Unmarshal(data, &obj); err != nil || obj == nil {
 		return data, false, false
 	}
 	for _, key := range owned {
-		if _, ok := obj[key]; ok {
+		val, ok := obj[key]
+		if !ok {
+			continue
+		}
+		names, perEntry := entries[key]
+		if !perEntry {
 			delete(obj, key)
 			found = true
+			continue
+		}
+		children, isObj := val.(map[string]any)
+		if !isObj {
+			continue
+		}
+		for _, name := range names {
+			if _, ok := children[name]; ok {
+				delete(children, name)
+				found = true
+			}
+		}
+		if len(children) == 0 {
+			delete(obj, key)
 		}
 	}
 	if !found {

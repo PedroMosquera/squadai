@@ -327,6 +327,7 @@ func managedFilePaths(adapter domain.Adapter, homeDir, projectDir string) []stri
 		adapter.SettingsPath(homeDir),
 		adapter.ProjectRulesFile(projectDir),
 		adapter.ProjectConfigFile(projectDir),
+		adapter.MCPConfigPath(projectDir),
 	}
 }
 
