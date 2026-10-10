@@ -13,7 +13,7 @@ propose new memory entries. @librarian writes drafts to `docs/memory/_inbox/`;
 the user runs `squadai memory promote` to accept them.
 
 **Available slash commands:**
-- `/memory-search <query>` — search and return ranked snippets
-- `/memory-add <note>` — add a new entry to the inbox
-- `/memory-reindex` — regenerate the index after manual edits
-- `/memory-promote` — promote inbox drafts to permanent topic folders
+- `/memory-search <query>`: search and return ranked snippets
+- `/memory-add <note>`: add a new entry to the inbox
+- `/memory-reindex`: regenerate the index after manual edits
+- `/memory-promote`: promote inbox drafts to permanent topic folders

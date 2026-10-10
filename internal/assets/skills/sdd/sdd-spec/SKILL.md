@@ -64,9 +64,9 @@ different developers could implement the same behavior independently.
 
 #### <FunctionName>(params) (returnType, error)
 - **Purpose**: <what it does>
-- **Parameters**: <name type — description>
+- **Parameters**: <name type: description>
 - **Returns**: <description of return value>
-- **Errors**: <error type — when it is returned>
+- **Errors**: <error type: when it is returned>
 - **Side effects**: <what changes as a result>
 - **Invariants**: <what must be true before/after>
 

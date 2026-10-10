@@ -5,7 +5,7 @@
 - Classes, methods, properties, and events in `PascalCase`.
 - Parameters and local variables in `camelCase`.
 - Private fields prefixed with `_` and in `camelCase` (`_userRepository`).
-- Constants in `PascalCase` (not `UPPER_SNAKE_CASE` — follow .NET convention).
+- Constants in `PascalCase` (not `UPPER_SNAKE_CASE`; follow .NET convention).
 - Interfaces prefixed with `I`: `IUserRepository`, `ILogger`.
 - Avoid abbreviations. Use `GetCustomer` not `GetCust`.
 

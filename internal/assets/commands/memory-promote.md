@@ -11,7 +11,7 @@ squadai memory status
 ```
 
 Show the user the inbox files. If the inbox is empty, say:
-`The inbox is empty — nothing to promote.`
+`The inbox is empty. Nothing to promote.`
 
 Otherwise, ask:
 1. Which note(s) to promote (by path or number)

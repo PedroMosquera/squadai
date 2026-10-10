@@ -42,7 +42,7 @@ skill is used by the Planner after the Brainstormer produces scenarios.
 
 6. **Estimate complexity**: Flag high-effort items.
    - Simple (< 30 min): straightforward logic, no external dependencies
-   - Medium (30 min – 2 hrs): requires new abstraction or refactoring
+   - Medium (30 min to 2 hrs): requires new abstraction or refactoring
    - Complex (> 2 hrs): involves multiple components or tricky concurrency
 
 ## Output Format

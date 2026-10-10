@@ -60,11 +60,11 @@ is not immediately obvious.
    - Explain in a comment why the fix works
    - Ensure the fix does not introduce new edge cases
 
-3. Run the previously-failing test — it must now pass.
+3. Run the previously-failing test. It must now pass.
 
 ### Phase 4: VERIFY
 
-1. Run the full test suite — ensure no regressions.
+1. Run the full test suite to ensure no regressions.
 2. Run with race detection: `go test -race ./...`
 3. If the bug was subtle, add a regression test that would have caught it.
 4. Document the root cause and fix for future reference.

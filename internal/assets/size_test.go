@@ -13,7 +13,7 @@ import (
 const sizeCeilingModel = "claude-sonnet-4-6"
 
 // personaBudget is a token ceiling plus the behavioral checklist flags for
-// one embedded persona asset. Ceilings ratchet down only — raising one is a
+// one embedded persona asset. Ceilings ratchet down only. Raising one is a
 // context-cost regression and needs an explicit decision.
 type personaBudget struct {
 	path       string
@@ -44,7 +44,7 @@ func TestOrchestratorPersonas_TokenCeilings(t *testing.T) {
 			content := assets.MustRead(b.path)
 			got := counter.Count(content)
 			if got > b.maxTokens {
-				t.Errorf("%s is %d tokens, ceiling is %d — slim the persona instead of raising the ceiling",
+				t.Errorf("%s is %d tokens, ceiling is %d; slim the persona instead of raising the ceiling",
 					b.path, got, b.maxTokens)
 			}
 		})
@@ -84,7 +84,7 @@ func TestOrchestratorPersonas_BehaviorChecklist(t *testing.T) {
 		},
 		{
 			name:    "per-role output summarization budgets",
-			re:      regexp.MustCompile(`<\s*\d+ lines|\d+[-–]\d+ lines?\b|\d+[-–]\d+ line summary`),
+			re:      regexp.MustCompile(`<\s*\d+ lines|\d+-\d+ lines?\b|\d+-\d+ line summary`),
 			applies: all,
 		},
 		{

@@ -2,7 +2,7 @@
 
 ### Null Safety
 
-- Enable sound null safety across the entire codebase — no `// ignore: null_safety` suppressions.
+- Enable sound null safety across the entire codebase, with no `// ignore: null_safety` suppressions.
 - Avoid the `!` (bang) operator except where non-nullability is provably guaranteed at the call site.
 - Use null-aware operators by default: `??` for fallback values, `?.` for safe member access, `??=` for lazy initialization.
 - Use `late` only when the variable is guaranteed to be initialized before first read and `final` alone cannot express it.
@@ -18,11 +18,11 @@
 
 ### Error Handling
 
-- Throw typed exceptions (`class NetworkException implements Exception`) — never `throw 'string'`.
+- Throw typed exceptions (`class NetworkException implements Exception`), never `throw 'string'`.
 - Catch specific exception types, not the generic `Exception` or `Object`.
 - Use a Result/Either pattern (`sealed class Result<T>`) for expected failures in domain logic.
 - Document thrown exceptions in `///` doc comments with `@throws` annotations.
-- Avoid silently swallowing exceptions in `catch` blocks — always log or rethrow.
+- Avoid silently swallowing exceptions in `catch` blocks; always log or rethrow.
 
 ### Testing
 
@@ -37,13 +37,13 @@
 - Run `dart format .` before every commit. The formatter is non-negotiable.
 - Run `dart analyze` with `strict-casts`, `strict-inference`, and `strict-raw-types` enabled in `analysis_options.yaml`.
 - Prefer `final` over `var` for all values that are not reassigned.
-- Prefer `const` constructors everywhere they are applicable — the linter will tell you when.
+- Prefer `const` constructors everywhere they are applicable; the linter will tell you when.
 - Avoid `dynamic` except at explicit serialization/deserialization boundaries.
 
 ### Flutter Patterns
 
-- Use BLoC (`flutter_bloc`) or Riverpod for state management — avoid raw `setState` beyond local widget state.
+- Use BLoC (`flutter_bloc`) or Riverpod for state management; avoid raw `setState` beyond local widget state.
 - Compose UI from small, single-responsibility widgets. Prefer composition over subclassing `Widget`.
 - Always use `const` constructors for stateless widgets and static subtrees.
-- Keep business logic out of `build()` methods — extract to BLoC, notifier, or service classes.
-- Use `ThemeData` and design tokens for colors and typography — no hardcoded hex values in widgets.
+- Keep business logic out of `build()` methods; extract to BLoC, notifier, or service classes.
+- Use `ThemeData` and design tokens for colors and typography, with no hardcoded hex values in widgets.

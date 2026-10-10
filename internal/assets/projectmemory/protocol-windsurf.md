@@ -6,8 +6,8 @@ decisions, learnings, and incidents for this project.
 Before I begin significant work, I search memory for relevant context:
 `squadai memory search <query>`. I pass any findings into my planning.
 
-When I complete a meaningful task — an implementation, a design decision, a
-debugging session — I capture what I learned: `squadai memory add "<note>"`.
+When I complete a meaningful task (an implementation, a design decision, a
+debugging session), I capture what I learned: `squadai memory add "<note>"`.
 Notes land in `docs/memory/_inbox/` as drafts until promoted.
 
 I use the `@librarian` agent for deeper research when a single search is not

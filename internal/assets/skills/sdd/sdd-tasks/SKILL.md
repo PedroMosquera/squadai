@@ -13,7 +13,7 @@ Each task must be independently completable and testable.
 
 1. **Identify leaf-level tasks**: Find the smallest independently implementable units.
    - Each task should produce a working, tested component
-   - Tasks should be completable in 30 min – 4 hours
+   - Tasks should be completable in 30 min to 4 hours
    - Tasks that cannot be tested independently need to be split further
 
 2. **Identify dependencies**: Map which tasks depend on others.
@@ -36,9 +36,9 @@ Each task must be independently completable and testable.
    - Continue until all tasks are assigned
 
 5. **Estimate effort**: Assign complexity to each task.
-   - **S** (Simple): ≤ 30 min — single function, no new abstraction
-   - **M** (Medium): 30 min–2 hrs — new type or interface, some design needed
-   - **L** (Large): 2–4 hrs — multiple components, requires careful integration
+   - **S** (Simple): ≤ 30 min, single function, no new abstraction
+   - **M** (Medium): 30 min to 2 hrs, new type or interface, some design needed
+   - **L** (Large): 2 to 4 hrs, multiple components, requires careful integration
    - Tasks estimated **L** or larger should be split if possible
 
 6. **Write acceptance criteria per task**: Each task needs a clear done condition.

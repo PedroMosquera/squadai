@@ -45,4 +45,4 @@
 - Run `gofmt` (or `goimports`) on all files. Never commit unformatted code.
 - Use `go vet ./...` as a minimum static analysis check.
 - Prefer `golangci-lint` for comprehensive linting when configured.
-- Keep imports grouped: stdlib, external, internal — separated by blank lines.
+- Keep imports grouped: stdlib, external, internal, separated by blank lines.

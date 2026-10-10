@@ -2,7 +2,7 @@
 
 `docs/memory/` is this project's persistent, indexed memory store for
 decisions, learnings, and incidents. It is shared by every agent working in
-this repository — use it.
+this repository. Use it.
 
 **Search first.** Before any research, planning, or implementation task, run
 `/memory-search <query>` (or `squadai memory search <query>`) and pass the

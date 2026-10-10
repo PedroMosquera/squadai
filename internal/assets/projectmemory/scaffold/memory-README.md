@@ -4,10 +4,10 @@ This directory stores structured notes about decisions, learnings, and incidents
 
 ## Structure
 
-- `_inbox/` — raw, unprocessed notes (add with `/memory-add` or `squadai memory add`)
-- `decisions/` — promoted architectural and design decisions
-- `learnings/` — promoted insights and lessons learned
-- `incidents/` — promoted post-mortems and incident notes
+- `_inbox/`: raw, unprocessed notes (add with `/memory-add` or `squadai memory add`)
+- `decisions/`: promoted architectural and design decisions
+- `learnings/`: promoted insights and lessons learned
+- `incidents/`: promoted post-mortems and incident notes
 
 ## Workflow
 

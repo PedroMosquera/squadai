@@ -16,15 +16,15 @@ to improve quality without changing behavior.
 
 ## Steps
 
-### Phase 1: RED — Write a failing test
+### Phase 1: RED (write a failing test)
 
 1. Pick the next test from the implementation plan.
 2. Write the test code first, before any implementation.
 3. Run the test: it MUST fail (red). If it passes without implementation, the
    test is not testing the right thing.
-4. Read the failure message — it tells you exactly what to implement.
+4. Read the failure message. It tells you exactly what to implement.
 
-### Phase 2: GREEN — Make the test pass
+### Phase 2: GREEN (make the test pass)
 
 1. Write the MINIMUM implementation to make the failing test pass.
    - No extra logic, no anticipated future use cases
@@ -34,24 +34,24 @@ to improve quality without changing behavior.
 3. Run ALL tests: ensure no regressions.
 4. Do NOT refactor yet.
 
-### Phase 3: REFACTOR — Improve the code
+### Phase 3: REFACTOR (improve the code)
 
 1. Only after tests are green, improve code quality.
    - Remove duplication
    - Improve naming
    - Extract helper functions
    - Simplify logic
-2. Run tests after every change — refactoring must not break anything.
+2. Run tests after every change; refactoring must not break anything.
 3. Do NOT add new behavior during refactoring.
 4. When satisfied, move to the next test in the plan.
 
 ## Rules
 
-- Never skip the red phase — always write the test first
+- Never skip the red phase; always write the test first
 - Never write more code than needed to pass the current test
-- Never refactor while red — only refactor on green
+- Never refactor while red; only refactor on green
 - Commit after each green-refactor cycle (small, frequent commits)
-- If a test is hard to write, it signals a design problem — fix the design
+- If a test is hard to write, it signals a design problem, so fix the design
 
 ## Test Structure
 

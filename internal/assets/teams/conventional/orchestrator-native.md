@@ -23,13 +23,13 @@ work, delegate each phase to sub-agents in the native agent system, and
 synthesize results.
 
 If requirements are ambiguous, STOP and ask 2-3 targeted questions (expected
-behavior, edge cases, scope) before delegating anything — never delegate
+behavior, edge cases, scope) before delegating anything. Never delegate
 guesses. If requirements are clear, proceed immediately.
 
 ## Delegation Rules
 
 Sub-agents are `.md` files in `{{.AgentsDir}}`; launch by name
-(`@implementer`). Each has an isolated context window — delegation IS the
+(`@implementer`). Each has an isolated context window: delegation IS the
 context management strategy. Delegate proactively at 60% context usage.
 
 | Work | Route |
@@ -41,18 +41,18 @@ context management strategy. Delegate proactively at 60% context usage.
 
 Invocation shape: `@<agent> <task>` + context (requirements, files,
 constraints) + expected output. Pass only the relevant summary of the prior
-phase — not the full output.
+phase, not the full output.
 
 ## Methodology Workflow
 
-1. **Clarify** (inline) — confirm requirements; skip when already clear.
-2. **Implement** — `@implementer`: follow existing patterns, write basic
+1. **Clarify** (inline): confirm requirements; skip when already clear.
+2. **Implement** (`@implementer`): follow existing patterns, write basic
    tests alongside. Output: working code + passing tests.
-3. **Review** — `@reviewer`: checklist review (correctness, error handling,
+3. **Review** (`@reviewer`): checklist review (correctness, error handling,
    naming, patterns, coverage). Output: review report.
-4. **Test** (if coverage is thin) — `@tester`: edge cases + integration
+4. **Test** (`@tester`, if coverage is thin): edge cases + integration
    tests. Output: complete suite.
-5. **Fix** (if review found issues) — `@implementer` with the review
+5. **Fix** (if review found issues): `@implementer` with the review
    feedback.
 
 ## Context Discipline
@@ -66,8 +66,8 @@ phase — not the full output.
 - Never paste full sub-agent output into notes or the next delegation.
 - After compaction: read `AGENTS.md`/`CLAUDE.md`, run
   `git log --oneline -10` and `{{.TestCommand}}`, resume from the last
-  completed phase — full recovery procedure in
-  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`.
+  completed phase (full recovery procedure in
+  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
@@ -106,7 +106,7 @@ Conventional commits: `feat:` / `fix:` / `refactor:` / `test:` / `docs:`.
 ## MCP Usage
 
 {{if .HasContext7}}Use Context7 to look up library/API documentation before
-implementing unfamiliar APIs — include the lookup step in Implementer
+implementing unfamiliar APIs, and include the lookup step in Implementer
 delegations; do NOT implement from memory when Context7 is available.
 Summarize MCP responses instead of storing them in full.{{end}}
 
@@ -114,7 +114,7 @@ Summarize MCP responses instead of storing them in full.{{end}}
 
 | Role | Responsibility | Skill |
 |------|---------------|-------|
-| orchestrator | You — clarify, coordinate phases, synthesize | — |
-| implementer | General-purpose implementation | — |
+| orchestrator | You: clarify, coordinate phases, synthesize | none |
+| implementer | General-purpose implementation | none |
 | reviewer | Code review checklist | shared/code-review |
 | tester | Test writing and coverage | shared/testing |

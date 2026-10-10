@@ -13,7 +13,7 @@ have produced their artifacts.
 ## Core Principle
 
 Your job is to implement what is specified, not to improve the design.
-If the spec is wrong, report it — do not fix it silently.
+If the spec is wrong, report it. Do not fix it silently.
 
 ## Steps
 
@@ -34,7 +34,7 @@ If the spec is wrong, report it — do not fix it silently.
    - Verify the test passes
 
 4. **Respect the interface contract strictly**:
-   - Return exactly the error types specified — no substitutions
+   - Return exactly the error types specified, with no substitutions
    - Produce exactly the output format specified
    - Respect all invariants stated in the spec
    - If spec says "side effect X happens", make it happen
@@ -51,7 +51,7 @@ If the spec is wrong, report it — do not fix it silently.
    - No convenience methods not in the interface
 
 7. **Report spec gaps**: If you encounter behavior the spec does not cover:
-   - Do not guess — make a conservative implementation (return error)
+   - Do not guess; make a conservative implementation (return error)
    - Document the gap explicitly with a `// TODO(spec): ...` comment
    - Report gaps to the orchestrator before finalizing
 

@@ -1,7 +1,7 @@
 ## Project Memory Protocol
 
 `docs/memory/` is this project's persistent, indexed memory store for
-decisions, learnings, and incidents. It survives across sessions — use it.
+decisions, learnings, and incidents. It survives across sessions. Use it.
 
 **Search first.** Before starting significant work, run `/memory-search <query>`
 (or `squadai memory search <query>` in the terminal) and pass any findings into

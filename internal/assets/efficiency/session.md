@@ -12,7 +12,7 @@ errored; trust that result instead of re-opening the file to check.
 the relevant findings instead of pasting the whole output into the transcript.
 {{if .Delegation}}
 **Delegate exploration.** Send open-ended codebase exploration to sub-agents
-and request a compact report (files, symbols, one-line conclusions) — keep
+and request a compact report (files, symbols, one-line conclusions), and keep
 raw file dumps out of the main context.
 {{- else}}
 **Timebox exploration.** Bound open-ended exploration and checkpoint findings
@@ -20,7 +20,7 @@ in a scratch note before moving on, so they survive context pressure.
 {{- end}}
 {{- if .MemoryEnabled}}
 
-**Memory first.** Run a memory search before exploring the codebase — prior
+**Memory first.** Run a memory search before exploring the codebase: prior
 decisions often answer the question faster than fresh exploration.
 {{- end}}
 

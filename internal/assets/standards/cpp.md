@@ -2,11 +2,11 @@
 
 ### Memory Management
 
-- Use `std::unique_ptr` for exclusive ownership and `std::shared_ptr` for shared ownership — never raw `new`/`delete` in application code.
+- Use `std::unique_ptr` for exclusive ownership and `std::shared_ptr` for shared ownership, never raw `new`/`delete` in application code.
 - Follow RAII: acquire resources in constructors, release in destructors. Never hold resources outside an owning object.
 - Prefer stack allocation over heap allocation. Reach for `std::vector` before `new T[]`.
 - Document ownership transfers explicitly in function signatures (`std::unique_ptr` parameter = callee takes ownership).
-- Use `std::make_unique` and `std::make_shared` — never call `new` directly alongside smart pointer constructors.
+- Use `std::make_unique` and `std::make_shared`; never call `new` directly alongside smart pointer constructors.
 
 ### Naming Conventions
 
@@ -14,11 +14,11 @@
 - Constants and compile-time values prefixed with `k` (`kMaxRetries`, `kDefaultTimeout`).
 - Macros in `ALL_CAPS`; avoid macros where `constexpr` or `inline` functions suffice.
 - Private member variables suffixed with `_` (`config_`, `handler_`).
-- Follow Google C++ Style or LLVM style consistently — pick one per project.
+- Follow Google C++ Style or LLVM style consistently; pick one per project.
 
 ### Error Handling
 
-- Prefer exceptions for error propagation in application code — they compose cleanly with RAII.
+- Prefer exceptions for error propagation in application code; they compose cleanly with RAII.
 - Mark move constructors and move assignment operators `noexcept` unconditionally.
 - Use `std::expected<T, E>` (C++23) or a Result-style wrapper for expected failures in library APIs.
 - Never use errno or return-code patterns in new C++ code unless wrapping C APIs.
@@ -47,5 +47,5 @@
 - Use `auto` to avoid type repetition, but annotate where the type aids readability.
 - Mark functions `constexpr` when their result can be computed at compile time.
 - Use C++20 ranges and structured bindings to reduce boilerplate.
-- Avoid `std::endl` — use `'\n'`; `endl` flushes and is usually unnecessary overhead.
+- Avoid `std::endl` and use `'\n'`; `endl` flushes and is usually unnecessary overhead.
 - Prefer `enum class` over unscoped `enum` to prevent namespace pollution.

@@ -69,7 +69,7 @@ Then re-delegate to Implementer or apply fix directly.
 ## Sub-Agent Isolation Rules
 
 - Each sub-agent starts with a fresh context
-- Pass ONLY what the sub-agent needs — no irrelevant history
+- Pass ONLY what the sub-agent needs, no irrelevant history
 - Summarize results after each phase (do not carry full sub-agent output)
 - If a sub-agent exceeds its scope, correct and redirect
 

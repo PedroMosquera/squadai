@@ -17,6 +17,6 @@ with a plain query: `@librarian what do we know about <topic>`.
 
 **Periodically:**
 Use `/memory-promote` to graduate inbox drafts into permanent topic folders.
-The `docs/memory/_inbox/` folder holds unprocessed notes — keep it tidy.
+The `docs/memory/_inbox/` folder holds unprocessed notes. Keep it tidy.
 
 Never skip the memory-search step before architecture or API decisions.
