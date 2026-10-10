@@ -168,6 +168,7 @@ type VerifyResult struct {
 	Severity  string `json:"severity"`            // "error", "warning", "info"
 	Component string `json:"component,omitempty"` // which component or subsystem produced this
 	Message   string `json:"message,omitempty"`
+	Path      string `json:"path,omitempty"` // project-relative file the result is about, when there is one
 }
 
 // VerifyReport is the full verification output.

@@ -176,7 +176,7 @@ Returns an array of objects with `path`, `action`, and `diff` fields.
 squadai diff --exit-code
 ```
 
-Exits 4 when `apply` would change any file and 0 when nothing would change. The diff is still printed, so the CI log shows what drifted. Combines with `--json`. Only agents detected on the machine running the check are compared, and a CI runner usually has none installed besides the always-on OpenCode baseline.
+Exits 4 when `apply` would change any file and 0 when nothing would change. The diff is still printed, so the CI log shows what drifted. Combines with `--json`. Only agents detected on the machine running the check are compared, and a CI runner usually has none installed besides the always-on OpenCode baseline. For a CI gate use `squadai verify --ci`, which compares every agent the project config enables.
 
 ---
 
@@ -228,7 +228,7 @@ On failure, the output includes the backup ID and instructions for manual restor
 Run compliance checks and print a health report.
 
 ```sh
-squadai verify [--json]
+squadai verify [--json] [--strict] [--ci]
 ```
 
 Checks include:
@@ -252,6 +252,23 @@ All checks passed.
 ```
 
 Failed checks include a message explaining what's wrong.
+
+**CI gate (`--ci`):**
+
+```sh
+squadai verify --ci [--json]
+```
+
+Checks that the committed project files match what `apply` would write for every adapter enabled in the project config, whether or not that agent is installed. It is the same comparison as `squadai diff --exit-code`, without depending on the machine:
+
+- Agents come from `.squadai/project.json` (and `policy.json`), not from detection. Disabled adapters are still checked for stale SquadAI content that `apply` would remove.
+- It plans against an empty scratch home, so `~/.squadai/config.json`, user-level files such as `~/.claude/CLAUDE.md`, agent binaries and environment variables (MCP tokens included) do not affect the result. The same checkout gives the same answer on a laptop and on a runner.
+- Files the project gitignores are skipped and counted in a `project-content-gitignored` line, since a checkout can never contain them. Outside a git work tree, or without `git` on PATH, nothing is skipped.
+- MCP servers you added yourself to `.mcp.json` and the other MCP files are not drift; only the servers SquadAI owns are compared.
+
+Each drifted file is one failed result with a `path`: `project-file-missing` (apply would create it), `project-file-drift` (content differs, the diff is printed after the summary) or `project-file-stale` (apply would remove it). Policy overrides are reported as warnings. With `GITHUB_ACTIONS=true` each failure is also printed as a `::error file=<path>::` annotation, with paths relative to `GITHUB_WORKSPACE`; annotations are not printed with `--json`.
+
+Exits 4 (`E-401`) on any drifted or missing file and 0 otherwise. `--strict` adds nothing under `--ci`. The repo's [`action.yml`](../action.yml) runs this command followed by `squadai scan`.
 
 ---
 

@@ -21,6 +21,19 @@ import (
 // Version is the CLI version string, set by app before calling any Run* function.
 var Version = "dev"
 
+// allAdapters returns one instance of every registered adapter, OpenCode first.
+func allAdapters() []domain.Adapter {
+	return []domain.Adapter{
+		opencode.New(),
+		claude.New(),
+		vscode.New(),
+		cursor.New(),
+		windsurf.New(),
+		pi.New(),
+		codex.New(),
+	}
+}
+
 // DetectAdapters returns all registered adapters that are installed or have config.
 // OpenCode (team lane) is always included. Personal-lane adapters (Claude Code,
 // VS Code Copilot, Cursor, Windsurf, Pi, Codex) are included only when detected
@@ -28,42 +41,15 @@ var Version = "dev"
 func DetectAdapters(homeDir string) []domain.Adapter {
 	ctx := context.Background()
 	var adapters []domain.Adapter
-
-	// OpenCode is always included — team baseline.
-	oc := opencode.New()
-	adapters = append(adapters, oc)
-
-	// Personal-lane adapters: include only if binary or config is found.
-	cc := claude.New()
-	if installed, configFound, err := cc.Detect(ctx, homeDir); err == nil && (installed || configFound) {
-		adapters = append(adapters, cc)
+	for _, a := range allAdapters() {
+		if a.ID() == domain.AgentOpenCode {
+			adapters = append(adapters, a)
+			continue
+		}
+		if installed, configFound, err := a.Detect(ctx, homeDir); err == nil && (installed || configFound) {
+			adapters = append(adapters, a)
+		}
 	}
-
-	vs := vscode.New()
-	if installed, configFound, err := vs.Detect(ctx, homeDir); err == nil && (installed || configFound) {
-		adapters = append(adapters, vs)
-	}
-
-	cu := cursor.New()
-	if installed, configFound, err := cu.Detect(ctx, homeDir); err == nil && (installed || configFound) {
-		adapters = append(adapters, cu)
-	}
-
-	ws := windsurf.New()
-	if installed, configFound, err := ws.Detect(ctx, homeDir); err == nil && (installed || configFound) {
-		adapters = append(adapters, ws)
-	}
-
-	piAgent := pi.New()
-	if installed, configFound, err := piAgent.Detect(ctx, homeDir); err == nil && (installed || configFound) {
-		adapters = append(adapters, piAgent)
-	}
-
-	cx := codex.New()
-	if installed, configFound, err := cx.Detect(ctx, homeDir); err == nil && (installed || configFound) {
-		adapters = append(adapters, cx)
-	}
-
 	return adapters
 }
 

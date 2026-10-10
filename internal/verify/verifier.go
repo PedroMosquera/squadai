@@ -174,20 +174,25 @@ func (v *Verifier) VerifyWithSet(set *bundle.Set, cfg *domain.MergedConfig, adap
 	healthResults := v.checkAgentHealth(cfg, adapters, homeDir)
 	collectResults(report, healthResults)
 
-	// Report policy violations as warnings.
-	if len(cfg.Violations) > 0 {
-		for _, violation := range cfg.Violations {
-			report.Results = append(report.Results, domain.VerifyResult{
-				Check:     "policy-override",
-				Passed:    true, // violations are informational — policy value won
-				Severity:  domain.SeverityWarning,
-				Component: "policy",
-				Message:   violation,
-			})
-		}
-	}
+	report.Results = append(report.Results, PolicyResults(cfg)...)
 
 	return report, nil
+}
+
+// PolicyResults reports each policy override as a passing warning: the policy
+// value already won the merge, so the user is told but nothing fails.
+func PolicyResults(cfg *domain.MergedConfig) []domain.VerifyResult {
+	var results []domain.VerifyResult
+	for _, violation := range cfg.Violations {
+		results = append(results, domain.VerifyResult{
+			Check:     "policy-override",
+			Passed:    true,
+			Severity:  domain.SeverityWarning,
+			Component: "policy",
+			Message:   violation,
+		})
+	}
+	return results
 }
 
 // checkCodexProjectDocSize warns when AGENTS.md is larger than Codex's

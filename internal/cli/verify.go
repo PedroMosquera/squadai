@@ -16,14 +16,17 @@ import (
 func RunVerify(args []string, stdout io.Writer) error {
 	jsonOut := false
 	strict := false
+	ci := false
 	for _, arg := range args {
 		switch arg {
 		case "--json":
 			jsonOut = true
 		case "--strict":
 			strict = true
+		case "--ci":
+			ci = true
 		case "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: squadai verify [--json] [--strict]")
+			fmt.Fprintln(stdout, "Usage: squadai verify [--json] [--strict] [--ci]")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Run compliance and health checks against the current project configuration.")
 			fmt.Fprintln(stdout, "Verifies that all enabled components are correctly installed for each detected")
@@ -36,23 +39,33 @@ func RunVerify(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json    Output the full verification report as JSON.")
 			fmt.Fprintln(stdout, "  --strict  Also run a drift check; fail if any managed file has drifted.")
+			fmt.Fprintln(stdout, "  --ci      Check committed project files against what apply would write for every")
+			fmt.Fprintln(stdout, "            agent enabled in project config, installed or not. Skips machine checks")
+			fmt.Fprintln(stdout, "            (agent binaries, user config, home files) and gitignored files. Exits 4")
+			fmt.Fprintln(stdout, "            on drift or missing files. Prints GitHub annotations when")
+			fmt.Fprintln(stdout, "            GITHUB_ACTIONS=true (not with --json).")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Examples:")
 			fmt.Fprintln(stdout, "  squadai verify")
 			fmt.Fprintln(stdout, "  squadai verify --json")
 			fmt.Fprintln(stdout, "  squadai verify --strict")
+			fmt.Fprintln(stdout, "  squadai verify --ci")
 			return nil
 		}
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("resolve home directory: %w", err)
 	}
 
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	if ci {
+		return runVerifyCI(stdout, projectDir, jsonOut)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
 	}
 
 	merged, err := loadAndMerge(homeDir, projectDir)
