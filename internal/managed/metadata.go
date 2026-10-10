@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/PedroMosquera/squadai/internal/fileutil"
@@ -18,6 +19,12 @@ const (
 
 	// sidecarFile is the file name for the centralized managed-keys sidecar.
 	sidecarFile = "managed.json"
+
+	// userSidecarFile, under ~/.squadai, records files outside the project
+	// (agent config under HOME) keyed by absolute path. They cannot go in the
+	// project sidecar: it is committed, and a home path is private and differs
+	// on every machine.
+	userSidecarFile = "managed-home.json"
 )
 
 // sidecarDoc is the on-disk structure of the sidecar file.
@@ -47,20 +54,21 @@ func SidecarPath(projectRoot string) string {
 	return filepath.Join(projectRoot, sidecarDir, sidecarFile)
 }
 
-// ReadManagedKeys reads the managed keys for the given config file (expressed
-// as a relative path from the project root) from the centralized sidecar.
-// If the sidecar does not exist, or the config file has no entry, an empty
-// slice is returned without error.
+// ReadManagedKeys reads the managed keys recorded for configFile. Every
+// function taking a file path accepts it absolute or relative to projectRoot,
+// and uses the project sidecar when the file is inside the project and the
+// per-user sidecar otherwise. If the sidecar does not exist, or the config
+// file has no entry, an empty slice is returned without error.
 func ReadManagedKeys(projectRoot, configFile string) ([]string, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, _, key, err := loadFor(projectRoot, configFile)
 	if err != nil {
 		return nil, err
 	}
 
-	entry, ok := doc.ManagedFiles[configFile]
+	entry, ok := doc.ManagedFiles[key]
 	if !ok {
 		return nil, nil
 	}
@@ -71,13 +79,12 @@ func ReadManagedKeys(projectRoot, configFile string) ([]string, error) {
 }
 
 // WriteManagedKeys atomically updates (or creates) the sidecar file so that the
-// entry for configFile contains exactly keys (sorted). configFile must be a
-// relative path from the project root.
+// entry for configFile contains exactly keys (sorted).
 func WriteManagedKeys(projectRoot, configFile string, keys []string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, file, configFile, err := loadFor(projectRoot, configFile)
 	if err != nil {
 		return err
 	}
@@ -101,7 +108,7 @@ func WriteManagedKeys(projectRoot, configFile string, keys []string) error {
 	}
 	doc.ManagedFiles[configFile] = entry
 
-	return writeSidecar(projectRoot, doc)
+	return writeDoc(file, doc)
 }
 
 // ReadManagedEntries returns the child names SquadAI owns under the top-level
@@ -112,7 +119,7 @@ func ReadManagedEntries(projectRoot, configFile, key string) (names []string, tr
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, _, configFile, err := loadFor(projectRoot, configFile)
 	if err != nil {
 		return nil, false, err
 	}
@@ -132,7 +139,7 @@ func WriteManagedEntries(projectRoot, configFile, key string, names []string) er
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, file, configFile, err := loadFor(projectRoot, configFile)
 	if err != nil {
 		return err
 	}
@@ -155,7 +162,7 @@ func WriteManagedEntries(projectRoot, configFile, key string, names []string) er
 	entry.ManagedEntries[key] = sorted
 	doc.ManagedFiles[configFile] = entry
 
-	return writeSidecar(projectRoot, doc)
+	return writeDoc(file, doc)
 }
 
 func containsString(list []string, s string) bool {
@@ -173,7 +180,7 @@ func RemoveManagedFile(projectRoot, configFile string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, file, configFile, err := loadFor(projectRoot, configFile)
 	if err != nil {
 		return err
 	}
@@ -181,14 +188,75 @@ func RemoveManagedFile(projectRoot, configFile string) error {
 		return nil
 	}
 	delete(doc.ManagedFiles, configFile)
-	return writeSidecar(projectRoot, doc)
+	return writeDoc(file, doc)
 }
 
-// readSidecar reads the sidecar file. Returns an empty doc if the file does not
-// exist; returns an error for any other I/O or parse failure.
-func readSidecar(projectRoot string) (sidecarDoc, error) {
-	path := SidecarPath(projectRoot)
+// locate returns the sidecar file that records path and the key path is
+// stored under there.
+func locate(projectRoot, path string) (file, key string, err error) {
+	if projectRoot == "" {
+		return SidecarPath(projectRoot), path, nil
+	}
+	abs := path
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(projectRoot, abs)
+	}
+	if rel, relErr := filepath.Rel(projectRoot, abs); relErr == nil && insideProject(rel) {
+		return SidecarPath(projectRoot), rel, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("resolve user sidecar for %s: %w", path, err)
+	}
+	return filepath.Join(home, sidecarDir, userSidecarFile), filepath.Clean(abs), nil
+}
 
+func insideProject(rel string) bool {
+	return !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// loadFor reads the sidecar that records path; file and key are where a
+// write of path's record belongs.
+func loadFor(projectRoot, path string) (doc sidecarDoc, file, key string, err error) {
+	file, key, err = locate(projectRoot, path)
+	if err != nil {
+		return sidecarDoc{}, "", "", err
+	}
+	if file == SidecarPath(projectRoot) {
+		doc, err = readSidecar(projectRoot)
+	} else {
+		doc, err = readDoc(file)
+	}
+	return doc, file, key, err
+}
+
+// readSidecar reads the project sidecar, discarding records of paths outside
+// the project. Older versions wrote home files there as "../" paths that only
+// resolve on the machine that wrote them. Ignoring them means such a file is
+// stripped rather than deleted, and the next write drops them.
+func readSidecar(projectRoot string) (sidecarDoc, error) {
+	doc, err := readDoc(SidecarPath(projectRoot))
+	if err != nil {
+		return doc, err
+	}
+	var created []string
+	for _, f := range doc.CreatedFiles {
+		if insideProject(f) {
+			created = append(created, f)
+		}
+	}
+	doc.CreatedFiles = created
+	for f := range doc.ManagedFiles {
+		if !insideProject(f) {
+			delete(doc.ManagedFiles, f)
+		}
+	}
+	return doc, nil
+}
+
+// readDoc returns an empty doc if the file does not exist; returns an error
+// for any other I/O or parse failure.
+func readDoc(path string) (sidecarDoc, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -206,12 +274,12 @@ func readSidecar(projectRoot string) (sidecarDoc, error) {
 }
 
 // TrackCreatedFile records that SquadAI created the file at relPath.
-// Idempotent — calling twice does not duplicate the entry.
+// Idempotent: calling twice does not duplicate the entry.
 func TrackCreatedFile(projectRoot, relPath string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, file, relPath, err := loadFor(projectRoot, relPath)
 	if err != nil {
 		return err
 	}
@@ -225,7 +293,7 @@ func TrackCreatedFile(projectRoot, relPath string) error {
 	doc.CreatedFiles = append(doc.CreatedFiles, relPath)
 	sort.Strings(doc.CreatedFiles)
 
-	return writeSidecar(projectRoot, doc)
+	return writeDoc(file, doc)
 }
 
 // UntrackCreatedFile removes relPath from the created-files list.
@@ -234,7 +302,7 @@ func UntrackCreatedFile(projectRoot, relPath string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, file, relPath, err := loadFor(projectRoot, relPath)
 	if err != nil {
 		return err
 	}
@@ -250,11 +318,11 @@ func UntrackCreatedFile(projectRoot, relPath string) error {
 	}
 	doc.CreatedFiles = filtered
 
-	return writeSidecar(projectRoot, doc)
+	return writeDoc(file, doc)
 }
 
-// ListManagedFiles returns all files that have managed marker blocks (keys of
-// managed_files), sorted. Returns an empty slice (not nil) when the sidecar
+// ListManagedFiles returns the files inside the project that have managed
+// entries (keys of managed_files), sorted. Returns an empty slice (not nil) when the sidecar
 // does not exist or no entries are recorded.
 func ListManagedFiles(projectRoot string) ([]string, error) {
 	mu.Lock()
@@ -273,8 +341,10 @@ func ListManagedFiles(projectRoot string) ([]string, error) {
 	return out, nil
 }
 
-// ListCreatedFiles returns all files SquadAI created (relative paths), sorted.
-// Returns an empty slice (not nil) when the sidecar does not exist.
+// ListCreatedFiles returns the files inside the project that SquadAI created
+// (relative paths), sorted. Files it created under HOME are shared by every
+// project and are not listed. Returns an empty slice (not nil) when the
+// sidecar does not exist.
 func ListCreatedFiles(projectRoot string) ([]string, error) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -346,15 +416,17 @@ func DeleteSidecar(projectRoot string) error {
 	return nil
 }
 
-// writeSidecar marshals doc and writes it atomically to the sidecar path.
 func writeSidecar(projectRoot string, doc sidecarDoc) error {
+	return writeDoc(SidecarPath(projectRoot), doc)
+}
+
+func writeDoc(path string, doc sidecarDoc) error {
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal sidecar: %w", err)
 	}
 	data = append(data, '\n')
 
-	path := SidecarPath(projectRoot)
 	if _, err := fileutil.WriteAtomic(path, data, 0644); err != nil {
 		return fmt.Errorf("write sidecar: %w", err)
 	}

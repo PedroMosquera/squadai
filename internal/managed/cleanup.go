@@ -47,12 +47,11 @@ func InspectStale(projectRoot, path string) (stale StaleContent, exists bool, er
 	}
 
 	mu.Lock()
-	doc, err := readSidecar(projectRoot)
+	doc, _, rel, err := loadFor(projectRoot, path)
 	mu.Unlock()
 	if err != nil {
 		return StaleContent{}, true, err
 	}
-	rel := relPath(projectRoot, path)
 	for _, f := range doc.CreatedFiles {
 		if f == rel {
 			stale.Created = true
@@ -118,17 +117,15 @@ func stripOwnedJSON(data []byte, owned []string, entries map[string][]string) (o
 }
 
 // ForgetFile drops every sidecar record for the file at path (created-file
-// entry and managed keys). path may be absolute; it is resolved the same way
-// the installers resolve it when recording.
+// entry and managed keys).
 func ForgetFile(projectRoot, path string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	doc, err := readSidecar(projectRoot)
+	doc, file, rel, err := loadFor(projectRoot, path)
 	if err != nil {
 		return err
 	}
-	rel := relPath(projectRoot, path)
 
 	changed := false
 	if _, ok := doc.ManagedFiles[rel]; ok {
@@ -147,15 +144,5 @@ func ForgetFile(projectRoot, path string) error {
 	if !changed {
 		return nil
 	}
-	return writeSidecar(projectRoot, doc)
-}
-
-func relPath(projectRoot, path string) string {
-	if projectRoot == "" || !filepath.IsAbs(path) {
-		return path
-	}
-	if rel, err := filepath.Rel(projectRoot, path); err == nil {
-		return rel
-	}
-	return path
+	return writeDoc(file, doc)
 }
