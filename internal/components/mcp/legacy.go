@@ -13,8 +13,9 @@ import (
 
 const legacyPrefix = "mcp:legacy:"
 
-// Ownership is per top-level key, so inside an owned legacy root key squadai
-// cannot tell its own servers from ones the user added later. Every apply used
+// Legacy locations were only ever tracked per top-level key, so inside an
+// owned legacy root key squadai cannot tell its own servers from ones the user
+// added later. Every apply used
 // to overwrite the whole key with the desired set, so a name in the desired set
 // is treated as squadai's; any other name is left for the user. A server
 // removed from the squadai config before this migration therefore stays behind
@@ -120,11 +121,11 @@ func (i *Installer) legacyRemainder(agent domain.AgentID) (map[string]any, error
 // agent with neither copy.
 func (i *Installer) applyLegacyMigration(action domain.PlannedAction) error {
 	cfg := i.agentConfigs[action.Agent]
-	current, err := fileutil.ReadJSONFile(cfg.configPath)
+	current, err := i.serversCurrent(action.Agent, cfg.configPath, cfg.projectDir)
 	if err != nil {
 		return fmt.Errorf("read MCP config: %w", err)
 	}
-	if current == nil || !i.mcpServersKeyMatches(current, i.servers, action.Agent) {
+	if !current {
 		return fmt.Errorf("%s does not hold the squadai MCP servers yet; left %s unchanged",
 			cfg.configPath, action.TargetPath)
 	}

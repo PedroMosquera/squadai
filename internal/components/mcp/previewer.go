@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
-	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
 // Preview implements domain.Previewer. It returns one entry per planned
@@ -61,11 +59,9 @@ func (i *Installer) Preview(adapter domain.Adapter, homeDir, projectDir string) 
 	return entries, nil
 }
 
-// detectConflicts returns the set of root-key conflicts between the existing
-// on-disk file and what Apply would write. A conflict occurs when SquadAI's
-// target root key ("mcp" or the adapter's MCPRootKey) is present on disk,
-// not tracked in the managed-keys sidecar, and has a value different from
-// what SquadAI would write.
+// detectConflicts returns the servers Apply would refuse to overwrite: a
+// server SquadAI configures that is already on disk under the same name, not
+// owned by SquadAI, and different from what SquadAI would write.
 func (i *Installer) detectConflicts(action domain.PlannedAction, projectDir string) ([]domain.Conflict, error) {
 	// TOML targets (Codex's config.toml) are marker-managed: Apply rewrites
 	// only the hash-marker block and preserves user TOML outside it verbatim,
@@ -79,69 +75,14 @@ func (i *Installer) detectConflicts(action domain.PlannedAction, projectDir stri
 	if strings.HasPrefix(action.Description, legacyPrefix) {
 		return nil, nil
 	}
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return nil, fmt.Errorf("read existing JSON: %w", err)
-	}
-	if existing == nil {
-		return nil, nil
-	}
-
-	rootKey, incomingVal, err := i.rootKeyAndValue(action)
+	m, err := i.mergeServers(action.Agent, action.TargetPath, projectDir, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	relPath := action.TargetPath
-	if projectDir != "" {
-		if rel, relErr := filepath.Rel(projectDir, action.TargetPath); relErr == nil {
-			relPath = rel
-		}
-	}
-	managedKeys, err := managed.ReadManagedKeys(projectDir, relPath)
-	if err != nil {
-		return nil, fmt.Errorf("read managed keys: %w", err)
-	}
-
-	incoming := map[string]any{rootKey: incomingVal}
-	_, merges, _, mergeErr := fileutil.MergeJSON(existing, incoming, managedKeys)
-	if mergeErr != nil {
-		return nil, mergeErr
-	}
-	if len(merges) == 0 {
+	if len(m.conflicts) == 0 {
 		return nil, nil
 	}
-
-	out := make([]domain.Conflict, 0, len(merges))
-	for _, c := range merges {
-		out = append(out, domain.Conflict{
-			Key:           c.Key,
-			UserValue:     stringifyForConflict(c.UserValue),
-			IncomingValue: stringifyForConflict(c.IncomingValue),
-		})
-	}
-	return out, nil
-}
-
-// rootKeyAndValue returns the top-level JSON key SquadAI owns for this
-// action's strategy, plus the value Apply would write under it.
-func (i *Installer) rootKeyAndValue(action domain.PlannedAction) (string, any, error) {
-	serversMap := make(map[string]any, len(i.servers))
-	for name, def := range i.servers {
-		serversMap[name] = i.serverToMap(def, action.Agent)
-	}
-
-	// Both strategies write under the adapter's MCPRootKey (cached). The
-	// strategy difference is which file is targeted, not which key is used.
-	rootKey := i.rootKeyForAgent(action.Agent)
-
-	// Round-trip through JSON so the value is the same concrete type that
-	// MergeJSON will see on the existing side (map[string]any, etc.).
-	normalized, err := normalizeJSON(serversMap)
-	if err != nil {
-		return "", nil, err
-	}
-	return rootKey, normalized, nil
+	return conflictsToDomain(m.conflicts), nil
 }
 
 // normalizeJSON round-trips v through encoding/json so values end up as the

@@ -1,16 +1,13 @@
 package mcp
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
-	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
@@ -238,8 +235,11 @@ func (i *Installer) planMergedConfig(adapter domain.Adapter, projectDir string) 
 		}, nil
 	}
 
-	// Check if MCP key matches desired state.
-	if i.mcpKeyMatches(existing, i.servers, adapter.ID()) {
+	current, err := i.serversCurrent(adapter.ID(), targetPath, projectDir)
+	if err != nil {
+		return nil, err
+	}
+	if current {
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
@@ -283,26 +283,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return i.applyLegacyMigration(action)
 	}
 
-	// MCPConfigFile actions have a "mcp:configfile:" prefix.
-	if strings.HasPrefix(action.Description, "mcp:configfile:") {
-		return i.applyMCPConfigFile(action)
-	}
-
-	return i.applyMergedConfig(action)
-}
-
-// applyMergedConfig writes all servers under the adapter's root key in a
-// shared config file, respecting user-wins semantics for any unrelated
-// top-level key on disk.
-func (i *Installer) applyMergedConfig(action domain.PlannedAction) error {
-	rootKey := i.rootKeyForAgent(action.Agent)
-	mcpMap := make(map[string]interface{}, len(i.servers))
-	for name, def := range i.servers {
-		mcpMap[name] = i.serverToMap(def, action.Agent)
-	}
-	incoming := map[string]any{rootKey: mcpMap}
-
-	return i.mergeAndWrite(action, incoming, []string{rootKey})
+	return i.applyServers(action)
 }
 
 // planMCPConfigFile plans actions for the MCPConfigFile strategy.
@@ -337,8 +318,11 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, targetPath string)
 		}, nil
 	}
 
-	// Check if mcpServers key matches desired state.
-	if i.mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
+	current, err := i.serversCurrent(adapter.ID(), targetPath, i.agentConfigs[adapter.ID()].projectDir)
+	if err != nil {
+		return nil, err
+	}
+	if current {
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
@@ -361,20 +345,6 @@ func (i *Installer) planMCPConfigFile(adapter domain.Adapter, targetPath string)
 			Description: "mcp:configfile:update MCP server configuration",
 		},
 	}, nil
-}
-
-// applyMCPConfigFile writes all servers into the servers-root key of a dedicated
-// MCP config file, respecting user-wins semantics so unrelated user-authored
-// keys (e.g. "inputs" for VS Code) are preserved.
-func (i *Installer) applyMCPConfigFile(action domain.PlannedAction) error {
-	rootKey := i.rootKeyForAgent(action.Agent)
-	serversMap := make(map[string]interface{}, len(i.servers))
-	for name, def := range i.servers {
-		serversMap[name] = i.serverToMap(def, action.Agent)
-	}
-	incoming := map[string]any{rootKey: serversMap}
-
-	return i.mergeAndWrite(action, incoming, []string{rootKey})
 }
 
 // tomlSectionID is the hash-marker section ID for the managed TOML MCP block:
@@ -527,79 +497,6 @@ func (i *Installer) verifyTOMLConfigFile(adapter domain.Adapter, targetPath stri
 	return results, nil
 }
 
-// mergeAndWrite is the shared helper both MCP apply branches route through.
-// It reads the existing sidecar, pulls any per-key overrides from the active
-// ApplyPolicy, invokes MergeAndWriteJSON, surfaces conflicts as
-// *domain.ConflictError, and finally updates the sidecar to reflect the new
-// managed-keys set (existing ∪ newlyManaged).
-func (i *Installer) mergeAndWrite(action domain.PlannedAction, incoming map[string]any, incomingKeys []string) error {
-	// Ensure the parent directory exists even for fresh installs —
-	// WriteAtomic does this too, but failing early gives a clearer error.
-	dir := filepath.Dir(action.TargetPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
-	}
-
-	relPath := action.TargetPath
-	if i.projectDir != "" {
-		if rel, relErr := filepath.Rel(i.projectDir, action.TargetPath); relErr == nil {
-			relPath = rel
-		}
-	}
-
-	var existingManaged []string
-	if i.projectDir != "" {
-		keys, err := managed.ReadManagedKeys(i.projectDir, relPath)
-		if err != nil {
-			return fmt.Errorf("read managed keys sidecar: %w", err)
-		}
-		existingManaged = keys
-	}
-
-	overrides := i.policy.EffectiveOverrides(action.TargetPath, incomingKeys)
-
-	res, err := fileutil.MergeAndWriteJSON(action.TargetPath, incoming, existingManaged, overrides, 0644)
-	if err != nil {
-		return fmt.Errorf("merge and write %s: %w", action.TargetPath, err)
-	}
-	if len(res.Conflicts) > 0 {
-		return &domain.ConflictError{
-			TargetPath: action.TargetPath,
-			Conflicts:  conflictsToDomain(res.Conflicts),
-		}
-	}
-
-	if i.projectDir != "" {
-		finalManaged := unionKeys(existingManaged, res.NewlyManaged)
-		if err := managed.WriteManagedKeys(i.projectDir, relPath, finalManaged); err != nil {
-			return fmt.Errorf("write managed keys sidecar: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// unionKeys returns the sorted, deduped union of two string slices. It is
-// used to maintain the sidecar's managed-keys set across merges — keys
-// SquadAI previously claimed must be retained even if this merge didn't
-// touch them.
-func unionKeys(a, b []string) []string {
-	set := make(map[string]bool, len(a)+len(b))
-	for _, k := range a {
-		set[k] = true
-	}
-	for _, k := range b {
-		set[k] = true
-	}
-	out := make([]string, 0, len(set))
-	for k := range set {
-		out = append(out, k)
-	}
-	// MergeJSON already returns sorted; union may re-order, so sort here.
-	sort.Strings(out)
-	return out
-}
-
 // conflictsToDomain adapts fileutil-level merge conflicts into the
 // domain-level Conflict shape the review pipeline expects.
 func conflictsToDomain(in []fileutil.MergeConflict) []domain.Conflict {
@@ -645,7 +542,11 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 		Component: "mcp",
 	})
 
-	if i.mcpServersKeyMatches(existing, i.servers, adapter.ID()) {
+	current, err := i.serversCurrent(adapter.ID(), targetPath, projectDir)
+	if err != nil {
+		return nil, err
+	}
+	if current {
 		results = append(results, domain.VerifyResult{
 			Check:     "mcp-configfile-servers-current",
 			Passed:    true,
@@ -663,27 +564,6 @@ func (i *Installer) verifyMCPConfigFile(adapter domain.Adapter, projectDir strin
 	}
 
 	return results, nil
-}
-
-// mcpServersKeyMatches checks whether the adapter-specific root key in the
-// document matches the expected server definitions. Reads the cached schema
-// for the agent — Plan must have been called first.
-func (i *Installer) mcpServersKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef, agent domain.AgentID) bool {
-	rootKey := i.rootKeyForAgent(agent)
-	mcpVal, exists := doc[rootKey]
-	if !exists {
-		return false
-	}
-
-	// Compare via JSON serialization for deep equality.
-	expectedMap := make(map[string]interface{})
-	for name, def := range expected {
-		expectedMap[name] = i.serverToMap(def, agent)
-	}
-
-	expectedJSON, _ := json.Marshal(expectedMap)
-	actualJSON, _ := json.Marshal(mcpVal)
-	return string(expectedJSON) == string(actualJSON)
 }
 
 // Verify checks post-apply state for the MCP component. The strategy is
@@ -746,7 +626,11 @@ func (i *Installer) verifyMergedConfig(adapter domain.Adapter, projectDir string
 		Passed: true,
 	})
 
-	if i.mcpKeyMatches(existing, i.servers, adapter.ID()) {
+	current, err := i.serversCurrent(adapter.ID(), targetPath, projectDir)
+	if err != nil {
+		return nil, err
+	}
+	if current {
 		results = append(results, domain.VerifyResult{
 			Check:  "mcp-servers-current",
 			Passed: true,
@@ -775,55 +659,7 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 		}
 		return marshalJSONDoc(doc)
 	}
-	if strings.HasPrefix(action.Description, "mcp:configfile:") {
-		return i.renderMCPConfigFileContent(action)
-	}
-	return i.renderMergedConfigContent(action)
-}
-
-// renderMergedConfigContent computes what applyMergedConfig would write.
-func (i *Installer) renderMergedConfigContent(action domain.PlannedAction) ([]byte, error) {
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return nil, fmt.Errorf("read target: %w", err)
-	}
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-	mcpMap := make(map[string]interface{})
-	for name, def := range i.servers {
-		mcpMap[name] = i.serverToMap(def, action.Agent)
-	}
-	existing[i.rootKeyForAgent(action.Agent)] = mcpMap
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal config: %w", err)
-	}
-	data = append(data, '\n')
-	return data, nil
-}
-
-// renderMCPConfigFileContent computes what applyMCPConfigFile would write.
-// Existing keys not managed by squadai (e.g. "inputs") are preserved.
-func (i *Installer) renderMCPConfigFileContent(action domain.PlannedAction) ([]byte, error) {
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return nil, fmt.Errorf("read MCP config: %w", err)
-	}
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-	serversMap := make(map[string]interface{})
-	for name, def := range i.servers {
-		serversMap[name] = i.serverToMap(def, action.Agent)
-	}
-	existing[i.rootKeyForAgent(action.Agent)] = serversMap
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal MCP config: %w", err)
-	}
-	data = append(data, '\n')
-	return data, nil
+	return i.renderServersContent(action)
 }
 
 // serverToMap converts an MCPServerDef to a generic map for JSON output,
@@ -871,24 +707,4 @@ func (i *Installer) serverToMap(def domain.MCPServerDef, agent domain.AgentID) m
 		m["headers"] = def.Headers
 	}
 	return m
-}
-
-// mcpKeyMatches checks whether the cached root key in the document matches
-// the expected server definitions. Used by the MergeIntoSettings strategy.
-func (i *Installer) mcpKeyMatches(doc map[string]interface{}, expected map[string]domain.MCPServerDef, agent domain.AgentID) bool {
-	rootKey := i.rootKeyForAgent(agent)
-	mcpVal, exists := doc[rootKey]
-	if !exists {
-		return false
-	}
-
-	// Compare via JSON serialization for deep equality.
-	expectedMap := make(map[string]interface{})
-	for name, def := range expected {
-		expectedMap[name] = i.serverToMap(def, agent)
-	}
-
-	expectedJSON, _ := json.Marshal(expectedMap)
-	actualJSON, _ := json.Marshal(mcpVal)
-	return string(expectedJSON) == string(actualJSON)
 }

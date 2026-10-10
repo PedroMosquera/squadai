@@ -30,6 +30,11 @@ type sidecarDoc struct {
 // managedFileEntry tracks which keys are managed for a single config file.
 type managedFileEntry struct {
 	ManagedKeys []string `json:"managed_keys"`
+	// ManagedEntries narrows ownership below a top-level key to named
+	// children (MCP server names under "mcpServers"). A key missing here was
+	// recorded before per-entry tracking existed, so callers must not read
+	// its absence as "owns nothing".
+	ManagedEntries map[string][]string `json:"managed_entries,omitempty"`
 }
 
 // mu guards concurrent reads and writes to the sidecar file within a single
@@ -84,9 +89,82 @@ func WriteManagedKeys(projectRoot, configFile string, keys []string) error {
 	if doc.ManagedFiles == nil {
 		doc.ManagedFiles = make(map[string]managedFileEntry)
 	}
-	doc.ManagedFiles[configFile] = managedFileEntry{ManagedKeys: sorted}
+	entry := doc.ManagedFiles[configFile]
+	entry.ManagedKeys = sorted
+	for key := range entry.ManagedEntries {
+		if !containsString(sorted, key) {
+			delete(entry.ManagedEntries, key)
+		}
+	}
+	if len(entry.ManagedEntries) == 0 {
+		entry.ManagedEntries = nil
+	}
+	doc.ManagedFiles[configFile] = entry
 
 	return writeSidecar(projectRoot, doc)
+}
+
+// ReadManagedEntries returns the child names SquadAI owns under the top-level
+// key of configFile. tracked is false when the sidecar predates per-entry
+// tracking for that key (or has no entry at all); the caller then has to
+// decide ownership from the key-level record in ReadManagedKeys.
+func ReadManagedEntries(projectRoot, configFile, key string) (names []string, tracked bool, err error) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return nil, false, err
+	}
+	stored, ok := doc.ManagedFiles[configFile].ManagedEntries[key]
+	if !ok {
+		return nil, false, nil
+	}
+	out := make([]string, len(stored))
+	copy(out, stored)
+	return out, true, nil
+}
+
+// WriteManagedEntries records exactly names (sorted) as the children SquadAI
+// owns under key in configFile, and adds key to the file's managed keys in the
+// same atomic write. An empty names list is stored as tracked-and-empty.
+func WriteManagedEntries(projectRoot, configFile, key string, names []string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	doc, err := readSidecar(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	sorted := make([]string, len(names))
+	copy(sorted, names)
+	sort.Strings(sorted)
+
+	if doc.ManagedFiles == nil {
+		doc.ManagedFiles = make(map[string]managedFileEntry)
+	}
+	entry := doc.ManagedFiles[configFile]
+	if !containsString(entry.ManagedKeys, key) {
+		entry.ManagedKeys = append(entry.ManagedKeys, key)
+		sort.Strings(entry.ManagedKeys)
+	}
+	if entry.ManagedEntries == nil {
+		entry.ManagedEntries = make(map[string][]string)
+	}
+	entry.ManagedEntries[key] = sorted
+	doc.ManagedFiles[configFile] = entry
+
+	return writeSidecar(projectRoot, doc)
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoveManagedFile drops the managed-keys entry for configFile so drift

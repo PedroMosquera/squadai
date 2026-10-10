@@ -171,9 +171,9 @@ func TestLegacyMigration_VSCode_LegacyKeptWhenNewFileBlocked(t *testing.T) {
 	project := t.TempDir()
 	legacyPath := seedLegacyVSCode(t, project, map[string]any{"context7": squadaiContext7VSCode}, nil)
 	before, _ := os.ReadFile(legacyPath)
-	// A user-owned mcpServers key in .mcp.json blocks squadai's write.
+	// A user-owned server with squadai's server name blocks squadai's write.
 	writeTestJSON(t, filepath.Join(project, ".mcp.json"),
-		map[string]any{"mcpServers": map[string]any{"theirs": map[string]any{"command": "x"}}})
+		map[string]any{"mcpServers": map[string]any{"context7": map[string]any{"command": "x"}}})
 
 	inst := newTestInstaller()
 	actions, err := inst.Plan(vscode.New(), t.TempDir(), project)

@@ -15,10 +15,10 @@ import (
 )
 
 // TestUserWinsSmoke_PreviewerFlagsHandEditedKey is the end-to-end gate for
-// the user-wins safety story: if a user has hand-edited a top-level key
-// SquadAI would overwrite and the sidecar does NOT claim the key, the
-// Previewer must emit a Conflict entry so the review screen can block the
-// apply.
+// the user-wins safety story: if the user already has a server under a name
+// SquadAI would write and the sidecar does NOT claim that server, the
+// Previewer must emit a Conflict for that server alone so the review screen
+// can block the apply. Other user servers are not conflicts.
 func TestUserWinsSmoke_PreviewerFlagsHandEditedKey(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
@@ -30,11 +30,15 @@ func TestUserWinsSmoke_PreviewerFlagsHandEditedKey(t *testing.T) {
 		t.Fatalf("write project config: %v", err)
 	}
 
-	// Seed an opencode.json that the user has hand-edited: the "mcp" key
-	// exists but SquadAI has never claimed it (no sidecar entry).
+	// Seed an opencode.json the user wrote: SquadAI has never claimed any of
+	// its servers (no sidecar entry).
 	target := filepath.Join(project, "opencode.json")
 	userConfig := map[string]any{
 		"mcp": map[string]any{
+			"context7": map[string]any{
+				"type": "remote",
+				"url":  "https://user-fork.example.com/mcp",
+			},
 			"user-managed-server": map[string]any{
 				"type": "remote",
 				"url":  "https://user-only.example.com/mcp",
@@ -58,11 +62,11 @@ func TestUserWinsSmoke_PreviewerFlagsHandEditedKey(t *testing.T) {
 		t.Errorf("Action = %q, want %q", entries[0].Action, domain.ActionUpdate)
 	}
 	if len(entries[0].Conflicts) != 1 {
-		t.Fatalf("expected 1 conflict over unmanaged 'mcp' key, got %d: %+v",
+		t.Fatalf("expected 1 conflict over the unmanaged context7 server, got %d: %+v",
 			len(entries[0].Conflicts), entries[0].Conflicts)
 	}
-	if entries[0].Conflicts[0].Key != "mcp" {
-		t.Errorf("Conflict.Key = %q, want %q", entries[0].Conflicts[0].Key, "mcp")
+	if entries[0].Conflicts[0].Key != "mcp.context7" {
+		t.Errorf("Conflict.Key = %q, want %q", entries[0].Conflicts[0].Key, "mcp.context7")
 	}
 }
 
@@ -141,6 +145,10 @@ func TestUserWinsSmoke_OverrideWritesThrough(t *testing.T) {
 	target := filepath.Join(project, "opencode.json")
 	userConfig := map[string]any{
 		"mcp": map[string]any{
+			"context7": map[string]any{
+				"type": "remote",
+				"url":  "https://user-fork.example.com/mcp",
+			},
 			"user-managed-server": map[string]any{
 				"type": "remote",
 				"url":  "https://user-only.example.com/mcp",
@@ -165,7 +173,7 @@ func TestUserWinsSmoke_OverrideWritesThrough(t *testing.T) {
 	// Simulate the user granting consent via the review screen.
 	installer.SetApplyPolicy(domain.ApplyPolicy{
 		Overrides: map[string]map[string]bool{
-			target: {"mcp": true},
+			target: {"mcp.context7": true},
 		},
 	})
 
@@ -179,17 +187,18 @@ func TestUserWinsSmoke_OverrideWritesThrough(t *testing.T) {
 		}
 	}
 
-	// File should now contain SquadAI's mcp value, not the user's.
+	// context7 now holds SquadAI's value; the user's other server is untouched.
 	got := readJSON(t, target)
 	mcpBlock, ok := got["mcp"].(map[string]any)
 	if !ok {
 		t.Fatalf("mcp key missing or wrong type: %v", got["mcp"])
 	}
-	if _, hasContext7 := mcpBlock["context7"]; !hasContext7 {
-		t.Errorf("expected context7 server under mcp after override, got %v", mcpBlock)
+	c7, _ := mcpBlock["context7"].(map[string]any)
+	if c7["url"] != "https://mcp.context7.com/mcp" {
+		t.Errorf("expected squadai's context7 under mcp after override, got %v", mcpBlock)
 	}
-	if _, hasUserOnly := mcpBlock["user-managed-server"]; hasUserOnly {
-		t.Errorf("user-managed-server should be replaced after overwrite, got %v", mcpBlock)
+	if _, hasUserOnly := mcpBlock["user-managed-server"]; !hasUserOnly {
+		t.Errorf("overwriting context7 must keep user-managed-server, got %v", mcpBlock)
 	}
 
 	// Sidecar should now claim "mcp".
@@ -226,6 +235,10 @@ func TestUserWinsSmoke_NoOverrideReturnsConflictError(t *testing.T) {
 	target := filepath.Join(project, "opencode.json")
 	userConfig := map[string]any{
 		"mcp": map[string]any{
+			"context7": map[string]any{
+				"type": "remote",
+				"url":  "https://user-fork.example.com/mcp",
+			},
 			"user-managed-server": map[string]any{
 				"type": "remote",
 				"url":  "https://user-only.example.com/mcp",

@@ -545,3 +545,67 @@ func TestRemoveManagedFile_DropsOnlyThatEntry(t *testing.T) {
 		t.Errorf("RemoveManagedFile on absent entry: %v, want nil", err)
 	}
 }
+
+// ─── ManagedEntries ──────────────────────────────────────────────────────────
+
+func TestReadManagedEntries_OldFormatSidecarIsUntracked(t *testing.T) {
+	root := t.TempDir()
+	old := `{"managed_files": {".mcp.json": {"managed_keys": ["mcpServers"]}}}`
+	if err := os.MkdirAll(filepath.Join(root, ".squadai"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(SidecarPath(root), []byte(old), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	names, tracked, err := ReadManagedEntries(root, ".mcp.json", "mcpServers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tracked || names != nil {
+		t.Errorf("old-format sidecar must read as untracked, got names=%v tracked=%v", names, tracked)
+	}
+	keys, err := ReadManagedKeys(root, ".mcp.json")
+	if err != nil || len(keys) != 1 || keys[0] != "mcpServers" {
+		t.Errorf("old-format managed keys must still read, got %v (%v)", keys, err)
+	}
+}
+
+func TestWriteManagedEntries_RecordsKeyAndEmptySetStaysTracked(t *testing.T) {
+	root := t.TempDir()
+	if err := WriteManagedKeys(root, ".mcp.json", []string{"inputs"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteManagedEntries(root, ".mcp.json", "mcpServers", nil); err != nil {
+		t.Fatal(err)
+	}
+	names, tracked, err := ReadManagedEntries(root, ".mcp.json", "mcpServers")
+	if err != nil || !tracked || len(names) != 0 {
+		t.Errorf("empty owned set must stay tracked, got names=%v tracked=%v err=%v", names, tracked, err)
+	}
+	keys, _ := ReadManagedKeys(root, ".mcp.json")
+	if len(keys) != 2 || keys[0] != "inputs" || keys[1] != "mcpServers" {
+		t.Errorf("WriteManagedEntries must add its key and keep others, got %v", keys)
+	}
+}
+
+func TestWriteManagedKeys_KeepsEntriesOfRetainedKeysOnly(t *testing.T) {
+	root := t.TempDir()
+	if err := WriteManagedEntries(root, "f.json", "mcpServers", []string{"b", "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteManagedKeys(root, "f.json", []string{"mcpServers", "other"}); err != nil {
+		t.Fatal(err)
+	}
+	names, tracked, _ := ReadManagedEntries(root, "f.json", "mcpServers")
+	if !tracked || len(names) != 2 || names[0] != "a" || names[1] != "b" {
+		t.Errorf("WriteManagedKeys dropped entries of a key it kept: %v tracked=%v", names, tracked)
+	}
+
+	if err := WriteManagedKeys(root, "f.json", []string{"other"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, tracked, _ := ReadManagedEntries(root, "f.json", "mcpServers"); tracked {
+		t.Error("entries of a key no longer managed must be dropped")
+	}
+}

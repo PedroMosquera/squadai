@@ -118,19 +118,23 @@ func TestPreview_OpenCode_ManagedOverwrite_NoConflict(t *testing.T) {
 	}
 }
 
-func TestPreview_OpenCode_UserEditedMCPKey_EmitsConflict(t *testing.T) {
+func TestPreview_OpenCode_UserServerWithSquadaiName_EmitsConflict(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()
 	inst := newTestInstaller()
 
 	target := filepath.Join(project, "opencode.json")
-	// User has hand-edited the "mcp" key to a value SquadAI does not own
-	// (no managed-keys sidecar). Preview should flag this as a conflict.
+	// The user already has their own "context7" server and SquadAI does not
+	// own it (no sidecar). Only that server conflicts; other user servers do not.
 	writeTestJSON(t, target, map[string]interface{}{
 		"mcp": map[string]interface{}{
-			"user-added-server": map[string]interface{}{
+			"context7": map[string]interface{}{
 				"type": "remote",
 				"url":  "https://user.example.com/mcp",
+			},
+			"user-added-server": map[string]interface{}{
+				"type": "remote",
+				"url":  "https://other.example.com/mcp",
 			},
 		},
 	})
@@ -149,14 +153,14 @@ func TestPreview_OpenCode_UserEditedMCPKey_EmitsConflict(t *testing.T) {
 		t.Fatalf("expected 1 conflict, got %d: %v", len(entries[0].Conflicts), entries[0].Conflicts)
 	}
 	c := entries[0].Conflicts[0]
-	if c.Key != "mcp" {
-		t.Errorf("Conflict.Key = %q, want %q", c.Key, "mcp")
+	if c.Key != "mcp.context7" {
+		t.Errorf("Conflict.Key = %q, want %q", c.Key, "mcp.context7")
 	}
-	if !strings.Contains(c.UserValue, "user-added-server") {
-		t.Errorf("Conflict.UserValue should mention user-added-server, got %q", c.UserValue)
+	if !strings.Contains(c.UserValue, "user.example.com") {
+		t.Errorf("Conflict.UserValue should be the user's server, got %q", c.UserValue)
 	}
-	if !strings.Contains(c.IncomingValue, "context7") {
-		t.Errorf("Conflict.IncomingValue should mention context7, got %q", c.IncomingValue)
+	if !strings.Contains(c.IncomingValue, "mcp.context7.com") {
+		t.Errorf("Conflict.IncomingValue should be squadai's server, got %q", c.IncomingValue)
 	}
 }
 

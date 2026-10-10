@@ -470,8 +470,10 @@ func TestApply_UpdatesOutdatedMCP(t *testing.T) {
 
 	doc := readTestJSON(t, targetPath)
 	mcpMap := doc["mcp"].(map[string]interface{})
-	if _, ok := mcpMap["old-server"]; ok {
-		t.Error("old-server should be replaced")
+	// A key-level sidecar cannot tell a server squadai dropped from one the
+	// user added, so an unconfigured name is kept.
+	if _, ok := mcpMap["old-server"]; !ok {
+		t.Error("old-server is not configured by squadai and must be kept")
 	}
 	if _, ok := mcpMap["context7"]; !ok {
 		t.Error("context7 should be present")
@@ -1604,9 +1606,8 @@ func TestApplyMCPConfigFile_PreservesVSCodeInputs(t *testing.T) {
 	if _, ok := serversMap["context7"]; !ok {
 		t.Error("expected 'context7' server to be written")
 	}
-	// Old server should be replaced (we overwrite the servers key entirely).
-	if _, ok := serversMap["old-server"]; ok {
-		t.Error("old-server should have been replaced")
+	if _, ok := serversMap["old-server"]; !ok {
+		t.Error("old-server is not configured by squadai and must be kept")
 	}
 }
 
