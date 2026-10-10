@@ -6,13 +6,10 @@ package legacyinstructions
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
-	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
@@ -95,37 +92,11 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	return actions, nil
 }
 
-// Apply strips squadai's blocks from action.TargetPath and deletes the file
-// only when nothing else is left. It re-reads the file rather than trusting
-// the plan, so content the user added after planning survives.
+// Apply is a no-op: the executor routes every ComponentCleanup action
+// through managed.InspectStale, which strips the blocks and deletes the file
+// only when squadai created it and nothing else is left.
 func (i *Installer) Apply(action domain.PlannedAction) error {
-	data, err := fileutil.ReadFileOrEmpty(action.TargetPath)
-	if err != nil {
-		return fmt.Errorf("read legacy instructions: %w", err)
-	}
-	stripped, found := marker.StripAll(string(data))
-	if !found {
-		return nil
-	}
-	if strings.TrimSpace(stripped) != "" {
-		if _, err := fileutil.WriteAtomic(action.TargetPath, []byte(stripped), 0644); err != nil {
-			return fmt.Errorf("write legacy instructions: %w", err)
-		}
-		return nil
-	}
-	if err := os.Remove(action.TargetPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove legacy instructions: %w", err)
-	}
-	if i.projectDir == "" {
-		return nil
-	}
-	// The executor records created files relative to the project, home paths
-	// included, so untrack with the same computation.
-	rel, err := filepath.Rel(i.projectDir, action.TargetPath)
-	if err != nil {
-		return nil
-	}
-	return managed.UntrackCreatedFile(i.projectDir, rel)
+	return nil
 }
 
 // Verify fails once per legacy file that still holds squadai blocks.
@@ -145,14 +116,4 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		})
 	}
 	return results, nil
-}
-
-// Render returns what Apply would leave in a file holding existing; empty
-// means Apply deletes the file.
-func Render(existing []byte) []byte {
-	stripped, _ := marker.StripAll(string(existing))
-	if strings.TrimSpace(stripped) == "" {
-		return nil
-	}
-	return []byte(stripped)
 }

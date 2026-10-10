@@ -11,6 +11,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
+	"github.com/PedroMosquera/squadai/internal/pipeline"
 )
 
 const userContent = "# My Copilot notes\n\nPrefer table-driven tests.\n"
@@ -45,10 +46,13 @@ func planAndApply(t *testing.T, inst *Installer, home, project string) []domain.
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
-	for _, a := range actions {
-		if err := inst.Apply(a); err != nil {
-			t.Fatalf("Apply %s: %v", a.ID, err)
-		}
+	installers := map[domain.ComponentID]domain.ComponentInstaller{domain.ComponentCleanup: inst}
+	report, err := pipeline.New(installers, nil, project, domain.CopilotConfig{}, nil).Execute(actions)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !report.Success {
+		t.Fatalf("Execute failed: %+v", report.Steps)
 	}
 	return actions
 }
@@ -160,12 +164,5 @@ func TestVerify_FailsUntilLegacyBlocksAreRemoved(t *testing.T) {
 		if !r.Passed {
 			t.Errorf("Verify after migration still fails: %+v", r)
 		}
-	}
-}
-
-func TestRender_ShowsFileWithoutSquadaiBlocks(t *testing.T) {
-	got := Render([]byte(userContent + "\n" + squadaiBlocks()))
-	if string(got) != userContent {
-		t.Errorf("Render = %q, want %q", got, userContent)
 	}
 }
