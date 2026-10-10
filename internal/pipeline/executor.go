@@ -8,6 +8,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/backup"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
@@ -187,6 +188,20 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 		}
 	}
 
+	if action.Component == domain.ComponentCleanup {
+		if err := e.applyCleanup(action.TargetPath); err != nil {
+			return domain.StepResult{
+				Action: action,
+				Status: domain.StepFailed,
+				Error:  err.Error(),
+			}
+		}
+		return domain.StepResult{
+			Action: action,
+			Status: domain.StepSuccess,
+		}
+	}
+
 	// Handle delete actions: remove the target file if it exists.
 	// Idempotent — non-existent files are treated as already deleted.
 	if action.Action == domain.ActionDelete {
@@ -246,6 +261,36 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 		Action: action,
 		Status: domain.StepSuccess,
 	}
+}
+
+// applyCleanup re-inspects path instead of trusting the planned action type,
+// because the file may have changed since the plan was shown: a delete is
+// downgraded to a strip, or to a no-op, when user content has appeared.
+func (e *Executor) applyCleanup(path string) error {
+	stale, exists, err := managed.InspectStale(e.projectDir, path)
+	if err != nil {
+		return err
+	}
+	if !exists || !stale.Found {
+		return nil
+	}
+	if stale.Deletable() {
+		if err := deleteFile(path); err != nil {
+			return err
+		}
+	} else {
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("stat %s: %w", path, err)
+		}
+		if _, err := fileutil.WriteAtomic(path, stale.Stripped, info.Mode().Perm()); err != nil {
+			return fmt.Errorf("strip %s: %w", path, err)
+		}
+	}
+	if e.projectDir == "" {
+		return nil
+	}
+	return managed.ForgetFile(e.projectDir, path)
 }
 
 // deleteFile removes path from disk. It is idempotent: if the file does not

@@ -2,7 +2,6 @@ package planner
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/PedroMosquera/squadai/internal/components/agent_teams"
 	"github.com/PedroMosquera/squadai/internal/components/agents"
@@ -22,6 +21,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/workflows"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
@@ -247,19 +247,16 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 		actions = append(actions, copilotAction)
 	}
 
-	// Stale file cleanup pass: for adapters that are disabled, emit ActionDelete
-	// for any managed files that still exist on disk.
-	deleteActions := p.planStaleCleanup(cfg, adapters, homeDir, projectDir)
-	actions = append(actions, deleteActions...)
+	actions = append(actions, p.planStaleCleanup(cfg, adapters, homeDir, projectDir)...)
 
 	return actions, nil
 }
 
-// planStaleCleanup returns ActionDelete actions for files belonging to disabled
-// adapters that still exist on disk. This prevents orphaned managed files when
-// an adapter transitions from enabled to disabled.
+// planStaleCleanup removes SquadAI's content from files of disabled adapters.
+// A file is deleted only when SquadAI created it and nothing else remains;
+// otherwise its marker blocks or owned JSON keys are stripped in place
+// (ActionUpdate). Files with no recognizable SquadAI content are left alone.
 func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.Adapter, homeDir, projectDir string) []domain.PlannedAction {
-	// Build a lookup of adapters by ID for matching against cfg.Adapters.
 	adapterByID := make(map[domain.AgentID]domain.Adapter, len(adapters))
 	for _, adapter := range adapters {
 		adapterByID[adapter.ID()] = adapter
@@ -279,40 +276,46 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 		}
 	}
 
-	var deleteActions []domain.PlannedAction
+	var cleanupActions []domain.PlannedAction
 
 	for adapterKey, adapterCfg := range cfg.Adapters {
 		if adapterCfg.Enabled {
-			continue // only clean up disabled adapters
+			continue
 		}
-
 		adapter, ok := adapterByID[domain.AgentID(adapterKey)]
 		if !ok {
-			continue // adapter not in the provided list — nothing to clean up
+			continue
 		}
 
-		// Collect all file paths that this adapter's components can write to.
-		paths := managedFilePaths(adapter, homeDir, projectDir)
-
-		for _, path := range paths {
+		for _, path := range managedFilePaths(adapter, homeDir, projectDir) {
 			if path == "" || keep[path] {
 				continue
 			}
-			if _, err := os.Stat(path); err != nil {
-				continue // file does not exist — nothing to delete
+			// Two disabled adapters can share a path; plan it once.
+			keep[path] = true
+
+			stale, exists, err := managed.InspectStale(projectDir, path)
+			if err != nil || !exists || !stale.Found {
+				continue
 			}
-			deleteActions = append(deleteActions, domain.PlannedAction{
-				ID:          fmt.Sprintf("%s-stale-cleanup-%s", adapterKey, sanitizePath(path)),
-				Agent:       adapter.ID(),
-				Component:   domain.ComponentCleanup,
-				Action:      domain.ActionDelete,
-				TargetPath:  path,
-				Description: fmt.Sprintf("remove stale file for disabled adapter %s: %s", adapterKey, path),
-			})
+			action := domain.PlannedAction{
+				ID:         fmt.Sprintf("%s-stale-cleanup-%s", adapterKey, sanitizePath(path)),
+				Agent:      adapter.ID(),
+				Component:  domain.ComponentCleanup,
+				TargetPath: path,
+			}
+			if stale.Deletable() {
+				action.Action = domain.ActionDelete
+				action.Description = fmt.Sprintf("delete %s: created by squadai for disabled adapter %s, holds only squadai content", path, adapterKey)
+			} else {
+				action.Action = domain.ActionUpdate
+				action.Description = fmt.Sprintf("strip squadai content from %s for disabled adapter %s (file kept)", path, adapterKey)
+			}
+			cleanupActions = append(cleanupActions, action)
 		}
 	}
 
-	return deleteActions
+	return cleanupActions
 }
 
 // managedFilePaths returns the set of individual file paths that an adapter's
@@ -461,6 +464,16 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 
 	case domain.ComponentEfficiency:
 		return p.renderEfficiency(action, oldContent)
+
+	case domain.ComponentCleanup:
+		stale, _, err := managed.InspectStale(projectDir, action.TargetPath)
+		if err != nil {
+			return oldContent, nil, err
+		}
+		if !stale.Found {
+			return oldContent, oldContent, nil
+		}
+		return oldContent, stale.Stripped, nil
 
 	default:
 		return oldContent, []byte("[content preview not available for " + string(action.Component) + "]"), nil

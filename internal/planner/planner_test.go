@@ -538,7 +538,7 @@ func TestPlan_DisabledAdapter_ProducesDeleteActions(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
 		}
-		if err := os.WriteFile(path, []byte("managed content"), 0644); err != nil {
+		if err := seedSquadAICreatedFile(project, path); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
 	}
@@ -700,7 +700,7 @@ func TestPlan_DisabledAdapter_KeepsFilesSharedWithEnabledAdapter(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte("managed content"), 0644); err != nil {
+		if err := seedSquadAICreatedFile(project, path); err != nil {
 			t.Fatal(err)
 		}
 	}
