@@ -23,6 +23,10 @@ const teamSectionID = "team"
 // instead of the full orchestrator when the plan was budget-degraded.
 const budgetModeSummary = "summary"
 const refinementSectionID = "refinement"
+
+// managerAgentName is SquadAI's own agent, shipped to Claude Code only because
+// its frontmatter is in Claude's sub-agent format.
+const managerAgentName = "squadai-manager"
 const memorySectionID = "memory-protocol"
 const refinementPlaceholder = "<!-- empty until /squadai-init populates -->"
 
@@ -137,48 +141,47 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	}
 
 	agentsDir := adapter.ProjectAgentsDir(projectDir)
-	if agentsDir != "" && len(i.agents) > 0 {
-		names := sortedKeys(i.agents)
-		for _, name := range names {
-			def := i.agents[name]
-			targetPath := filepath.Join(agentsDir, name+".md")
-			content, err := renderAgentForAdapter(adapter.ID(), name, def)
-			if err != nil {
-				return nil, fmt.Errorf("render agent %s: %w", name, err)
-			}
-			actionID := fmt.Sprintf("%s-agent-%s", adapter.ID(), name)
+	if agentsDir == "" {
+		return actions, nil
+	}
+	for _, name := range i.customAgentNames(adapter.ID()) {
+		targetPath := filepath.Join(agentsDir, name+".md")
+		content, err := i.customAgentContent(adapter.ID(), name)
+		if err != nil {
+			return nil, err
+		}
+		actionID := fmt.Sprintf("%s-agent-%s", adapter.ID(), name)
 
-			existing, err := fileutil.ReadFileOrEmpty(targetPath)
-			if err != nil {
-				return nil, fmt.Errorf("read agent %s: %w", name, err)
-			}
+		existing, err := fileutil.ReadFileOrEmpty(targetPath)
+		if err != nil {
+			return nil, fmt.Errorf("read agent %s: %w", name, err)
+		}
 
-			if string(existing) == content {
-				actions = append(actions, domain.PlannedAction{
-					ID:          actionID,
-					Agent:       adapter.ID(),
-					Component:   domain.ComponentAgents,
-					Action:      domain.ActionSkip,
-					TargetPath:  targetPath,
-					Description: fmt.Sprintf("agent %s already up to date", name),
-				})
-				continue
-			}
-
-			action := domain.ActionCreate
-			if len(existing) > 0 {
-				action = domain.ActionUpdate
-			}
-
+		if string(existing) == content {
 			actions = append(actions, domain.PlannedAction{
 				ID:          actionID,
 				Agent:       adapter.ID(),
 				Component:   domain.ComponentAgents,
-				Action:      action,
+				Action:      domain.ActionSkip,
 				TargetPath:  targetPath,
-				Description: fmt.Sprintf("%s agent %s", action, name),
+				Description: fmt.Sprintf("agent %s already up to date", name),
 			})
+			continue
 		}
+
+		action := domain.ActionCreate
+		if len(existing) > 0 {
+			action = domain.ActionUpdate
+		}
+
+		actions = append(actions, domain.PlannedAction{
+			ID:          actionID,
+			Agent:       adapter.ID(),
+			Component:   domain.ComponentAgents,
+			Action:      action,
+			TargetPath:  targetPath,
+			Description: fmt.Sprintf("%s agent %s", action, name),
+		})
 	}
 
 	return actions, nil
@@ -612,14 +615,9 @@ func (i *Installer) applyMarkerInjection(action domain.PlannedAction, variant st
 // applyCustomAgent writes a custom agent definition file.
 func (i *Installer) applyCustomAgent(action domain.PlannedAction) error {
 	name := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
-	def, ok := i.agents[name]
-	if !ok {
-		return fmt.Errorf("agent %q not found in config", name)
-	}
-
-	content, err := renderAgentForAdapter(action.Agent, name, def)
+	content, err := i.customAgentContent(action.Agent, name)
 	if err != nil {
-		return fmt.Errorf("render agent %s: %w", name, err)
+		return err
 	}
 
 	dir := filepath.Dir(action.TargetPath)
@@ -657,12 +655,11 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return results, nil
 	}
 	agentsDir := adapter.ProjectAgentsDir(projectDir)
-	if agentsDir == "" || len(i.agents) == 0 {
+	if agentsDir == "" {
 		return results, nil
 	}
 
-	for _, name := range sortedKeys(i.agents) {
-		def := i.agents[name]
+	for _, name := range i.customAgentNames(adapter.ID()) {
 		targetPath := filepath.Join(agentsDir, name+".md")
 		data, err := os.ReadFile(targetPath)
 		if err != nil {
@@ -674,9 +671,9 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 			continue
 		}
 
-		expected, renderErr := renderAgentForAdapter(adapter.ID(), name, def)
-		if renderErr != nil {
-			return nil, fmt.Errorf("render agent %s: %w", name, renderErr)
+		expected, err := i.customAgentContent(adapter.ID(), name)
+		if err != nil {
+			return nil, err
 		}
 		if string(data) == expected {
 			results = append(results, domain.VerifyResult{
@@ -967,11 +964,41 @@ func (i *Installer) renderMarkerInjectionContent(action domain.PlannedAction, va
 // renderCustomAgentContent computes the content for a custom agent file.
 func (i *Installer) renderCustomAgentContent(action domain.PlannedAction) (string, error) {
 	name := strings.TrimSuffix(filepath.Base(action.TargetPath), ".md")
-	def, ok := i.agents[name]
-	if !ok {
-		return "", fmt.Errorf("agent %q not found in config", name)
+	return i.customAgentContent(action.Agent, name)
+}
+
+// customAgentNames lists the single-file agents this installer manages for
+// agentID, sorted: config-defined agents plus, for Claude Code, SquadAI's own
+// manager agent unless config defines an agent of the same name.
+func (i *Installer) customAgentNames(agentID domain.AgentID) []string {
+	names := sortedKeys(i.agents)
+	if _, shadowed := i.agents[managerAgentName]; agentID == domain.AgentClaudeCode && !shadowed {
+		names = append(names, managerAgentName)
+		sort.Strings(names)
 	}
-	return renderAgentForAdapter(action.Agent, name, def)
+	return names
+}
+
+// customAgentContent returns the bytes Apply writes for a name returned by
+// customAgentNames.
+func (i *Installer) customAgentContent(agentID domain.AgentID, name string) (string, error) {
+	if def, ok := i.agents[name]; ok {
+		content, err := renderAgentForAdapter(agentID, name, def)
+		if err != nil {
+			return "", fmt.Errorf("render agent %s: %w", name, err)
+		}
+		return content, nil
+	}
+	if agentID == domain.AgentClaudeCode && name == managerAgentName {
+		content, err := assets.Read("agents/" + managerAgentName + ".md")
+		if err != nil {
+			return "", fmt.Errorf("read built-in agent %s: %w", name, err)
+		}
+		// The trailing newline matches what the removed install-commands
+		// command wrote, so existing installs are adopted as up to date.
+		return content + "\n", nil
+	}
+	return "", fmt.Errorf("agent %q not found in config", name)
 }
 
 // renderAgent generates the markdown content for an agent definition with YAML frontmatter.

@@ -330,13 +330,15 @@ Supported components: memory, rules, settings, mcp, agents, skills, commands, pl
 | Component | File Path |
 |-----------|-----------|
 | System prompt | `CLAUDE.md` (project root) |
-| Team (prompt) | `CLAUDE.md` (marker block) |
+| Agents (native) | `.claude/agents/<name>.md` (team roles, your `agents`, plus SquadAI's `squadai-manager`) |
 | Settings | `.claude/settings.json` |
 | MCP | `.mcp.json` `"mcpServers"` key (shared with VS Code) |
 | Skills | `.claude/skills/<name>/SKILL.md` |
 | Commands | `.claude/commands/<name>.md` (your `commands` plus SquadAI's `/squadai-*` and `/memory-*`) |
 
-Supported components: memory, rules, settings, skills, mcp, plugins, commands. Does not support agents (uses prompt delegation instead) or workflows.
+Supported components: memory, rules, settings, skills, mcp, plugins, agents, commands. Does not support workflows.
+
+The agents component writes `squadai-manager.md` whenever it is enabled for Claude Code. Define an agent named `squadai-manager` in `agents` to replace it. Disabling the component leaves `.claude/agents/` as it is.
 
 Disabling the commands component (`"commands": {"enabled": false}`) makes the next apply delete the command files it wrote, as long as they are unchanged. Edited files and your own commands in `.claude/commands/` stay.
 

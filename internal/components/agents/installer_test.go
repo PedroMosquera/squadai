@@ -11,6 +11,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
 	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
+	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
@@ -146,16 +147,83 @@ func TestPlan_OpenCode_Outdated_ReturnsUpdate(t *testing.T) {
 
 // ─── Plan (Claude Code — now native) ───────────────────────────────────────
 
-func TestPlan_Claude_NoTeam_ReturnsEmpty(t *testing.T) {
+func TestPlan_Claude_NoTeam_PlansOnlyManagerAgent(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
-	// Claude supports ComponentAgents now, but with no team config the custom
-	// agent (reviewer) will be planned for .claude/agents/.
-	inst := New(nil, nil, project) // no agents, no config
+	inst := New(nil, nil, project)
 
-	actions, _ := inst.Plan(adapter, t.TempDir(), project)
+	actions, err := inst.Plan(adapter, t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(project, ".claude", "agents", "squadai-manager.md")
+	if len(actions) != 1 || actions[0].TargetPath != want || actions[0].Action != domain.ActionCreate {
+		t.Fatalf("want a single create of %s, got %+v", want, actions)
+	}
+
+	content, err := inst.RenderContent(actions[0])
+	if err != nil {
+		t.Fatalf("RenderContent: %v", err)
+	}
+	asset, err := assets.Read("agents/squadai-manager.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content != asset+"\n" {
+		t.Errorf("rendered manager agent does not match the shipped asset:\n%s", content)
+	}
+}
+
+func TestPlan_Claude_EditedManagerAgentPlansUpdate(t *testing.T) {
+	project := t.TempDir()
+	path := filepath.Join(project, ".claude", "agents", "squadai-manager.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("my local tweak\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, err := New(nil, nil, project).Plan(claude.New(), t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 || actions[0].Action != domain.ActionUpdate {
+		t.Fatalf("an edited copy must surface as an update in the plan, got %+v", actions)
+	}
+}
+
+func TestPlan_Claude_ConfigAgentShadowsManagerAgent(t *testing.T) {
+	project := t.TempDir()
+	defs := map[string]domain.AgentDef{
+		"squadai-manager": {Description: "my own manager", Prompt: "Do it my way."},
+	}
+	inst := New(defs, nil, project)
+
+	actions, err := inst.Plan(claude.New(), t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("want one action for squadai-manager.md, got %+v", actions)
+	}
+	content, err := inst.RenderContent(actions[0])
+	if err != nil {
+		t.Fatalf("RenderContent: %v", err)
+	}
+	if !strings.Contains(content, "Do it my way.") {
+		t.Errorf("config-defined agent should win over the shipped one:\n%s", content)
+	}
+}
+
+func TestPlan_OpenCode_NoManagerAgent(t *testing.T) {
+	project := t.TempDir()
+	actions, err := New(nil, nil, project).Plan(opencode.New(), t.TempDir(), project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(actions) != 0 {
-		t.Errorf("expected 0 actions for claude without agents/team, got %d", len(actions))
+		t.Errorf("the manager agent ships to Claude Code only, got %+v", actions)
 	}
 }
 
@@ -636,7 +704,7 @@ func TestPlanTeamNative_Cursor_TDD(t *testing.T) {
 // ─── Team: Native delegation (Claude Code) ─────────────────────────────────
 // Claude Code now uses DelegationNativeAgents — agents go to .claude/agents/.
 
-func TestPlanTeamNative_Claude_TDD_SixActions(t *testing.T) {
+func TestPlanTeamNative_Claude_TDD_SevenActions(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
 	cfg := tddTeamConfig()
@@ -646,9 +714,10 @@ func TestPlanTeamNative_Claude_TDD_SixActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// TDD: orchestrator + brainstormer + planner + implementer + reviewer + debugger = 6
-	if len(actions) != 6 {
-		t.Errorf("expected 6 actions for Claude Code TDD native, got %d", len(actions))
+	// TDD: orchestrator + brainstormer + planner + implementer + reviewer + debugger,
+	// plus the shipped squadai-manager agent.
+	if len(actions) != 7 {
+		t.Errorf("expected 7 actions for Claude Code TDD native, got %d", len(actions))
 	}
 }
 
