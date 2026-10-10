@@ -158,7 +158,7 @@ func TestFallbackDivisors(t *testing.T) {
 
 func TestGeneratedAt_Parses(t *testing.T) {
 	if GeneratedAt().IsZero() {
-		t.Fatal("GeneratedAt() is zero; embedded pricing.json generated_at missing or malformed")
+		t.Fatal("GeneratedAt() is zero; model catalog updated date missing or malformed")
 	}
 }
 

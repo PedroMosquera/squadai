@@ -44,7 +44,6 @@ type Divisors struct {
 // priceTable mirrors pricing.json. Divisor entries are ordered so that
 // more specific prefixes are matched before shorter ones.
 type priceTable struct {
-	GeneratedAt      string `json:"generated_at"`
 	FallbackDivisors []struct {
 		Prefix string `json:"prefix"`
 		Divisors
