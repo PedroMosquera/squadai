@@ -412,13 +412,15 @@ Skills are written once to `.agents/skills/`, the [Agent Skills](https://agentsk
 
 ```
 .agents/skills/
-  shared/code-review/SKILL.md
-  shared/testing/SKILL.md
-  shared/pr-description/SKILL.md
-  tdd/brainstorming/SKILL.md       # TDD only
-  tdd/writing-plans/SKILL.md       # TDD only
+  code-review/SKILL.md
+  testing/SKILL.md
+  pr-description/SKILL.md
+  brainstorming/SKILL.md       # TDD only
+  writing-plans/SKILL.md       # TDD only
   ...
 ```
+
+Each skill sits one level below the skills directory, in a folder named after its frontmatter `name`. The asset paths above (`sdd/sdd-spec`) group skills in the SquadAI source and in `skill_scopes`, but the group is not part of the installed path. Claude Code, VS Code Copilot and Windsurf document only `<skills-dir>/<skill-name>/SKILL.md`, and VS Code and Cursor skip a skill whose `name` differs from its folder. A custom skill in `skills` with the same name as an embedded one replaces it.
 
 Every supported agent except Claude Code reads that directory natively, per its docs as of 2026-10-11:
 
@@ -435,6 +437,8 @@ Every supported agent except Claude Code reads that directory natively, per its 
 When Claude Code is enabled, apply also writes a copy of each skill to `.claude/skills/`. It is a plain copy, not a symlink, so it behaves the same on every OS and in every git checkout. The orchestrator each agent receives points at the directory that agent reads (`{{.SkillsDir}}`).
 
 Projects applied with an earlier release have per-agent copies in `.opencode/skills/`, `.pi/skills/`, `.cursor/skills/`, `.copilot/skills/` or `.windsurf/skills/`. The next apply deletes each copy that is still byte-identical to what SquadAI writes, so agents do not load the same skill twice. A copy you edited, and any file SquadAI did not write, stays where it is.
+
+Releases before the flat layout wrote `<skills-dir>/<group>/<skill>/SKILL.md` (for example `.agents/skills/shared/testing/`). Apply removes those copies the same way, byte-identical ones only, and then removes folders left empty.
 
 ---
 

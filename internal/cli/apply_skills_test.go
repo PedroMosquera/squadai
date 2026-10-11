@@ -158,7 +158,7 @@ func TestApplySkills_WritesEachSkillOnceToAgentsSkills(t *testing.T) {
 	}
 
 	shared := byRoot[".agents/skills"]
-	for _, want := range []string{"house-style", "shared/context-discipline", "tdd/brainstorming"} {
+	for _, want := range []string{"house-style", "context-discipline", "brainstorming"} {
 		if !slices.Contains(shared, want) {
 			t.Errorf(".agents/skills is missing %s; has %v", want, shared)
 		}
@@ -189,7 +189,7 @@ func TestApplySkills_MigrationRemovesOnlyUnchangedRedundantCopies(t *testing.T) 
 	if err != nil || string(got) != edited {
 		t.Errorf("user-edited .cursor/skills copy must survive unchanged (err %v)", err)
 	}
-	if _, err := os.Stat(filepath.Join(project, ".claude/skills/shared/context-discipline/SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(project, ".claude/skills/context-discipline/SKILL.md")); err != nil {
 		t.Errorf("Claude Code does not read .agents/skills, so its copy must stay: %v", err)
 	}
 
@@ -198,7 +198,7 @@ func TestApplySkills_MigrationRemovesOnlyUnchangedRedundantCopies(t *testing.T) 
 	}
 }
 
-var skillRef = regexp.MustCompile("`([^`\\s]*)/(?:shared|tdd|sdd)/[a-z-]+/SKILL\\.md`")
+var skillRef = regexp.MustCompile("`([^`\\s]*)/[a-z0-9-]+/SKILL\\.md`")
 
 func TestApplySkills_OrchestratorPointsAtADirTheHarnessReads(t *testing.T) {
 	project, actions, p := applySkillsProject(t, nil)
@@ -236,5 +236,92 @@ func TestApplySkills_OrchestratorPointsAtADirTheHarnessReads(t *testing.T) {
 		if !checked[id] {
 			t.Errorf("no rendered orchestrator with skill references for %s", id)
 		}
+	}
+}
+
+var frontmatterName = regexp.MustCompile(`(?m)^name:\s*(\S+)\s*$`)
+
+// Claude Code, VS Code Copilot and Windsurf document only <skills-dir>/<name>/SKILL.md,
+// and VS Code and Cursor drop a skill whose frontmatter name differs from its folder.
+func TestApplySkills_WritesOneLevelDirsNamedLikeTheSkill(t *testing.T) {
+	project, _, _ := applySkillsProject(t, nil)
+
+	for root, rels := range skillFilesByRoot(t, project) {
+		for _, rel := range rels {
+			if strings.Contains(rel, "/") {
+				t.Errorf("%s/%s/SKILL.md is nested; harnesses read <skills-dir>/<name>/SKILL.md", root, rel)
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(project, root, rel, "SKILL.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if m := frontmatterName.FindStringSubmatch(string(data)); m != nil && m[1] != rel {
+				t.Errorf("%s/%s/SKILL.md declares name %q; it must match its directory", root, rel, m[1])
+			}
+		}
+	}
+}
+
+var anySkillPath = regexp.MustCompile("`([^`\\s]*/SKILL\\.md)`")
+
+func TestApplySkills_EverySkillPathInGeneratedFilesExists(t *testing.T) {
+	project, _, _ := applySkillsProject(t, nil)
+
+	checked := 0
+	err := filepath.WalkDir(project, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() == "SKILL.md" || filepath.Ext(path) != ".md" {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(project, path)
+		for _, m := range anySkillPath.FindAllStringSubmatch(string(data), -1) {
+			checked++
+			if _, err := os.Stat(filepath.Join(project, m[1])); err != nil {
+				t.Errorf("%s references %s, which apply did not write", rel, m[1])
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checked == 0 {
+		t.Fatal("no SKILL.md references found in generated files")
+	}
+}
+
+func TestApplySkills_MigrationFlattensNestedCopies(t *testing.T) {
+	edited := embeddedSkill(t, "shared/code-review") + "\nLocal note kept by the user.\n"
+	project, _, _ := applySkillsProject(t, func(project string) {
+		writeSkillFile(t, filepath.Join(project, ".agents/skills/shared/testing/SKILL.md"), embeddedSkill(t, "shared/testing"))
+		writeSkillFile(t, filepath.Join(project, ".claude/skills/tdd/brainstorming/SKILL.md"), embeddedSkill(t, "tdd/brainstorming"))
+		writeSkillFile(t, filepath.Join(project, ".agents/skills/shared/code-review/SKILL.md"), edited)
+		// An earlier migration deleted files but left their folders behind.
+		if err := os.MkdirAll(filepath.Join(project, ".opencode/skills/shared/find-skills"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	for _, rel := range []string{".agents/skills/shared/testing", ".claude/skills/tdd", ".opencode/skills"} {
+		if _, err := os.Stat(filepath.Join(project, rel)); !os.IsNotExist(err) {
+			t.Errorf("%s held only unchanged nested copies or nothing, so it should be gone (stat err %v)", rel, err)
+		}
+	}
+	got, err := os.ReadFile(filepath.Join(project, ".agents/skills/shared/code-review/SKILL.md"))
+	if err != nil || string(got) != edited {
+		t.Errorf("user-edited nested copy must survive unchanged (err %v)", err)
+	}
+	for _, rel := range []string{".agents/skills/testing/SKILL.md", ".agents/skills/code-review/SKILL.md", ".claude/skills/brainstorming/SKILL.md"} {
+		if _, err := os.Stat(filepath.Join(project, rel)); err != nil {
+			t.Errorf("flat copy %s missing: %v", rel, err)
+		}
+	}
+
+	if out, err := runVerifyCIForTest(t); err != nil {
+		t.Fatalf("verify --ci after migration: %v\n%s", err, out)
 	}
 }

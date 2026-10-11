@@ -39,7 +39,7 @@ Pattern:
 
 ```
 Task: You are the Explorer for an SDD team.
-Load and follow: {{.SkillsDir}}/sdd/sdd-explore/SKILL.md
+Load and follow: {{.SkillsDir}}/sdd-explore/SKILL.md
 Task: Analyze the codebase for [feature context].
 Context: [requirements summary, relevant areas]
 Output: Codebase analysis report covering existing patterns, integration points,
@@ -78,20 +78,20 @@ constraints. Do not implement.
 - After compaction: read `CLAUDE.md`, check `specs/`, run
   `git log --oneline -10` and `{{.TestCommand}}`, resume from the last
   completed phase (full recovery procedure in
-  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
 Reference skill files by path in Task prompts; each Task agent loads its
 skill at invocation start. Do not cache skill content in your own context:
-`{{.SkillsDir}}/sdd/sdd-explore/SKILL.md` (Explorer),
-`{{.SkillsDir}}/sdd/sdd-propose/SKILL.md` (Proposer),
-`{{.SkillsDir}}/sdd/sdd-spec/SKILL.md` (Spec Writer),
-`{{.SkillsDir}}/sdd/sdd-design/SKILL.md` (Designer),
-`{{.SkillsDir}}/sdd/sdd-tasks/SKILL.md` (Task Planner),
-`{{.SkillsDir}}/sdd/sdd-apply/SKILL.md` (Implementer),
-`{{.SkillsDir}}/sdd/sdd-verify/SKILL.md` (Verifier),
-`{{.SkillsDir}}/shared/context-discipline/SKILL.md` (on demand).
+`{{.SkillsDir}}/sdd-explore/SKILL.md` (Explorer),
+`{{.SkillsDir}}/sdd-propose/SKILL.md` (Proposer),
+`{{.SkillsDir}}/sdd-spec/SKILL.md` (Spec Writer),
+`{{.SkillsDir}}/sdd-design/SKILL.md` (Designer),
+`{{.SkillsDir}}/sdd-tasks/SKILL.md` (Task Planner),
+`{{.SkillsDir}}/sdd-apply/SKILL.md` (Implementer),
+`{{.SkillsDir}}/sdd-verify/SKILL.md` (Verifier),
+`{{.SkillsDir}}/context-discipline/SKILL.md` (on demand).
 
 ## Stack Conventions
 
@@ -138,10 +138,10 @@ responses instead of storing them in full.
 | Role | Responsibility | Skill |
 |------|---------------|-------|
 | orchestrator | You: clarify, coordinate via Task tool, synthesize | none |
-| explorer | Codebase analysis + context gathering | sdd/sdd-explore |
-| proposer | Solution proposals with tradeoffs | sdd/sdd-propose |
-| spec-writer | Formal specification authoring | sdd/sdd-spec |
-| designer | Architecture and interface design | sdd/sdd-design |
-| task-planner | Dependency-ordered task breakdown | sdd/sdd-tasks |
-| implementer | Spec-faithful implementation | sdd/sdd-apply |
-| verifier | Spec compliance verification | sdd/sdd-verify |
+| explorer | Codebase analysis + context gathering | sdd-explore |
+| proposer | Solution proposals with tradeoffs | sdd-propose |
+| spec-writer | Formal specification authoring | sdd-spec |
+| designer | Architecture and interface design | sdd-design |
+| task-planner | Dependency-ordered task breakdown | sdd-tasks |
+| implementer | Spec-faithful implementation | sdd-apply |
+| verifier | Spec compliance verification | sdd-verify |

@@ -67,13 +67,13 @@ phase, not the full output.
 - After compaction: read `AGENTS.md`/`CLAUDE.md`, run
   `git log --oneline -10` and `{{.TestCommand}}`, resume from the last
   completed phase (full recovery procedure in
-  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
 Load the phase skill from `{{.SkillsDir}}` at phase start and cache it for
-the session: `shared/code-review` (Review), `shared/testing` (Test),
-`shared/pr-description` (PRs), `shared/context-discipline` (on demand).
+the session: `code-review` (Review), `testing` (Test),
+`pr-description` (PRs), `context-discipline` (on demand).
 
 ## Stack Conventions
 
@@ -116,5 +116,5 @@ Summarize MCP responses instead of storing them in full.{{end}}
 |------|---------------|-------|
 | orchestrator | You: clarify, coordinate phases, synthesize | none |
 | implementer | General-purpose implementation | none |
-| reviewer | Code review checklist | shared/code-review |
-| tester | Test writing and coverage | shared/testing |
+| reviewer | Code review checklist | code-review |
+| tester | Test writing and coverage | testing |

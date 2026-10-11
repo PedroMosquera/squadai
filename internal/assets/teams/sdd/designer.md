@@ -23,7 +23,7 @@ into a concrete design that the Task Planner and Implementer will follow.
 
 ## Skill
 
-Load and follow the skill at: `skills/sdd/sdd-design/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/sdd-design/SKILL.md`
 
 ## Responsibilities
 

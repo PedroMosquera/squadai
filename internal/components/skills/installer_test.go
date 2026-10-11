@@ -419,15 +419,15 @@ func TestPlanMethodologySkills_TDD_CorrectPaths(t *testing.T) {
 
 	skillsDir := filepath.Join(project, ".agents", "skills")
 	expectedPaths := map[string]bool{
-		filepath.Join(skillsDir, "shared", "code-review", "SKILL.md"):              false,
-		filepath.Join(skillsDir, "shared", "find-skills", "SKILL.md"):              false,
-		filepath.Join(skillsDir, "shared", "testing", "SKILL.md"):                  false,
-		filepath.Join(skillsDir, "shared", "pr-description", "SKILL.md"):           false,
-		filepath.Join(skillsDir, "tdd", "brainstorming", "SKILL.md"):               false,
-		filepath.Join(skillsDir, "tdd", "writing-plans", "SKILL.md"):               false,
-		filepath.Join(skillsDir, "tdd", "test-driven-development", "SKILL.md"):     false,
-		filepath.Join(skillsDir, "tdd", "subagent-driven-development", "SKILL.md"): false,
-		filepath.Join(skillsDir, "tdd", "systematic-debugging", "SKILL.md"):        false,
+		filepath.Join(skillsDir, "code-review", "SKILL.md"):                 false,
+		filepath.Join(skillsDir, "find-skills", "SKILL.md"):                 false,
+		filepath.Join(skillsDir, "testing", "SKILL.md"):                     false,
+		filepath.Join(skillsDir, "pr-description", "SKILL.md"):              false,
+		filepath.Join(skillsDir, "brainstorming", "SKILL.md"):               false,
+		filepath.Join(skillsDir, "writing-plans", "SKILL.md"):               false,
+		filepath.Join(skillsDir, "test-driven-development", "SKILL.md"):     false,
+		filepath.Join(skillsDir, "subagent-driven-development", "SKILL.md"): false,
+		filepath.Join(skillsDir, "systematic-debugging", "SKILL.md"):        false,
 	}
 
 	for _, a := range actions {
@@ -490,7 +490,7 @@ func TestApplyMethodologySkills_WritesEmbeddedContent(t *testing.T) {
 	}
 
 	// Verify a shared skill file was written with YAML frontmatter.
-	codeReviewPath := filepath.Join(project, ".agents", "skills", "shared", "code-review", "SKILL.md")
+	codeReviewPath := filepath.Join(project, ".agents", "skills", "code-review", "SKILL.md")
 	data, err := os.ReadFile(codeReviewPath)
 	if err != nil {
 		t.Fatalf("code-review skill not written: %v", err)
@@ -549,5 +549,26 @@ func testSkills() map[string]domain.SkillDef {
 			Description: "Docker deployment",
 			Content:     "Deploy using docker compose.",
 		},
+	}
+}
+
+func TestPlan_CustomSkillReplacesEmbeddedSkillOfTheSameName(t *testing.T) {
+	project := t.TempDir()
+	custom := map[string]domain.SkillDef{"testing": {Description: "Our testing rules", Content: "Use table tests."}}
+	inst := New(custom, &domain.MergedConfig{Methodology: domain.MethodologyTDD}, project)
+
+	actions, err := inst.Plan(opencode.New(), t.TempDir(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(project, ".agents", "skills", "testing", "SKILL.md")
+	var descs []string
+	for _, a := range actions {
+		if a.TargetPath == target {
+			descs = append(descs, a.Description)
+		}
+	}
+	if len(descs) != 1 || strings.HasPrefix(descs[0], "skill:embedded:") {
+		t.Fatalf("actions for %s = %v, want only the custom skill", target, descs)
 	}
 }

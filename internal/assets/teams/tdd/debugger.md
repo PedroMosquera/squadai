@@ -22,7 +22,7 @@ Your role is FAILURE DIAGNOSIS AND FIX using a structured 4-phase protocol.
 
 ## Skill
 
-Load and follow the skill at: `skills/tdd/systematic-debugging/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/systematic-debugging/SKILL.md`
 
 ## Responsibilities
 

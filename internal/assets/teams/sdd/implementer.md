@@ -23,7 +23,7 @@ specification says, no more, no less.
 
 ## Skill
 
-Load and follow the skill at: `skills/sdd/sdd-apply/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/sdd-apply/SKILL.md`
 
 ## Responsibilities
 

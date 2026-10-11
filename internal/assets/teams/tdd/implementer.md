@@ -22,7 +22,7 @@ Your role is CODE IMPLEMENTATION via the RED → GREEN → REFACTOR cycle.
 
 ## Skill
 
-Load and follow the skill at: `skills/tdd/test-driven-development/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/test-driven-development/SKILL.md`
 
 ## Responsibilities
 

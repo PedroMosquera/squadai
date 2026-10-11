@@ -23,7 +23,7 @@ a formal specification that is the source of truth for the Designer and Implemen
 
 ## Skill
 
-Load and follow the skill at: `skills/sdd/sdd-spec/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/sdd-spec/SKILL.md`
 
 ## Responsibilities
 

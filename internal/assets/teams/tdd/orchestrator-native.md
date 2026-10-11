@@ -75,14 +75,14 @@ phase, not the full output.
 - After compaction: read `AGENTS.md`/`CLAUDE.md`, run
   `git log --oneline -10` and `{{.TestCommand}}` (red/green state indicates
   the phase), resume from the last completed phase (full recovery procedure
-  in `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  in `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
 Load the phase skill from `{{.SkillsDir}}` at phase start and cache it for
-the session: `tdd/brainstorming` (Brainstorm), `tdd/writing-plans` (Plan),
-`tdd/test-driven-development` (Red/Green/Refactor), `shared/code-review`
-(Review), `tdd/systematic-debugging` (Debug), `shared/context-discipline`
+the session: `brainstorming` (Brainstorm), `writing-plans` (Plan),
+`test-driven-development` (Red/Green/Refactor), `code-review`
+(Review), `systematic-debugging` (Debug), `context-discipline`
 (on demand).
 
 ## Stack Conventions
@@ -126,8 +126,8 @@ this preserves context budget for implementation.
 | Role | Responsibility | Skill |
 |------|---------------|-------|
 | orchestrator | You: coordinate phases, never implement | none |
-| brainstormer | Requirements exploration, question-asking | tdd/brainstorming |
-| planner | Test plan + implementation plan | tdd/writing-plans |
-| implementer | Red-green-refactor cycles | tdd/test-driven-development |
-| reviewer | Two-stage review: automated + design | shared/code-review |
-| debugger | Reproduce → isolate → fix → verify | tdd/systematic-debugging |
+| brainstormer | Requirements exploration, question-asking | brainstorming |
+| planner | Test plan + implementation plan | writing-plans |
+| implementer | Red-green-refactor cycles | test-driven-development |
+| reviewer | Two-stage review: automated + design | code-review |
+| debugger | Reproduce → isolate → fix → verify | systematic-debugging |

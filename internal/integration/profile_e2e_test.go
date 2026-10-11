@@ -105,10 +105,10 @@ func TestApplyProfileCheap_E2E(t *testing.T) {
 
 	// 4. Skills: only the shared scope is installed.
 	skillsDir := adapter.ProjectSkillsDir(project)
-	if _, err := os.Stat(filepath.Join(skillsDir, "shared", "code-review", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(skillsDir, "code-review", "SKILL.md")); err != nil {
 		t.Errorf("shared skill should be installed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(skillsDir, "tdd")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(skillsDir, "brainstorming")); !os.IsNotExist(err) {
 		t.Error("tdd skills should be filtered out by the cheap profile's shared scope")
 	}
 

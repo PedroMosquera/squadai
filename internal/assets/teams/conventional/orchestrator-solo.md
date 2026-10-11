@@ -18,10 +18,10 @@ Execute sequentially, writing a 2-3 line summary at each phase end:
 1. **Clarify**: confirm requirements; skip when already clear.
 2. **Implement**: follow existing patterns, write basic tests alongside,
    run `{{.TestCommand}}`, commit with conventional commits.
-3. **Review**: load `{{.SkillsDir}}/shared/code-review/SKILL.md`, apply the
+3. **Review**: load `{{.SkillsDir}}/code-review/SKILL.md`, apply the
    checklist to your own implementation, fix issues found.
 4. **Test** (if coverage is thin): load
-   `{{.SkillsDir}}/shared/testing/SKILL.md`, add edge cases + integration
+   `{{.SkillsDir}}/testing/SKILL.md`, add edge cases + integration
    tests, run `{{.TestCommand}}`.
 
 Phase marker pattern:
@@ -43,13 +43,13 @@ Summary: [files changed, tests added, pass/fail, 2-3 lines]
 - After compaction: find your `=== PHASE: ===` marker, run
   `git log --oneline -10` and `{{.TestCommand}}`, resume from the last
   completed phase (full recovery procedure in
-  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
 Load the relevant skill at phase start from `{{.SkillsDir}}`:
-`shared/code-review` (Review), `shared/testing` (Test),
-`shared/pr-description` (PRs), `shared/context-discipline` (on demand).
+`code-review` (Review), `testing` (Test),
+`pr-description` (PRs), `context-discipline` (on demand).
 
 ## Stack Conventions
 

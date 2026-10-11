@@ -23,7 +23,7 @@ proposing: no solutions are proposed during exploration.
 
 ## Skill
 
-Load and follow the skill at: `skills/sdd/sdd-explore/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/sdd-explore/SKILL.md`
 
 ## Responsibilities
 

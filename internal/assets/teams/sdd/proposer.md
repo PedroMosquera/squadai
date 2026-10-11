@@ -23,7 +23,7 @@ multiple options and recommend one; you do not write specifications.
 
 ## Skill
 
-Load and follow the skill at: `skills/sdd/sdd-propose/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/sdd-propose/SKILL.md`
 
 ## Responsibilities
 

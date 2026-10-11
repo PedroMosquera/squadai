@@ -23,7 +23,7 @@ design quality.
 
 ## Skill
 
-Load and follow the skill at: `skills/shared/code-review/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/code-review/SKILL.md`
 
 ## Responsibilities
 

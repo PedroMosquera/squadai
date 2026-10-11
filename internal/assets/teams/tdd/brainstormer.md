@@ -22,7 +22,7 @@ Your role is QUESTION-ASKING and SCENARIO GENERATION. You do NOT write code.
 
 ## Skill
 
-Load and follow the skill at: `skills/tdd/brainstorming/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/brainstorming/SKILL.md`
 
 ## Responsibilities
 

@@ -2,7 +2,9 @@ package skills
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,14 +17,17 @@ import (
 // Options controls optional skills installer behavior.
 type Options struct {
 	// Scopes filters which skills are installed. Nil means no filter (install
-	// everything). A scope matches a skill path either exactly
-	// ("tdd/systematic-debugging") or as a directory prefix ("shared" matches
-	// "shared/code-review"). Paths are relative to the skills directory.
+	// everything). A scope matches a skill's asset path either exactly
+	// ("tdd/systematic-debugging") or as a group prefix ("shared" matches
+	// "shared/code-review"). Asset paths keep their group; installed skills
+	// do not (see skillName).
 	Scopes []string
 }
 
 // Installer implements domain.ComponentInstaller for skill definitions.
 // It writes <ProjectSkillsDir>/<name>/SKILL.md files with YAML frontmatter.
+// Embedded skills are grouped in assets (shared/, tdd/, sdd/) but installed
+// flat, because Claude Code, VS Code and Windsurf document only one level.
 // When config.Methodology is set, it also installs embedded methodology skills.
 type Installer struct {
 	skills     map[string]domain.SkillDef // custom skills from config
@@ -58,8 +63,8 @@ func New(skills map[string]domain.SkillDef, cfg *domain.MergedConfig, projectDir
 	}
 }
 
-// inScope reports whether a skill path (relative to the skills dir, e.g.
-// "shared/code-review" or a custom skill name) passes the scope filter.
+// inScope reports whether a skill asset path (e.g. "shared/code-review") or
+// custom skill name passes the scope filter.
 // A nil filter admits everything; scopes match exactly or as a directory
 // prefix ("shared" → "shared/...", "tdd" → "tdd/...").
 func (i *Installer) inScope(rel string) bool {
@@ -179,19 +184,12 @@ var legacyProjectSkillsDirs = map[domain.AgentID]string{
 	domain.AgentWindsurf:      ".windsurf/skills",
 }
 
-// planLegacyRemoval returns delete actions for skill files in the adapter's
-// legacy directory that are byte-identical to what Plan now writes to
-// skillsDir. A copy the user edited is not squadai's to remove and stays.
+// planLegacyRemoval returns delete actions for old copies that are
+// byte-identical to what Plan now writes: the grouped layout
+// (<dir>/<group>/<name>/SKILL.md) in skillsDir, and any copy in the adapter's
+// legacy directory. A copy the user edited is not squadai's to remove and
+// stays.
 func (i *Installer) planLegacyRemoval(adapter domain.Adapter, projectDir, skillsDir string) ([]domain.PlannedAction, error) {
-	legacy, ok := legacyProjectSkillsDirs[adapter.ID()]
-	if !ok {
-		return nil, nil
-	}
-	legacyDir := filepath.Join(projectDir, filepath.FromSlash(legacy))
-	if legacyDir == skillsDir {
-		return nil, nil
-	}
-
 	desired, err := i.desired()
 	if err != nil {
 		return nil, err
@@ -202,26 +200,56 @@ func (i *Installer) planLegacyRemoval(adapter domain.Adapter, projectDir, skills
 	}
 	sort.Strings(rels)
 
+	legacy, hasLegacy := legacyProjectSkillsDirs[adapter.ID()]
+	legacyDir := filepath.Join(projectDir, filepath.FromSlash(legacy))
+	hasLegacy = hasLegacy && legacyDir != skillsDir
+
 	var actions []domain.PlannedAction
 	for _, rel := range rels {
-		targetPath := filepath.Join(legacyDir, filepath.FromSlash(rel), "SKILL.md")
-		existing, err := fileutil.ReadFileOrEmpty(targetPath)
-		if err != nil {
-			return nil, fmt.Errorf("read legacy skill %s: %w", targetPath, err)
+		var candidates []string
+		if strings.Contains(rel, "/") {
+			candidates = append(candidates, filepath.Join(skillsDir, filepath.FromSlash(rel), "SKILL.md"))
 		}
-		if string(existing) != desired[rel] {
-			continue
+		if hasLegacy {
+			candidates = append(candidates, filepath.Join(legacyDir, filepath.FromSlash(rel), "SKILL.md"))
+			if strings.Contains(rel, "/") {
+				candidates = append(candidates, filepath.Join(legacyDir, skillName(rel), "SKILL.md"))
+			}
 		}
-		actions = append(actions, domain.PlannedAction{
-			ID:          fmt.Sprintf("%s-skill-legacy-%s", adapter.ID(), rel),
-			Agent:       adapter.ID(),
-			Component:   domain.ComponentSkills,
-			Action:      domain.ActionDelete,
-			TargetPath:  targetPath,
-			Description: fmt.Sprintf("delete skill %s from %s (now read from .agents/skills)", rel, legacy),
-		})
+		for _, targetPath := range candidates {
+			existing, err := fileutil.ReadFileOrEmpty(targetPath)
+			if err != nil {
+				return nil, fmt.Errorf("read legacy skill %s: %w", targetPath, err)
+			}
+			if string(existing) != desired[rel] {
+				continue
+			}
+			actions = append(actions, domain.PlannedAction{
+				ID:          fmt.Sprintf("%s-skill-legacy-%s", adapter.ID(), filepath.ToSlash(targetPath)),
+				Agent:       adapter.ID(),
+				Component:   domain.ComponentSkills,
+				Action:      domain.ActionDelete,
+				TargetPath:  targetPath,
+				Description: fmt.Sprintf("delete old copy of skill %s (now in %s)", skillName(rel), skillsDir),
+			})
+		}
 	}
 	return actions, nil
+}
+
+// skillName is the installed directory name for a skill asset path or custom
+// skill name. It equals the SKILL.md frontmatter name, which VS Code and
+// Cursor require to match the directory.
+func skillName(rel string) string {
+	return path.Base(rel)
+}
+
+// shadowedByCustom reports whether a custom skill from config claims the
+// directory an embedded skill would be installed to. The user's definition
+// wins.
+func (i *Installer) shadowedByCustom(rel string) bool {
+	_, ok := i.skills[skillName(rel)]
+	return ok && strings.Contains(rel, "/")
 }
 
 // desired returns the content Plan writes for each in-scope skill, keyed by
@@ -232,7 +260,7 @@ func (i *Installer) desired() (map[string]string, error) {
 		paths := append(sharedSkillPaths(), methodologySkillPaths(i.config.Methodology)...)
 		for _, assetDir := range paths {
 			rel := strings.TrimPrefix(assetDir, "skills/")
-			if !i.inScope(rel) {
+			if !i.inScope(rel) || i.shadowedByCustom(rel) {
 				continue
 			}
 			content, err := assets.Read(assetDir + "/SKILL.md")
@@ -254,10 +282,8 @@ func (i *Installer) desired() (map[string]string, error) {
 // assetDir is the directory under assets (e.g., "skills/tdd/brainstorming").
 // skillsDir is the project-level skills directory for the adapter.
 func (i *Installer) planEmbeddedSkill(adapter domain.Adapter, assetDir, skillsDir string) (*domain.PlannedAction, error) {
-	// Target: <skillsDir>/<relative>/SKILL.md
-	// e.g., assetDir = "skills/tdd/brainstorming" → relative = "tdd/brainstorming"
 	relative := strings.TrimPrefix(assetDir, "skills/")
-	if !i.inScope(relative) {
+	if !i.inScope(relative) || i.shadowedByCustom(relative) {
 		return nil, nil
 	}
 
@@ -266,7 +292,7 @@ func (i *Installer) planEmbeddedSkill(adapter domain.Adapter, assetDir, skillsDi
 	if err != nil {
 		return nil, fmt.Errorf("read embedded skill %s: %w", assetPath, err)
 	}
-	targetPath := filepath.Join(skillsDir, relative, "SKILL.md")
+	targetPath := filepath.Join(skillsDir, skillName(relative), "SKILL.md")
 	actionID := fmt.Sprintf("skill-embedded-%s", relative)
 	description := fmt.Sprintf("skill:embedded:%s", relative)
 
@@ -346,7 +372,47 @@ func (i *Installer) applyEmbeddedSkill(action domain.PlannedAction) error {
 		return fmt.Errorf("write embedded skill: %w", err)
 	}
 
+	i.sweepEmptyGroupDirs(filepath.Dir(dir))
 	return nil
+}
+
+// skillGroups are the asset groups that earlier versions also used as
+// directories under the skills dir.
+var skillGroups = []string{"shared", "sdd", "tdd"}
+
+// sweepEmptyGroupDirs removes group folders, and emptied legacy skills
+// folders, that hold no files. Earlier versions deleted skill files but left
+// their folders, and the executor's file deletes cannot reach those.
+func (i *Installer) sweepEmptyGroupDirs(skillsDir string) {
+	roots := []string{skillsDir}
+	if i.projectDir != "" {
+		for _, legacy := range legacyProjectSkillsDirs {
+			roots = append(roots, filepath.Join(i.projectDir, filepath.FromSlash(legacy)))
+		}
+	}
+	for _, root := range roots {
+		for _, group := range skillGroups {
+			removeEmptyDirs(filepath.Join(root, group))
+		}
+		if root != skillsDir {
+			_ = os.Remove(root)
+		}
+	}
+}
+
+// removeEmptyDirs removes dir and its subdirectories deepest first. os.Remove
+// refuses a directory that still holds anything, so files are never touched.
+func removeEmptyDirs(dir string) {
+	var dirs []string
+	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			dirs = append(dirs, p)
+		}
+		return nil
+	})
+	for k := len(dirs) - 1; k >= 0; k-- {
+		_ = os.Remove(dirs[k])
+	}
 }
 
 // applyCustomSkill writes a custom skill definition from config.
@@ -442,7 +508,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 // verifyEmbeddedSkill checks that an embedded skill file exists and is current.
 func (i *Installer) verifyEmbeddedSkill(assetDir, skillsDir string) *domain.VerifyResult {
 	relative := strings.TrimPrefix(assetDir, "skills/")
-	if !i.inScope(relative) {
+	if !i.inScope(relative) || i.shadowedByCustom(relative) {
 		return nil // filtered out by the active context profile
 	}
 
@@ -451,7 +517,7 @@ func (i *Installer) verifyEmbeddedSkill(assetDir, skillsDir string) *domain.Veri
 	if err != nil {
 		return nil // asset doesn't exist; skip
 	}
-	targetPath := filepath.Join(skillsDir, relative, "SKILL.md")
+	targetPath := filepath.Join(skillsDir, skillName(relative), "SKILL.md")
 	checkName := fmt.Sprintf("skill-embedded-%s", relative)
 
 	data, err := os.ReadFile(targetPath)

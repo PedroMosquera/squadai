@@ -21,20 +21,20 @@ Execute sequentially, loading each phase's skill first and writing a 3-5
 line summary at each phase end:
 
 1. **Clarify**: confirm requirements with no open ambiguities.
-2. **Explore**: load `{{.SkillsDir}}/sdd/sdd-explore/SKILL.md`: existing
+2. **Explore**: load `{{.SkillsDir}}/sdd-explore/SKILL.md`: existing
    patterns, integration points, constraints.
-3. **Propose**: load `{{.SkillsDir}}/sdd/sdd-propose/SKILL.md`: 2-3
+3. **Propose**: load `{{.SkillsDir}}/sdd-propose/SKILL.md`: 2-3
    solutions with tradeoffs; choose and justify.
-4. **Spec**: load `{{.SkillsDir}}/sdd/sdd-spec/SKILL.md`: write the formal
+4. **Spec**: load `{{.SkillsDir}}/sdd-spec/SKILL.md`: write the formal
    spec to `specs/<feature>.md`, precise and implementation-ready.
-5. **Design**: load `{{.SkillsDir}}/sdd/sdd-design/SKILL.md`: architecture,
+5. **Design**: load `{{.SkillsDir}}/sdd-design/SKILL.md`: architecture,
    data structures, interfaces aligned with the spec.
-6. **Plan Tasks**: load `{{.SkillsDir}}/sdd/sdd-tasks/SKILL.md`: ordered,
+6. **Plan Tasks**: load `{{.SkillsDir}}/sdd-tasks/SKILL.md`: ordered,
    dependency-aware tasks referencing spec sections.
-7. **Implement**: load `{{.SkillsDir}}/sdd/sdd-apply/SKILL.md`: implement
+7. **Implement**: load `{{.SkillsDir}}/sdd-apply/SKILL.md`: implement
    each task in order; each commit references its spec section; run
    `{{.TestCommand}}` after each task.
-8. **Verify**: load `{{.SkillsDir}}/sdd/sdd-verify/SKILL.md`: check
+8. **Verify**: load `{{.SkillsDir}}/sdd-verify/SKILL.md`: check
    implementation against spec. Any deviation must be fixed before
    completion.
 
@@ -59,7 +59,7 @@ Summary: [spec file path + section count, 3-5 lines]
 - After compaction: find your `=== PHASE: ===` marker, check `specs/`, run
   `git log --oneline -10` and `{{.TestCommand}}`, resume from the last
   completed phase (full recovery procedure in
-  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Stack Conventions
 

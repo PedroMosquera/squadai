@@ -917,7 +917,7 @@ synthesize; never implement directly when a sub-agent fits the task.
 - Test command: ` + "`{{.TestCommand}}`" + `.
 {{- end }}
 - Long-session hygiene and compaction recovery:
-  ` + "`{{.SkillsDir}}/shared/context-discipline/SKILL.md`" + `.
+  ` + "`{{.SkillsDir}}/context-discipline/SKILL.md`" + `.
 `
 
 // OrchestratorDigest renders the compact orchestrator for token counting.

@@ -23,7 +23,7 @@ an ordered test plan plus implementation dependencies.
 
 ## Skill
 
-Load and follow the skill at: `skills/tdd/writing-plans/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/writing-plans/SKILL.md`
 
 ## Responsibilities
 

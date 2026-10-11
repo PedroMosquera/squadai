@@ -23,7 +23,7 @@ the test suite is thorough, readable, and maintainable.
 
 ## Skill
 
-Load and follow the skill at: `skills/shared/testing/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/testing/SKILL.md`
 
 ## Responsibilities
 

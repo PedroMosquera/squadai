@@ -23,7 +23,7 @@ implementation satisfies every requirement in the specification.
 
 ## Skill
 
-Load and follow the skill at: `skills/sdd/sdd-verify/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/sdd-verify/SKILL.md`
 
 ## Responsibilities
 

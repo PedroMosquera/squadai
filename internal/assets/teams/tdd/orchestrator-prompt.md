@@ -34,7 +34,7 @@ the full output). Pattern:
 
 ```
 Task: You are the Brainstormer for a TDD team.
-Load and follow: {{.SkillsDir}}/tdd/brainstorming/SKILL.md
+Load and follow: {{.SkillsDir}}/brainstorming/SKILL.md
 Task: Explore requirements for [feature description].
 Context: [background, existing patterns, constraints]
 Output: Confirmed requirements list and edge cases. Do not implement.
@@ -68,18 +68,18 @@ Output: Confirmed requirements list and edge cases. Do not implement.
 - After compaction: read `CLAUDE.md`, run `git log --oneline -10` and
   `{{.TestCommand}}` (red/green state indicates the phase), resume from the
   last completed phase (full recovery procedure in
-  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
 Reference skill files by path in Task prompts; each Task agent loads its
 skill at invocation start. Do not cache skill content in your own context:
-`{{.SkillsDir}}/tdd/brainstorming/SKILL.md` (Brainstormer),
-`{{.SkillsDir}}/tdd/writing-plans/SKILL.md` (Planner),
-`{{.SkillsDir}}/tdd/test-driven-development/SKILL.md` (Implementer),
-`{{.SkillsDir}}/shared/code-review/SKILL.md` (Reviewer),
-`{{.SkillsDir}}/tdd/systematic-debugging/SKILL.md` (Debugger),
-`{{.SkillsDir}}/shared/context-discipline/SKILL.md` (on demand).
+`{{.SkillsDir}}/brainstorming/SKILL.md` (Brainstormer),
+`{{.SkillsDir}}/writing-plans/SKILL.md` (Planner),
+`{{.SkillsDir}}/test-driven-development/SKILL.md` (Implementer),
+`{{.SkillsDir}}/code-review/SKILL.md` (Reviewer),
+`{{.SkillsDir}}/systematic-debugging/SKILL.md` (Debugger),
+`{{.SkillsDir}}/context-discipline/SKILL.md` (on demand).
 
 ## Stack Conventions
 
@@ -123,8 +123,8 @@ than storing the full response.
 | Role | Responsibility | Skill |
 |------|---------------|-------|
 | orchestrator | You: coordinate phases via Task tool | none |
-| brainstormer | Requirements exploration, question-asking | tdd/brainstorming |
-| planner | Test plan + implementation plan | tdd/writing-plans |
-| implementer | Red-green-refactor cycles | tdd/test-driven-development |
-| reviewer | Two-stage review: automated + design | shared/code-review |
-| debugger | Reproduce → isolate → fix → verify | tdd/systematic-debugging |
+| brainstormer | Requirements exploration, question-asking | brainstorming |
+| planner | Test plan + implementation plan | writing-plans |
+| implementer | Red-green-refactor cycles | test-driven-development |
+| reviewer | Two-stage review: automated + design | code-review |
+| debugger | Reproduce → isolate → fix → verify | systematic-debugging |

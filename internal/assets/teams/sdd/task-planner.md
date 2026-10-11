@@ -23,7 +23,7 @@ implementation tasks with dependencies and effort estimates.
 
 ## Skill
 
-Load and follow the skill at: `skills/sdd/sdd-tasks/SKILL.md`
+Load and follow the skill at: `{{.SkillsDir}}/sdd-tasks/SKILL.md`
 
 ## Responsibilities
 

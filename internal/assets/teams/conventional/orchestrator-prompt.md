@@ -57,16 +57,16 @@ Pass only the relevant summary of the prior phase, not the full output.
 - Never store full Task output in your context; summarize it.
 - After compaction: read `CLAUDE.md`, run `git log --oneline -10` and
   `{{.TestCommand}}`, resume from the last completed phase (full recovery
-  procedure in `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  procedure in `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
 Reference skill files by path in Task prompts; each Task agent loads its
 skill at invocation start. Do not cache skill content in your own context:
-`{{.SkillsDir}}/shared/code-review/SKILL.md` (Reviewer),
-`{{.SkillsDir}}/shared/testing/SKILL.md` (Tester),
-`{{.SkillsDir}}/shared/pr-description/SKILL.md` (PR descriptions),
-`{{.SkillsDir}}/shared/context-discipline/SKILL.md` (on demand).
+`{{.SkillsDir}}/code-review/SKILL.md` (Reviewer),
+`{{.SkillsDir}}/testing/SKILL.md` (Tester),
+`{{.SkillsDir}}/pr-description/SKILL.md` (PR descriptions),
+`{{.SkillsDir}}/context-discipline/SKILL.md` (on demand).
 
 ## Stack Conventions
 
@@ -109,5 +109,5 @@ Summarize MCP responses instead of storing them in full.{{end}}
 |------|---------------|-------|
 | orchestrator | You: clarify, coordinate via Task tool, synthesize | none |
 | implementer | General-purpose implementation | none |
-| reviewer | Code review checklist | shared/code-review |
-| tester | Test writing and coverage | shared/testing |
+| reviewer | Code review checklist | code-review |
+| tester | Test writing and coverage | testing |

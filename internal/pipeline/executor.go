@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/backup"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
@@ -212,6 +213,10 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 				Error:  err.Error(),
 			}
 		}
+		// A skill is a folder; leaving it empty would leave a skill dir with no SKILL.md.
+		if action.Component == domain.ComponentSkills {
+			pruneEmptyParents(action.TargetPath, e.projectDir)
+		}
 		return domain.StepResult{
 			Action: action,
 			Status: domain.StepSuccess,
@@ -301,6 +306,23 @@ func deleteFile(path string) error {
 		return fmt.Errorf("remove %s: %w", path, err)
 	}
 	return nil
+}
+
+// pruneEmptyParents removes the empty directories above path, stopping at the
+// first one that still holds something and never leaving projectDir.
+func pruneEmptyParents(path, projectDir string) {
+	if projectDir == "" {
+		return
+	}
+	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+		rel, err := filepath.Rel(projectDir, dir)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return
+		}
+		if os.Remove(dir) != nil {
+			return
+		}
+	}
 }
 
 // collectTargetPaths extracts unique target paths from non-skip actions and

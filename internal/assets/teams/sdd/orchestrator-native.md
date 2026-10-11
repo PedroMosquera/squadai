@@ -85,15 +85,15 @@ phase, not the full output.
 - After compaction: read `AGENTS.md`/`CLAUDE.md`, check `specs/`, run
   `git log --oneline -10` and `{{.TestCommand}}`, resume from the last
   completed phase (full recovery procedure in
-  `{{.SkillsDir}}/shared/context-discipline/SKILL.md`).
+  `{{.SkillsDir}}/context-discipline/SKILL.md`).
 
 ## Skill Resolution
 
 Load the phase skill from `{{.SkillsDir}}` at phase start and cache it for
-the session: `sdd/sdd-explore`, `sdd/sdd-propose`, `sdd/sdd-spec`,
-`sdd/sdd-design`, `sdd/sdd-tasks`, `sdd/sdd-apply`, `sdd/sdd-verify`,
-`shared/code-review` (optional post-implementation),
-`shared/context-discipline` (on demand).
+the session: `sdd-explore`, `sdd-propose`, `sdd-spec`,
+`sdd-design`, `sdd-tasks`, `sdd-apply`, `sdd-verify`,
+`code-review` (optional post-implementation),
+`context-discipline` (on demand).
 
 ## Stack Conventions
 
@@ -141,10 +141,10 @@ responses instead of storing them in full.
 | Role | Responsibility | Skill |
 |------|---------------|-------|
 | orchestrator | You: clarify, coordinate phases, synthesize | none |
-| explorer | Codebase analysis + context gathering | sdd/sdd-explore |
-| proposer | Solution proposals with tradeoffs | sdd/sdd-propose |
-| spec-writer | Formal specification authoring | sdd/sdd-spec |
-| designer | Architecture and interface design | sdd/sdd-design |
-| task-planner | Dependency-ordered task breakdown | sdd/sdd-tasks |
-| implementer | Spec-faithful implementation | sdd/sdd-apply |
-| verifier | Spec compliance verification | sdd/sdd-verify |
+| explorer | Codebase analysis + context gathering | sdd-explore |
+| proposer | Solution proposals with tradeoffs | sdd-propose |
+| spec-writer | Formal specification authoring | sdd-spec |
+| designer | Architecture and interface design | sdd-design |
+| task-planner | Dependency-ordered task breakdown | sdd-tasks |
+| implementer | Spec-faithful implementation | sdd-apply |
+| verifier | Spec compliance verification | sdd-verify |
