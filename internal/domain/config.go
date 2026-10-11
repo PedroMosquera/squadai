@@ -183,12 +183,15 @@ type PluginDef struct {
 	Description         string   `json:"description"`
 	Enabled             bool     `json:"enabled"`
 	SupportedAgents     []string `json:"supported_agents"`
-	InstallMethod       string   `json:"install_method"`                 // "claude_plugin" or "skill_files"
+	InstallMethod       string   `json:"install_method"`                 // "claude_plugin", "package" or "skill_files"
 	PluginID            string   `json:"plugin_id,omitempty"`            // e.g., "superpowers@claude-plugins-official"
 	ExcludesMethodology string   `json:"excludes_methodology,omitempty"` // blocked when this methodology is active
 	// Marketplace is where the harness fetches the marketplace named after
 	// the "@" in PluginID. Omit it for marketplaces the harness already knows.
 	Marketplace *PluginMarketplace `json:"marketplace,omitempty"`
+	// Package is what a "package" declaration installs, in PackageSpec
+	// syntax ("npm:@scope/pkg@1.2.3" or "git:github.com/org/repo@v1").
+	Package string `json:"package,omitempty"`
 }
 
 // PluginMarketplace is a Claude Code marketplace source, written verbatim as

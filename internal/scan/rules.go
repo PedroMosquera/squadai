@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -26,11 +27,11 @@ type rule struct {
 var rules = []rule{
 	{Rule{"SCAN-001", SeverityHigh, "secret literal in MCP server, hook, settings env, skill or Pi extension"}, checkSecrets},
 	{Rule{"SCAN-002", SeverityHigh, "remote script fetched and executed at runtime"}, checkRemoteExec},
-	{Rule{"SCAN-003", SeverityMedium, "package runner without a pinned version"}, checkUnpinnedRunner},
+	{Rule{"SCAN-003", SeverityMedium, "package runner or plugin package without a pinned version"}, checkUnpinnedRunner},
 	{Rule{"SCAN-004", SeverityHigh, "hook command executes or splits tool input"}, checkHookInjection},
 	{Rule{"SCAN-005", SeverityLow, "project setting Claude Code ignores"}, checkIgnoredProjectSettings},
 	{Rule{"SCAN-006", SeverityMedium, "MCP server over plain http to a remote host"}, checkPlainHTTP},
-	{Rule{"SCAN-007", SeverityHigh, "MCP server, hook or plugin outside the policy allow-lists"}, checkAllowLists},
+	{Rule{"SCAN-007", SeverityHigh, "MCP server, hook, plugin or plugin package outside the policy allow-lists"}, checkAllowLists},
 }
 
 // Rules returns the metadata of every rule, in ID order. Severity is the
@@ -356,7 +357,18 @@ func checkUnpinnedRunner(in inputs) []Finding {
 			out = append(out, hookFinding("SCAN-003", SeverityMedium, h, spec, unpinnedMessage(call)))
 		}
 	}
+	for _, p := range in.packages {
+		if p.parsed && !p.spec.Pinned() {
+			out = append(out, packageFinding("SCAN-003", SeverityMedium, p,
+				fmt.Sprintf("package %q is not pinned to an exact npm version or a git ref, so a new or compromised release loads without review; pin it (for example pkg@1.2.3)", p.entry)))
+		}
+	}
 	return out
+}
+
+func packageFinding(id string, sev Severity, p pluginPackage, msg string) Finding {
+	quoted, _ := json.Marshal(p.entry)
+	return Finding{ID: id, Severity: sev, File: p.file, Subject: fmt.Sprintf("package %q", p.entry), Message: msg, locator: string(quoted)}
 }
 
 // Claude Code passes the tool call to hooks as JSON on stdin, so "tool_input"
@@ -509,8 +521,8 @@ func checkPlainHTTP(in inputs) []Finding {
 }
 
 // checkAllowLists applies the policy allow-lists to the committed harness
-// files, which catches servers, hooks and plugins added by hand that squadai
-// never sees in project.json.
+// files, which catches servers, hooks, plugins and packages added by hand
+// that squadai never sees in project.json.
 func checkAllowLists(in inputs) []Finding {
 	var out []Finding
 	for _, s := range in.servers {
@@ -530,6 +542,15 @@ func checkAllowLists(in inputs) []Finding {
 				out = append(out, Finding{ID: "SCAN-007", Severity: SeverityHigh, File: st.file, Subject: fmt.Sprintf("plugin %q", id),
 					Message: fmt.Sprintf("marketplace %q is not in allowed.plugin_sources", source), locator: id})
 			}
+		}
+	}
+	for _, p := range in.packages {
+		source := p.entry
+		if p.parsed {
+			source = p.spec.Source()
+		}
+		if !in.allow.PluginSourceAllowed(source) {
+			out = append(out, packageFinding("SCAN-007", SeverityHigh, p, fmt.Sprintf("package source %q is not in allowed.plugin_sources", source)))
 		}
 	}
 	return out

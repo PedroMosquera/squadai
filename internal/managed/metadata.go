@@ -38,7 +38,8 @@ type sidecarDoc struct {
 type managedFileEntry struct {
 	ManagedKeys []string `json:"managed_keys"`
 	// ManagedEntries narrows ownership below a top-level key to named
-	// children (MCP server names under "mcpServers"). A key missing here was
+	// children (MCP server names under "mcpServers") or, for an array value,
+	// to the exact string elements SquadAI wrote. A key missing here was
 	// recorded before per-entry tracking existed, so callers must not read
 	// its absence as "owns nothing".
 	ManagedEntries map[string][]string `json:"managed_entries,omitempty"`

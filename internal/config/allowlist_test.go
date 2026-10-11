@@ -78,6 +78,26 @@ func TestCheckAllowLists_MCPHooksAndPlugins(t *testing.T) {
 	}
 }
 
+func TestCheckAllowLists_PackageSources(t *testing.T) {
+	cfg := &domain.MergedConfig{
+		Plugins: map[string]domain.PluginDef{
+			"scoped":    {Enabled: true, InstallMethod: "package", Package: "npm:@vetted-org/tools@1.2.3"},
+			"stray":     {Enabled: true, InstallMethod: "package", Package: "npm:stray-tools@1.0.0"},
+			"repo":      {Enabled: true, InstallMethod: "package", Package: "git:github.com/vetted-org/pi-ext@v1"},
+			"elsewhere": {Enabled: true, InstallMethod: "package", Package: "git:gitlab.example.invalid/someone/ext@v2"},
+			"off":       {Enabled: false, InstallMethod: "package", Package: "npm:off-tools@1.0.0"},
+		},
+		Allowed: domain.AllowLists{PluginSources: []string{"npm:@vetted-org/*", "github.com/vetted-org/*"}},
+	}
+	want := []string{
+		`plugin "elsewhere" package comes from "gitlab.example.invalid/someone/ext", which is not in allowed.plugin_sources`,
+		`plugin "stray" package comes from "npm:stray-tools", which is not in allowed.plugin_sources`,
+	}
+	if got := CheckAllowLists(cfg, nil, nil); !reflect.DeepEqual(got, want) {
+		t.Errorf("violations:\n got %q\nwant %q", got, want)
+	}
+}
+
 func TestCheckAllowLists_EmptyListAllowsNothing(t *testing.T) {
 	cfg := &domain.MergedConfig{
 		Agents:  map[string]domain.AgentDef{"a": {Model: "any-model"}},

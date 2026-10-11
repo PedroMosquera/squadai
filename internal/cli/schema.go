@@ -394,7 +394,8 @@ func schemaPluginDef() map[string]any {
 			"description":          map[string]any{"type": "string"},
 			"enabled":              map[string]any{"type": "boolean"},
 			"supported_agents":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"install_method":       map[string]any{"type": "string", "enum": []string{"claude_plugin", "skill_files"}},
+			"install_method":       map[string]any{"type": "string", "enum": []string{"claude_plugin", "package", "skill_files"}},
+			"package":              map[string]any{"type": "string", "description": "For install_method package: npm:<name>@<exact version> or git:<host>/<repo>@<ref>, added to Pi's packages and OpenCode's plugin arrays."},
 			"plugin_id":            map[string]any{"type": "string", "description": "<plugin>@<marketplace>, the key written to enabledPlugins."},
 			"excludes_methodology": map[string]any{"type": "string"},
 			"marketplace": map[string]any{

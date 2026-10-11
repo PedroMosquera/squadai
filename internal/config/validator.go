@@ -486,8 +486,10 @@ func validatePluginDefs(plugins map[string]domain.PluginDef, methodology domain.
 			switch def.InstallMethod {
 			case "claude_plugin", "skill_files":
 				// valid
+			case "package":
+				issues = append(issues, validatePackagePlugin(name, def)...)
 			default:
-				issues = append(issues, fmt.Sprintf("plugin %q has unknown install_method %q (expected: claude_plugin, skill_files)", name, def.InstallMethod))
+				issues = append(issues, fmt.Sprintf("plugin %q has unknown install_method %q (expected: claude_plugin, package, skill_files)", name, def.InstallMethod))
 			}
 		}
 		if def.ExcludesMethodology != "" && def.Enabled && methodology != "" && string(methodology) == def.ExcludesMethodology {
@@ -497,7 +499,64 @@ func validatePluginDefs(plugins map[string]domain.PluginDef, methodology domain.
 			issues = append(issues, validatePluginMarketplace(name, def)...)
 		}
 	}
-	return append(issues, conflictingMarketplaces(plugins)...)
+	issues = append(issues, conflictingMarketplaces(plugins)...)
+	return append(issues, duplicatePackages(plugins)...)
+}
+
+// validatePackagePlugin checks a package declaration. The spec must be pinned
+// because the agent runs the package's code: an unpinned spec would load
+// whatever release is current when the agent next starts.
+func validatePackagePlugin(name string, def domain.PluginDef) []string {
+	var issues []string
+	if len(def.SupportedAgents) == 0 {
+		issues = append(issues, fmt.Sprintf("plugin %q needs supported_agents (pi, opencode)", name))
+	}
+	for _, agent := range def.SupportedAgents {
+		if domain.PackageSettingsKey(domain.AgentID(agent)) == "" {
+			issues = append(issues, fmt.Sprintf("plugin %q lists %q, but packages install only for pi and opencode", name, agent))
+		}
+	}
+	if def.Package == "" {
+		return append(issues, fmt.Sprintf("plugin %q needs a package (npm:<name>@<version> or git:<host>/<repo>@<ref>)", name))
+	}
+	spec, err := domain.ParsePackageSpec(def.Package)
+	if err != nil {
+		return append(issues, fmt.Sprintf("plugin %q %v", name, err))
+	}
+	switch {
+	case spec.Pinned():
+	case spec.Kind == "npm":
+		issues = append(issues, fmt.Sprintf("plugin %q package %q must pin an exact version, as npm:<name>@1.2.3", name, def.Package))
+	default:
+		issues = append(issues, fmt.Sprintf("plugin %q package %q must pin a ref (a tag or commit), as git:<host>/<repo>@v1.0.0", name, def.Package))
+	}
+	if _, ok := domain.HarnessPackageEntry(domain.AgentOpenCode, spec); !ok && slices.Contains(def.SupportedAgents, string(domain.AgentOpenCode)) {
+		issues = append(issues, fmt.Sprintf("plugin %q is a git package, which opencode cannot load; list it for pi only", name))
+	}
+	return issues
+}
+
+// duplicatePackages reports two declarations of one package: the harness
+// loads a package once, so only one of the versions could apply.
+func duplicatePackages(plugins map[string]domain.PluginDef) []string {
+	var issues []string
+	seen := make(map[string]string)
+	for _, name := range slices.Sorted(maps.Keys(plugins)) {
+		def := plugins[name]
+		if def.InstallMethod != "package" {
+			continue
+		}
+		spec, err := domain.ParsePackageSpec(def.Package)
+		if err != nil {
+			continue
+		}
+		if prev, ok := seen[spec.Identity()]; ok {
+			issues = append(issues, fmt.Sprintf("plugin %q and plugin %q both declare package %q", prev, name, spec.Identity()))
+			continue
+		}
+		seen[spec.Identity()] = name
+	}
+	return issues
 }
 
 // conflictingMarketplaces reports a marketplace name declared with two

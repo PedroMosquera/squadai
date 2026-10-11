@@ -1,7 +1,8 @@
 // Package scan is a read-only security scan of the agent configuration in a
 // project, and optionally the user's home: MCP server definitions, Claude Code
-// and Codex hooks, Claude Code settings, skills and Pi extensions. It never
-// writes files and never executes anything it finds.
+// and Codex hooks, Claude Code settings, Pi and OpenCode plugin packages,
+// skills and Pi extensions. It never writes files and never executes anything
+// it finds.
 package scan
 
 import (
@@ -139,6 +140,16 @@ type projectSettings struct {
 	plugins []string
 }
 
+// pluginPackage is one non-local entry of Pi's "packages" or OpenCode's
+// "plugin" array. parsed is false for a form ParseHarnessPackage does not
+// recognize, which can still be checked against the allow-list as written.
+type pluginPackage struct {
+	file   string
+	entry  string
+	spec   domain.PackageSpec
+	parsed bool
+}
+
 // textFile is free text an agent loads as instructions or code (a skill or a
 // Pi extension). Only rules that hold up on prose and source run over it.
 type textFile struct {
@@ -152,6 +163,7 @@ type inputs struct {
 	servers  []mcpServer
 	hooks    []hookCommand
 	settings []projectSettings
+	packages []pluginPackage
 	texts    []textFile
 	allow    domain.AllowLists
 }
@@ -238,7 +250,11 @@ func (s *scanner) project(a domain.Adapter) error {
 			s.codexHooks(filepath.Join(dir, ".codex", "hooks.json")),
 		)
 	case domain.AgentPi:
-		err = s.piExtensions(filepath.Join(dir, ".pi", "extensions"))
+		settings, _ := domain.PackageSettings(a, dir)
+		err = errors.Join(
+			s.piExtensions(filepath.Join(dir, ".pi", "extensions")),
+			s.packageSettings(settings, a.ID()),
+		)
 	}
 	if err != nil {
 		return err
@@ -368,7 +384,59 @@ func (s *scanner) mcpJSON(path string, a domain.Adapter) error {
 		return nil
 	}
 	s.in.servers = append(s.in.servers, servers...)
+	// OpenCode's opencode.json and Pi's user settings.json hold both MCP
+	// servers and plugin packages, and each file is read only once.
+	packages, _ := parsePackages(s.display(path), data, a.ID())
+	s.in.packages = append(s.in.packages, packages...)
 	return nil
+}
+
+func (s *scanner) packageSettings(path string, agent domain.AgentID) error {
+	data, ok, err := s.read(path)
+	if err != nil || !ok {
+		return err
+	}
+	packages, err := parsePackages(s.display(path), data, agent)
+	if err != nil {
+		s.skip(path, err)
+		return nil
+	}
+	s.in.packages = append(s.in.packages, packages...)
+	return nil
+}
+
+// parsePackages reads the agent's package array, accepting a plain string, a
+// Pi {"source": ...} object or an OpenCode [spec, options] tuple per entry.
+func parsePackages(file string, data []byte, agent domain.AgentID) ([]pluginPackage, error) {
+	key := domain.PackageSettingsKey(agent)
+	if key == "" {
+		return nil, nil
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	list, _ := doc[key].([]any)
+	var out []pluginPackage
+	for _, e := range list {
+		var entry string
+		switch v := e.(type) {
+		case string:
+			entry = v
+		case map[string]any:
+			entry, _ = v["source"].(string)
+		case []any:
+			if len(v) > 0 {
+				entry, _ = v[0].(string)
+			}
+		}
+		if entry == "" || domain.LocalPackageEntry(entry) {
+			continue
+		}
+		spec, parsed := domain.ParseHarnessPackage(agent, entry)
+		out = append(out, pluginPackage{file: file, entry: entry, spec: spec, parsed: parsed})
+	}
+	return out, nil
 }
 
 func (s *scanner) skills(dir string) error {

@@ -9,9 +9,9 @@ import (
 )
 
 // Preview implements domain.Previewer for the plugins installer. It returns
-// one entry per planned action with a unified diff. The Claude settings
-// entry also lists declared plugins or marketplaces the user already set to a
-// different value, which Apply refuses to overwrite.
+// one entry per planned action with a unified diff. The Claude settings and
+// package entries also list declarations the user already set to a different
+// value, which Apply refuses to overwrite.
 func (i *Installer) Preview(adapter domain.Adapter, homeDir, projectDir string) ([]domain.PreviewEntry, error) {
 	actions, err := i.Plan(adapter, homeDir, projectDir)
 	if err != nil {
@@ -44,6 +44,15 @@ func (i *Installer) Preview(adapter domain.Adapter, homeDir, projectDir string) 
 		entry.Diff = fileutil.UnifiedDiff(action.TargetPath, string(existingBytes), string(proposedBytes))
 		if action.Description == claudeSettingsDescription {
 			m, err := i.mergeClaude(action.TargetPath, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			if len(m.conflicts) > 0 {
+				entry.Conflicts = conflictsToDomain(m.conflicts)
+			}
+		}
+		if action.Description == packagesDescription {
+			m, err := i.mergePackages(action.Agent, action.TargetPath, domain.PackageSettingsKey(action.Agent), projectDir)
 			if err != nil {
 				return nil, err
 			}

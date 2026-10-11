@@ -1046,6 +1046,46 @@ func TestValidateProject_Plugin_Marketplace(t *testing.T) {
 	}
 }
 
+func TestValidateProject_Plugin_PackageMustBePinnedAndTargetPiOrOpenCode(t *testing.T) {
+	pkg := func(spec string, agents ...string) domain.PluginDef {
+		return domain.PluginDef{Enabled: true, InstallMethod: "package", Package: spec, SupportedAgents: agents}
+	}
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Plugins: map[string]domain.PluginDef{
+			"good-npm":    pkg("npm:@example-org/tools@1.2.3", "pi", "opencode"),
+			"good-git":    pkg("git:github.com/example-org/tools@v1.0.0", "pi"),
+			"no-version":  pkg("npm:@example-org/tools", "pi"),
+			"range":       pkg("npm:loose-tools@^1.2.0", "opencode"),
+			"dist-tag":    pkg("npm:tagged-tools@latest", "pi"),
+			"no-ref":      pkg("git:github.com/example-org/unpinned", "pi"),
+			"no-prefix":   pkg("@example-org/tools@1.2.3", "pi"),
+			"missing":     pkg("", "pi"),
+			"claude":      pkg("npm:claude-tools@1.0.0", "claude-code"),
+			"git-on-oc":   pkg("git:github.com/example-org/oc@v1", "opencode"),
+			"no-agents":   pkg("npm:nowhere-tools@1.0.0"),
+			"dup-version": pkg("npm:@example-org/tools@1.3.0", "pi"),
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `plugin "no-version" package "npm:@example-org/tools" must pin an exact version`)
+	assertContainsIssue(t, issues, `plugin "range" package "npm:loose-tools@^1.2.0" must pin an exact version`)
+	assertContainsIssue(t, issues, `plugin "dist-tag" package "npm:tagged-tools@latest" must pin an exact version`)
+	assertContainsIssue(t, issues, `plugin "no-ref" package "git:github.com/example-org/unpinned" must pin a ref`)
+	assertContainsIssue(t, issues, `plugin "no-prefix" package "@example-org/tools@1.2.3" must start with npm: or git:`)
+	assertContainsIssue(t, issues, `plugin "missing" needs a package`)
+	assertContainsIssue(t, issues, `plugin "claude" lists "claude-code", but packages install only for pi and opencode`)
+	assertContainsIssue(t, issues, `plugin "git-on-oc" is a git package, which opencode cannot load`)
+	assertContainsIssue(t, issues, `plugin "no-agents" needs supported_agents (pi, opencode)`)
+	assertContainsIssue(t, issues, `plugin "dup-version" and plugin "good-npm" both declare package "npm:@example-org/tools"`)
+	for _, issue := range issues {
+		if contains(issue, `"good-git"`) || contains(issue, `"good-npm"`) && !contains(issue, `"dup-version"`) {
+			t.Errorf("a pinned package should pass, got %q", issue)
+		}
+	}
+}
+
 func TestValidateProject_Plugin_ExcludesMethodology(t *testing.T) {
 	cfg := &domain.ProjectConfig{
 		Version:     1,

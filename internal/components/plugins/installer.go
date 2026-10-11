@@ -18,10 +18,12 @@ var pluginSkillContent = map[string]string{
 }
 
 // Installer implements domain.ComponentInstaller for third-party plugin installation.
-// It supports two install methods:
+// It supports three install methods:
 //   - claude_plugin: declares the plugin, and optionally its marketplace, in
 //     Claude Code's project settings; Claude Code installs it. Other agents
 //     have no way to load a Claude plugin, so nothing is written for them.
+//   - package: adds an npm or git package to the array Pi or OpenCode reads
+//     plugin packages from; the agent installs it.
 //   - skill_files: writes a skill markdown file to the adapter's skills directory
 type Installer struct {
 	plugins map[string]domain.PluginDef
@@ -60,6 +62,11 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		}
 		actions = append(actions, a...)
 	}
+	pkgActions, err := i.planPackages(adapter, projectDir)
+	if err != nil {
+		return nil, err
+	}
+	actions = append(actions, pkgActions...)
 
 	for _, name := range sortedPluginNames(i.plugins) {
 		plugin := i.plugins[name]
@@ -150,6 +157,8 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	switch {
 	case action.Description == claudeSettingsDescription:
 		return i.applyClaudeSettings(action)
+	case action.Description == packagesDescription:
+		return i.applyPackages(action)
 	case strings.HasPrefix(action.Description, "plugin:skill:"):
 		return i.applySkillFile(action)
 	default:
@@ -188,6 +197,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		}
 		results = append(results, r...)
 	}
+	results = append(results, i.verifyPackages(adapter, projectDir)...)
 
 	for _, name := range sortedPluginNames(i.plugins) {
 		plugin := i.plugins[name]
@@ -253,6 +263,8 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 	switch {
 	case action.Description == claudeSettingsDescription:
 		return i.renderClaudeSettings(action)
+	case action.Description == packagesDescription:
+		return i.renderPackages(action)
 	case strings.HasPrefix(action.Description, "plugin:skill:"):
 		name := strings.TrimPrefix(action.Description, "plugin:skill:")
 		return []byte(pluginSkillContentFor(name)), nil

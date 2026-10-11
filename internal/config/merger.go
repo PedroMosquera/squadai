@@ -466,13 +466,7 @@ func cloneTeamRoles(defs map[string]domain.TeamRole) map[string]domain.TeamRole 
 func clonePluginDefs(defs map[string]domain.PluginDef) map[string]domain.PluginDef {
 	clone := make(map[string]domain.PluginDef, len(defs))
 	for k, v := range defs {
-		plugin := domain.PluginDef{
-			Description:         v.Description,
-			Enabled:             v.Enabled,
-			InstallMethod:       v.InstallMethod,
-			PluginID:            v.PluginID,
-			ExcludesMethodology: v.ExcludesMethodology,
-		}
+		plugin := v
 		if v.Marketplace != nil {
 			m := *v.Marketplace
 			plugin.Marketplace = &m

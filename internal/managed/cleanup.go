@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/fileutil"
@@ -114,9 +115,9 @@ func ApplyStale(projectRoot, path string, stale StaleContent) error {
 }
 
 // stripOwnedJSON removes SquadAI's content from a JSON object: the named
-// children for keys with per-entry ownership (MCP servers), otherwise the
-// whole owned top-level key. This is the single place that interprets the
-// sidecar for removal. Output matches MergeAndWriteJSON's format.
+// children or string array elements for keys with per-entry ownership (MCP
+// servers, plugin packages), otherwise the whole owned top-level key. This is
+// the single place that interprets the sidecar for removal. Output matches MergeAndWriteJSON's format.
 func stripOwnedJSON(data []byte, owned []string, entries map[string][]string) (out []byte, found, empty bool) {
 	var obj map[string]any
 	if err := json.Unmarshal(data, &obj); err != nil || obj == nil {
@@ -133,18 +134,31 @@ func stripOwnedJSON(data []byte, owned []string, entries map[string][]string) (o
 			found = true
 			continue
 		}
-		children, isObj := val.(map[string]any)
-		if !isObj {
-			continue
-		}
-		for _, name := range names {
-			if _, ok := children[name]; ok {
-				delete(children, name)
-				found = true
+		switch children := val.(type) {
+		case map[string]any:
+			for _, name := range names {
+				if _, ok := children[name]; ok {
+					delete(children, name)
+					found = true
+				}
 			}
-		}
-		if len(children) == 0 {
-			delete(obj, key)
+			if len(children) == 0 {
+				delete(obj, key)
+			}
+		case []any:
+			kept := slices.DeleteFunc(slices.Clone(children), func(e any) bool {
+				s, ok := e.(string)
+				return ok && slices.Contains(names, s)
+			})
+			if len(kept) == len(children) {
+				continue
+			}
+			found = true
+			if len(kept) == 0 {
+				delete(obj, key)
+			} else {
+				obj[key] = kept
+			}
 		}
 	}
 	if !found {

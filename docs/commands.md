@@ -286,20 +286,21 @@ It reads the project MCP config of every supported harness, whether or not the h
 - hooks in `.codex/hooks.json` (same schema as Claude Code hooks),
 - skills: `*/SKILL.md` under `.agents/skills/` and `.claude/skills/`,
 - Pi extensions: `.pi/extensions/*.ts` and `.pi/extensions/*/index.ts`.
+- Plugin packages: `packages` in `.pi/settings.json` and `plugin` in `opencode.json`. Local paths are skipped.
 
 Skills and Pi extensions are free text, so only `SCAN-001` and `SCAN-002` run over them, line by line. The hook rules (`SCAN-003`, `SCAN-004`) stay on hook commands, where `tool_input` and package runners mean something.
 
-User-level config under your home directory is scanned only with `--user`. It adds what the adapters know about: `~/.claude/settings.json` (hooks, `env`, plugins), `~/.codex/config.toml` MCP servers and `~/.codex/hooks.json`, the MCP key of each harness's user settings file (Cursor and Windsurf global MCP files, OpenCode `opencode.json`, Pi `settings.json`), each harness's user skills directory, and Pi's global extensions. Those findings carry absolute paths. VS Code user settings are skipped: the file is JSONC and squadai writes no MCP servers there. Claude Code's `~/.claude.json` is not read.
+User-level config under your home directory is scanned only with `--user`. It adds what the adapters know about: `~/.claude/settings.json` (hooks, `env`, plugins), `~/.codex/config.toml` MCP servers and `~/.codex/hooks.json`, the MCP key of each harness's user settings file (Cursor and Windsurf global MCP files, OpenCode `opencode.json`, Pi `settings.json`) and the plugin packages in the last two, each harness's user skills directory, and Pi's global extensions. Those findings carry absolute paths. VS Code user settings are skipped: the file is JSONC and squadai writes no MCP servers there. Claude Code's `~/.claude.json` is not read.
 
 | Rule | Severity | Flags |
 |------|----------|-------|
 | `SCAN-001` | high | Literal secrets in MCP `env`, headers or args, hook commands, the settings `env` block, skills or Pi extensions: `sk-`, `ghp_`/`gho_`/`ghs_`, `github_pat_`, `xoxb-`/`xoxp-`, AWS `AKIA`, and high-entropy values under `*_TOKEN`/`*_KEY`/`*SECRET*`/`*PASSWORD*` names. `${VAR}`, `$VAR` and `{env:VAR}` references are fine. Messages never print the full value. |
 | `SCAN-002` | high | Code downloaded and executed at runtime: `curl ... \| sh`, `wget ... \| bash`, `bash -c "$(curl ...)"`, `source <(curl ...)`. |
-| `SCAN-003` | medium | `npx -y`, `bunx` or `uvx` running a package without an exact version, including `@latest`. |
+| `SCAN-003` | medium | `npx -y`, `bunx` or `uvx` running a package without an exact version, including `@latest`, and plugin packages in Pi's `.pi/settings.json` `packages` or OpenCode's `opencode.json` `plugin` without an exact npm version or a git ref. |
 | `SCAN-004` | high / medium | Hook commands (Claude Code or Codex) that pass `tool_input` to `eval`, `sh -c` or a pipe into a shell (high), or expand it in an unquoted `$(...)` (medium). |
 | `SCAN-005` | low | `permissions.defaultMode: "bypassPermissions"` in project `.claude/settings.json`, which Claude Code has ignored since 2026-09-02. Not reported for `settings.local.json` or user settings. |
 | `SCAN-006` | medium | MCP servers reached over plain `http://` on a host other than localhost or a loopback address. |
-| `SCAN-007` | high | MCP servers, hook commands or `enabledPlugins` marketplaces outside the `allowed` lists in `.squadai/policy.json` (see [Allow-lists](policy.md#allow-lists)). Reports nothing when the policy has no `allowed` block. |
+| `SCAN-007` | high | MCP servers, hook commands, `enabledPlugins` marketplaces or Pi and OpenCode plugin package sources outside the `allowed` lists in `.squadai/policy.json` (see [Allow-lists](policy.md#allow-lists)). Reports nothing when the policy has no `allowed` block. |
 
 Exit codes: `0` when no finding is at or above `--fail-on` (default `high`), `3` (`E-203`) when at least one is, `2` for an invalid flag. `--fail-on none` always exits `0` after a successful scan. A config file that cannot be parsed is listed as skipped and does not stop the scan. A `.squadai/policy.json` that cannot be parsed fails the scan, so the allow-lists are never skipped silently.
 

@@ -313,14 +313,39 @@ SquadAI owns individual entries, not the two maps. Plugins and marketplaces you 
 
 Claude Code does the rest. It registers a declared marketplace once you accept the folder trust prompt. A plugin stored inside that marketplace loads from there. A plugin whose marketplace entry points at an external source still has to be installed by each user (`claude plugin install <plugin>@<marketplace> --scope project`). To opt out of a project plugin locally, set it to `false` in `.claude/settings.local.json`.
 
-Other agents have their own plugin systems, and a Claude plugin cannot be loaded by them, so `claude_plugin` declarations write nothing for them:
+Other agents have their own plugin systems, and a Claude plugin cannot be loaded by them, so `claude_plugin` declarations write nothing for them. Pi and OpenCode load plugins as packages instead, declared with `install_method: "package"`:
 
 | Agent | Native mechanism | What SquadAI writes |
 |-------|------------------|---------------------|
-| Claude Code | `enabledPlugins` and `extraKnownMarketplaces` in `.claude/settings.json` | Both, as above |
+| Claude Code | `enabledPlugins` and `extraKnownMarketplaces` in `.claude/settings.json` | `claude_plugin` declarations, as above |
 | Codex | `[plugins."<plugin>@<marketplace>"]` and `[marketplaces.<name>]` in `.codex/config.toml` ([config reference](https://developers.openai.com/codex/config-reference), [plugins](https://developers.openai.com/codex/plugins)) | Nothing. SquadAI configures Codex globally and does not write project `.codex/config.toml`. |
-| Pi | `packages` in `.pi/settings.json` ([packages](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md)) | Nothing yet. Pi packages are npm or git sources, not Claude plugins. |
-| OpenCode | `plugin` in `opencode.json` ([plugins](https://opencode.ai/docs/plugins/)) | Nothing yet. OpenCode plugins are npm packages, not Claude plugins. |
+| Pi | `packages` in `.pi/settings.json` ([packages](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md)) | `package` declarations, as written: `npm:<name>@<version>` or `git:<host>/<repo>@<ref>` |
+| OpenCode | `plugin` in `opencode.json` ([plugins](https://opencode.ai/docs/plugins/)) | npm `package` declarations, without the `npm:` prefix: `<name>@<version>` |
+
+#### Package plugins
+
+```json
+{
+  "plugins": {
+    "agent-tools": {
+      "enabled": true,
+      "supported_agents": ["pi", "opencode"],
+      "install_method": "package",
+      "package": "npm:@example-org/agent-tools@1.2.3"
+    },
+    "pi-review": {
+      "enabled": true,
+      "supported_agents": ["pi"],
+      "install_method": "package",
+      "package": "git:github.com/example-org/pi-review@v1.0.0"
+    }
+  }
+}
+```
+
+`package` uses Pi's source syntax. A package runs code inside the agent, so the validator requires it pinned: an npm package needs an exact version (`1.2.3`, not `^1.2.0`, `latest` or no version) and a git package needs a ref. Use a tag or a commit, because a branch ref still moves. `supported_agents` may list only `pi` and `opencode`. OpenCode installs plugins from npm only, so a git package must list `pi` alone. Two declarations of the same package (same npm name, or same repository) are rejected, because each agent loads a package once. Local paths are not declarable; reference them in the agent's file yourself.
+
+SquadAI owns individual array entries, recorded in `.squadai/managed.json` as the exact strings it wrote. Entries you add stay where they are and in their order. A declared package is appended after them the first time, replaced in place when its version changes, and removed when the declaration goes. If you already list the same package at another version, apply reports a conflict instead of overwriting it. `opencode.json` is shared with SquadAI's MCP servers and settings, and each keeps its own keys. Pi and OpenCode fetch and install the packages themselves when they start. Pi loads project packages only after you grant project trust.
 
 ### Plugin Filtering
 

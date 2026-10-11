@@ -81,7 +81,7 @@ Entries are globs matched against the whole value: `*` matches any run of charac
 | `mcp_servers.urls` | The URL of a remote server. Stdio servers are not checked by this list. |
 | `models` | Concrete model IDs: `model` on custom agents and commands, and the model each team role resolves to for every enabled agent that writes agent files (OpenCode and Pi use provider-qualified IDs such as `anthropic/claude-sonnet-5-5`). |
 | `hook_commands` | Every hook command string. |
-| `plugin_sources` | The marketplace of each enabled plugin (the part after `@` in `plugin_id`, or in an `enabledPlugins` key). When a declaration sets `marketplace`, its location is checked too: `github.com/<repo>` for a `github` source, otherwise its `url` or `path`. This stops an allowed marketplace name from being pointed at another repository. Bundled plugins without a `plugin_id` are not checked. |
+| `plugin_sources` | The marketplace of each enabled plugin (the part after `@` in `plugin_id`, or in an `enabledPlugins` key). When a declaration sets `marketplace`, its location is checked too: `github.com/<repo>` for a `github` source, otherwise its `url` or `path`. This stops an allowed marketplace name from being pointed at another repository. A `package` plugin is checked by where its package comes from: `npm:<name>` for npm (match a scope with `npm:@example-org/*`) and `<host>/<repo>` for git, the same form as a `github` marketplace, so `github.com/example-org/*` covers both. Bundled plugins without a `plugin_id` are not checked. |
 
 A server must pass every `mcp_servers` list that is set. Set `commands` or `urls` as well as `names`: a hand-added server can reuse an allowed name.
 
@@ -93,7 +93,7 @@ Where each list is enforced:
 |---------|----------------|--------------------------|
 | `squadai validate-policy` | `.squadai/project.json` merged with the policy (user config is ignored) | `3` (`E-201`) |
 | `squadai verify` and `squadai verify --ci` | The merged config, one `policy-allow-list` failure per declaration | `3` (`E-201`) under `--ci`, ahead of drift |
-| `squadai scan` | Committed harness files, as rule `SCAN-007` (high): MCP servers in every harness MCP file, hooks and `enabledPlugins` in `.claude/settings.json`. This catches servers and hooks added by hand that SquadAI never sees in `project.json`. | `3` (`E-203`) at the default `--fail-on high` |
+| `squadai scan` | Committed harness files, as rule `SCAN-007` (high): MCP servers in every harness MCP file, hooks and `enabledPlugins` in `.claude/settings.json`, and package entries in `.pi/settings.json` `packages` and `opencode.json` `plugin` (local paths are skipped). This catches servers, hooks and packages added by hand that SquadAI never sees in `project.json`. | `3` (`E-203`) at the default `--fail-on high` |
 
 ### Native controls
 

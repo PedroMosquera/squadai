@@ -18,9 +18,10 @@ import (
 // every enabled adapter that writes agents, hook commands, and the source of
 // every enabled plugin: the marketplace named in its plugin_id and, when the
 // declaration says where to fetch that marketplace, that location too, so an
-// allowed name cannot be pointed at another repository. Plugins without a
-// plugin_id ship inside squadai and have no source to check. A nil cat
-// resolves tiers with the embedded catalog.
+// allowed name cannot be pointed at another repository. A package plugin is
+// checked by its PackageSpec.Source. Plugins without a plugin_id ship inside
+// squadai and have no source to check. A nil cat resolves tiers with the
+// embedded catalog.
 func CheckAllowLists(cfg *domain.MergedConfig, adapters []domain.Adapter, cat *modelcatalog.Catalog) []string {
 	allow := cfg.Allowed
 	var out []string
@@ -51,6 +52,13 @@ func CheckAllowLists(cfg *domain.MergedConfig, adapters []domain.Adapter, cat *m
 
 	for _, name := range slices.Sorted(maps.Keys(cfg.Plugins)) {
 		def := cfg.Plugins[name]
+		if def.InstallMethod == "package" {
+			spec, err := domain.ParsePackageSpec(def.Package)
+			if def.Enabled && err == nil && !allow.PluginSourceAllowed(spec.Source()) {
+				out = append(out, fmt.Sprintf("plugin %q package comes from %q, which is not in allowed.plugin_sources", name, spec.Source()))
+			}
+			continue
+		}
 		_, source, ok := strings.Cut(def.PluginID, "@")
 		if !def.Enabled || !ok {
 			continue
