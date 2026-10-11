@@ -2,6 +2,7 @@ package assets
 
 import (
 	"encoding/json"
+	"path"
 	"strings"
 	"testing"
 )
@@ -325,6 +326,52 @@ func TestSubAgentDefs_HaveExecutorBoundary(t *testing.T) {
 			content := MustRead(path)
 			if !strings.Contains(content, "EXECUTOR") && !strings.Contains(content, "not the orchestrator") {
 				t.Errorf("%s: expected to mention 'EXECUTOR' or 'not the orchestrator'", path)
+			}
+		})
+	}
+}
+
+// roleSkills maps each role template to the skill that carries its procedure.
+// conventional/implementer has none.
+var roleSkills = map[string]string{
+	"teams/tdd/brainstormer.md":      "skills/tdd/brainstorming",
+	"teams/tdd/planner.md":           "skills/tdd/writing-plans",
+	"teams/tdd/implementer.md":       "skills/tdd/test-driven-development",
+	"teams/tdd/reviewer.md":          "skills/shared/code-review",
+	"teams/tdd/debugger.md":          "skills/tdd/systematic-debugging",
+	"teams/sdd/explorer.md":          "skills/sdd/sdd-explore",
+	"teams/sdd/proposer.md":          "skills/sdd/sdd-propose",
+	"teams/sdd/spec-writer.md":       "skills/sdd/sdd-spec",
+	"teams/sdd/designer.md":          "skills/sdd/sdd-design",
+	"teams/sdd/task-planner.md":      "skills/sdd/sdd-tasks",
+	"teams/sdd/implementer.md":       "skills/sdd/sdd-apply",
+	"teams/sdd/verifier.md":          "skills/sdd/sdd-verify",
+	"teams/conventional/reviewer.md": "skills/shared/code-review",
+	"teams/conventional/tester.md":   "skills/shared/testing",
+}
+
+// Role files exist so harnesses can delegate by name with a per-role model
+// and tool set; the procedure lives in the skill, so a role file only points
+// at it. The bound keeps the procedure from creeping back in.
+const maxRoleTemplateBytes = 1100
+
+func TestSubAgentDefs_PointAtTheirSkillInsteadOfRestatingIt(t *testing.T) {
+	for _, tmpl := range subAgentPaths {
+		t.Run(tmpl, func(t *testing.T) {
+			content := MustRead(tmpl)
+			if len(content) > maxRoleTemplateBytes {
+				t.Errorf("%s is %d bytes, over %d; keep the procedure in the skill", tmpl, len(content), maxRoleTemplateBytes)
+			}
+			skill, ok := roleSkills[tmpl]
+			if !ok {
+				return
+			}
+			if _, err := Read(skill + "/SKILL.md"); err != nil {
+				t.Fatalf("%s: skill %s missing: %v", tmpl, skill, err)
+			}
+			ref := "`{{.SkillsDir}}/" + path.Base(skill) + "/SKILL.md`"
+			if !strings.Contains(content, ref) {
+				t.Errorf("%s must point at %s", tmpl, ref)
 			}
 		})
 	}

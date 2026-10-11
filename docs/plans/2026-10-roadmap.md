@@ -62,7 +62,7 @@ Size: 4 agent sessions in parallel, about one day of wall-clock including review
 
 1. **AGENTS.md is the canonical instruction file.** `apply` writes all shared content to AGENTS.md. CLAUDE.md becomes `@AGENTS.md` plus Claude-only blocks. VS Code, Cursor, Windsurf, Pi, OpenCode and Codex read AGENTS.md natively. Claude Code also reads AGENTS.md when no CLAUDE.md exists (2.1.277), so the import keeps working for users who keep their own CLAUDE.md. This fixes 4.1 properly and removes one copy of every instruction block. Keep the 32 KiB check in mind: one file now carries everything.
 2. **Skills in `.agents/skills`.** (Done.) Write SKILL.md once to `.agents/skills` (Agent Skills standard, read by Codex and Pi), then link or copy into harness-specific directories only where a harness does not read it. Codex gains skills.
-3. **Shrink role files after skills land.** Today: tdd 6, sdd 8, conventional 4 role files per harness for Claude, Cursor, OpenCode and Pi. With roles as skills, generate one orchestrator stub per harness.
+3. **Shrink role files after skills land.** (Done.) Role files stay, because Claude Code, OpenCode, Cursor and Pi delegate to sub-agents defined as files, chosen by name and description, each with its own model and tools. Each role file is now a stub: frontmatter, a one-line identity, the path to its skill, role-specific boundaries and the stack commands. The procedure lives only in the skill. Generated agent files across those four harnesses: tdd 62.8 KB to 44.4 KB, sdd 85.4 KB to 56.2 KB, conventional 44.8 KB to 32.0 KB.
 
 Size: 2 to 3 sessions, about one day. Bottleneck: a live check in Claude Code, VS Code and Codex that each actually loads the new files.
 
