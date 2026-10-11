@@ -157,10 +157,12 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 		s.AgentTeams = agent_teams.New(cfg.Claude.AgentTeams.Enabled)
 	}
 
-	// Runs even with nothing desired so budget hooks left behind by an earlier
-	// enforcement setting are removed.
+	// Runs even with nothing desired so owned hooks left behind by an earlier
+	// enforcement or capture_on_stop setting are removed.
 	if claudeCfg, ok := cfg.Adapters[string(domain.AgentClaudeCode)]; ok && claudeCfg.Enabled {
-		s.Hooks = hooks.New(hooks.WithBudgetHooks(cfg.Hooks, cfg.Usage))
+		desired := hooks.WithBudgetHooks(cfg.Hooks, cfg.Usage)
+		desired = hooks.WithMemoryHooks(desired, MemoryEnabled(cfg) && cfg.Memory.CaptureOnStop)
+		s.Hooks = hooks.New(desired)
 	}
 
 	return s, nil

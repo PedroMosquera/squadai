@@ -2,8 +2,9 @@
 //
 // Hooks are additive: SquadAI-managed entries are merged into any existing user
 // hooks. Deduplication is by Command string within a matched Matcher group.
-// Budget hooks (see budget.go) are the exception: SquadAI owns them outright,
-// so they are also updated and removed to follow usage.enforcement.
+// Budget hooks (budget.go) and the memory capture hook (memory.go) are the
+// exception: SquadAI owns them outright, so they are also updated and removed
+// to follow usage.enforcement and memory.capture_on_stop.
 // Only the Claude Code adapter emits actions; all other adapters are silently
 // skipped — hooks are a Claude Code-specific feature.
 package hooks
@@ -67,7 +68,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	}
 	desc := fmt.Sprintf("merge %d hook event(s) into .claude/settings.json", len(i.desired))
 	if len(i.desired) == 0 {
-		desc = "remove SquadAI budget hooks from .claude/settings.json"
+		desc = "remove SquadAI-owned hooks from .claude/settings.json"
 	}
 
 	return []domain.PlannedAction{{

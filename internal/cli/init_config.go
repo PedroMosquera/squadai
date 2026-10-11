@@ -281,7 +281,7 @@ func mergeProjectConfigs(existing, fresh *domain.ProjectConfig, methodologyExpli
 }
 
 func isZeroMemoryConfig(c domain.MemoryConfig) bool {
-	return c.Backend == "" && !c.AutoCapture && c.ProjectKeyStrategy == "" && c.ExportPath == ""
+	return c.Backend == "" && !c.AutoCapture && c.ProjectKeyStrategy == "" && c.ExportPath == "" && !c.CaptureOnStop
 }
 
 func isZeroContextConfig(c domain.ContextConfig) bool {

@@ -93,7 +93,7 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		if project.ModelTier != "" {
 			merged.ModelTier = project.ModelTier
 		}
-		if project.Memory.Backend != "" || project.Memory.ProjectKeyStrategy != "" || project.Memory.ExportPath != "" || project.Memory.AutoCapture {
+		if project.Memory.Backend != "" || project.Memory.ProjectKeyStrategy != "" || project.Memory.ExportPath != "" || project.Memory.AutoCapture || project.Memory.CaptureOnStop {
 			merged.Memory = project.Memory
 		}
 		if project.Context.DefaultProfile != "" || len(project.Context.Profiles) > 0 {

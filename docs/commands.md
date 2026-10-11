@@ -594,6 +594,32 @@ Not covered yet: refusing a `/model` switch to a pricier model. Claude Code has 
 
 ---
 
+## Memory capture at the end of Claude Code sessions
+
+A hook cannot summarize a session, so this one asks Claude to. Opt in through the `memory` block of `.squadai/project.json`:
+
+```json
+"memory": {
+  "backend": "native",
+  "export_path": "docs/memory",
+  "capture_on_stop": true
+}
+```
+
+With `capture_on_stop` true and the `memory` component enabled, `squadai apply` adds a `Stop` hook running `squadai memory-hook --event Stop` to the project's `.claude/settings.json`. It sits beside any budget `Stop` hook and your own hooks. Set the flag to false (the default) and the next apply removes it.
+
+When Claude finishes a turn, the hook asks it, once per session, to record the session's decisions, non-obvious fixes and dead ends with the `memory_add` MCP tool (or `squadai memory add`), and to stop without writing anything if nothing durable came out of it. Notes land in `docs/memory/_inbox/` like any other. The request arrives as `Stop` hook feedback (`hookSpecificOutput.additionalContext`), which gives Claude one more turn and is not shown as a hook error.
+
+The hook stays silent, and Claude stops normally, when:
+
+- the session has fewer than 10 tool calls in its transcript, so quick questions are never interrupted,
+- Claude is already continuing because of a `Stop` hook (`stop_hook_active`),
+- the session was already asked. A marker per session id is kept under `~/.squadai/memory-hook/` for 30 days.
+
+Like `budget-hook`, it needs `squadai` on the `PATH` Claude Code runs hooks with, reads only the project config and the session transcript, and has a 10 second timeout. Codex and Pi are not covered yet.
+
+---
+
 ## `squadai version`
 
 Print the version.

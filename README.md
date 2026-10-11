@@ -154,6 +154,8 @@ squadai memory add --note "switched to JWT"
 squadai memory status
 ```
 
+In Claude Code, set `"capture_on_stop": true` in the `memory` block of `.squadai/project.json` and Claude is asked, once at the end of each non-trivial session, to record what it decided. See [Memory capture at the end of Claude Code sessions](docs/commands.md#memory-capture-at-the-end-of-claude-code-sessions).
+
 See [`docs/project-memory.md`](docs/project-memory.md) for the full protocol.
 
 ---

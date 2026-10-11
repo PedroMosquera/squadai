@@ -15,7 +15,9 @@ const budgetHookPrefix = "squadai budget-hook "
 // Code's 600s default; under block, onFailure turns the timeout into a block.
 const budgetHookTimeout = 10
 
-func ownedCommand(cmd string) bool { return strings.HasPrefix(cmd, budgetHookPrefix) }
+func ownedCommand(cmd string) bool {
+	return strings.HasPrefix(cmd, budgetHookPrefix) || strings.HasPrefix(cmd, memoryHookPrefix)
+}
 
 // BudgetHooks returns the Claude Code hook entries that enforce usage inside
 // the session, or nil when enforcement is unset or off or no token budget is
