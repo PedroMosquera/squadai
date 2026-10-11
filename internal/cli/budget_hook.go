@@ -6,10 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/PedroMosquera/squadai/internal/exitcode"
-	"github.com/PedroMosquera/squadai/internal/tokenprofile/session"
 )
 
 // budgetHookMaxInput bounds the stdin read; a hook payload is a few KB.
@@ -18,13 +16,16 @@ const budgetHookMaxInput = 1 << 20
 // budgetHookInput is the subset of the Claude Code hook payload budget-hook
 // reads (common input fields, https://code.claude.com/docs/en/hooks).
 type budgetHookInput struct {
+	SessionID      string `json:"session_id"`
 	TranscriptPath string `json:"transcript_path"`
 	Cwd            string `json:"cwd"`
 }
 
-// RunBudgetHook implements the hidden `squadai budget-hook --event <name>`
-// that the hooks component installs into .claude/settings.json. It reads the
-// hook payload on stdin and answers per the Claude Code hook contract:
+// RunBudgetHook implements the hidden `squadai budget-hook --event <name>
+// [--harness claude|codex|pi]` that the hooks component installs into
+// .claude/settings.json, .codex/hooks.json and the Pi extension. It reads the
+// hook payload on stdin and answers per the Claude Code hook contract, which
+// Codex hooks share and the Pi extension translates:
 //
 //   - within budget, or enforcement unset or off: exit 0, no output (allow)
 //   - over budget under warn, and on Stop under any enforcement: exit 0 with a
@@ -35,10 +36,12 @@ type budgetHookInput struct {
 //     reason on stderr
 //
 // Every other failure exits 1, which Claude Code treats as non-blocking
-// unless the entry sets onFailure "block". Reads only the project config and
-// the last 24h of local transcripts; no network.
+// unless the entry sets onFailure "block". Under codex, ask acts as warn, and
+// usage comes from ccusage; without it the hook allows and warns once per
+// session. Otherwise it reads only the project config and the last 24h of
+// local transcripts; no network.
 func RunBudgetHook(args []string, stdin io.Reader, stdout io.Writer) error {
-	event := ""
+	event, harness := "", "claude"
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--event" && i+1 < len(args):
@@ -46,12 +49,22 @@ func RunBudgetHook(args []string, stdin io.Reader, stdout io.Writer) error {
 			event = args[i]
 		case strings.HasPrefix(args[i], "--event="):
 			event = strings.TrimPrefix(args[i], "--event=")
+		case args[i] == "--harness" && i+1 < len(args):
+			i++
+			harness = args[i]
+		case strings.HasPrefix(args[i], "--harness="):
+			harness = strings.TrimPrefix(args[i], "--harness=")
 		}
 	}
 	switch event {
 	case "PreToolUse", "UserPromptSubmit", "Stop":
 	default:
 		return fmt.Errorf("budget-hook: unsupported --event %q (want PreToolUse, UserPromptSubmit or Stop)", event)
+	}
+	switch harness {
+	case "claude", "codex", "pi":
+	default:
+		return fmt.Errorf("budget-hook: unsupported --harness %q (want claude, codex or pi)", harness)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(stdin, budgetHookMaxInput))
@@ -69,7 +82,7 @@ func RunBudgetHook(args []string, stdin io.Reader, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("budget-hook: resolve home directory: %w", err)
 	}
-	projectDir := hookProjectDir(in)
+	projectDir := hookProjectDir(in, harness)
 	merged, err := loadAndMerge(homeDir, projectDir)
 	if err != nil {
 		return fmt.Errorf("budget-hook: %w", err)
@@ -84,14 +97,12 @@ func RunBudgetHook(args []string, stdin io.Reader, stdout io.Writer) error {
 		return nil
 	}
 
-	daily, err := session.Aggregate(homeDir, session.AggregateOptions{Since: 24 * time.Hour, ProjectDir: projectDir})
+	daily, err := harnessUsage(harness, homeDir, projectDir, in)
 	if err != nil {
 		return fmt.Errorf("budget-hook: aggregate usage: %w", err)
 	}
-	// Inside a session the session budget means this session, not the largest
-	// one of the day, which would lock every new session after one big one.
-	if in.TranscriptPath != "" {
-		daily.MaxSessionTokens = session.ClaudeTranscriptTokens(in.TranscriptPath)
+	if daily == nil {
+		return warnNoUsageSourceOnce(stdout, harness, in.SessionID)
 	}
 
 	reason := overBudgetReason(evaluateBudgets(usage, daily))
@@ -104,7 +115,8 @@ func RunBudgetHook(args []string, stdin io.Reader, stdout io.Writer) error {
 		return writeHookJSON(stdout, map[string]any{"systemMessage": "squadai: " + reason})
 	case usage.Enforcement == "block":
 		return exitcode.ErrBudgetHookBlock(reason)
-	case usage.Enforcement == "ask" && event == "PreToolUse":
+	// Codex rejects permissionDecision "ask", so ask acts as warn there.
+	case usage.Enforcement == "ask" && event == "PreToolUse" && harness != "codex":
 		return writeHookJSON(stdout, map[string]any{"hookSpecificOutput": map[string]any{
 			"hookEventName":            "PreToolUse",
 			"permissionDecision":       "ask",
@@ -119,8 +131,8 @@ func RunBudgetHook(args []string, stdin io.Reader, stdout io.Writer) error {
 
 // hookProjectDir prefers CLAUDE_PROJECT_DIR, the project root Claude Code
 // exports to hooks, over the payload cwd, which follows cd inside the session.
-func hookProjectDir(in budgetHookInput) string {
-	if d := os.Getenv("CLAUDE_PROJECT_DIR"); d != "" {
+func hookProjectDir(in budgetHookInput, harness string) string {
+	if d := os.Getenv("CLAUDE_PROJECT_DIR"); d != "" && harness == "claude" {
 		return d
 	}
 	if in.Cwd != "" {

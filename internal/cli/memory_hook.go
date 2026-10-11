@@ -85,7 +85,7 @@ func RunMemoryHook(args []string, stdin io.Reader, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("memory-hook: resolve home directory: %w", err)
 	}
-	merged, err := loadAndMerge(homeDir, hookProjectDir(budgetHookInput{Cwd: in.Cwd}))
+	merged, err := loadAndMerge(homeDir, hookProjectDir(budgetHookInput{Cwd: in.Cwd}, "claude"))
 	if err != nil {
 		return fmt.Errorf("memory-hook: %w", err)
 	}

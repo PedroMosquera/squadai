@@ -564,9 +564,9 @@ Error: --force is required to remove managed files.
 
 ---
 
-## Budget enforcement in Claude Code sessions
+## Budget enforcement in agent sessions
 
-`squadai token-usage --against-budget` checks budgets after the fact. For Claude Code, `squadai apply` also moves the check into the session through hooks in the project's `.claude/settings.json`, using the `usage` block of `.squadai/project.json`:
+`squadai token-usage --against-budget` checks budgets after the fact. For Claude Code, Codex and Pi, `squadai apply` also moves the check into the session, using the `usage` block of `.squadai/project.json`. Claude Code gets hooks in the project's `.claude/settings.json`, Codex gets hooks in `.codex/hooks.json`, and Pi gets the extension `.pi/extensions/squadai-budget.ts`:
 
 ```json
 "usage": {
@@ -576,7 +576,9 @@ Error: --force is required to remove managed files.
 }
 ```
 
-Hooks are installed only when `enforcement` is `warn`, `ask` or `block` and at least one token budget is set. With `enforcement` unset or `off`, nothing is installed, and an earlier install is removed on the next apply. Your own hooks in the same file are kept as they are.
+Hooks are installed only when `enforcement` is `warn`, `ask` or `block` and at least one token budget is set, and only for the agents enabled in the project. With `enforcement` unset or `off`, nothing is installed, and an earlier install is removed on the next apply. Your own hooks in the same file are kept as they are.
+
+The table below is for Claude Code. Codex and Pi differences follow it.
 
 | `enforcement` | Hook events | Over budget |
 |---------------|-------------|-------------|
@@ -590,7 +592,33 @@ The daily budget counts the last 24 hours of usage for this project, the same to
 
 Each entry runs `squadai budget-hook --event <name>`, an internal command that reads the hook input on stdin. It needs `squadai` on the `PATH` Claude Code runs hooks with. It reads only the project config and local transcripts, makes no network calls, and has a 10 second timeout.
 
-Not covered yet: refusing a `/model` switch to a pricier model. Claude Code has a `PreModelSwitch` hook for it, but `usage` has no tier ceiling to compare against. `profile_tiers` maps context profiles to tiers for budget fitting, not to a maximum. Codex and Pi hooks are not written either.
+### Codex
+
+`apply` merges entries into the project's `.codex/hooks.json`, which uses the Claude Code hooks schema. Each runs `squadai budget-hook --harness codex --event <name>`. Codex project hooks have the same contract as Claude Code for these events: exit 2 refuses a tool call or prompt with stderr as the reason, `systemMessage` shows a warning, and a blocking `Stop` would keep Codex working, so `Stop` only warns here too.
+
+- `block` installs `PreToolUse`, `UserPromptSubmit` and `Stop`. Codex has no `onFailure`, so a hook that cannot start or times out lets the action through.
+- `ask` behaves like `warn` (`UserPromptSubmit`, `Stop`). Codex rejects `permissionDecision: "ask"` from a hook.
+- Codex runs project hooks only after you trust the project and then review and trust each new or changed hook in Codex. squadai does not write that trust for you.
+- Usage comes from `ccusage codex session --json --offline` ([ccusage](https://github.com/ccusage/ccusage)), because the Codex session log format is not documented. ccusage reports no project directory, so the daily budget counts every Codex session with activity in the last 24 hours, in full, across all projects. The session budget counts the current session. Without `ccusage` on the `PATH` (or if it fails or exceeds 8 seconds), the hook allows everything and warns once per session that the budget is not enforced.
+
+### Pi
+
+`apply` writes `.pi/extensions/squadai-budget.ts`, a small extension with no dependencies that runs `squadai budget-hook --harness pi` and maps the result onto Pi's extension events:
+
+| Claude Code event | Pi event | Over budget under `block` |
+|-------------------|----------|---------------------------|
+| `PreToolUse` | `tool_call` | The tool call is refused with the reason. |
+| `UserPromptSubmit` | `input` | The prompt is dropped before any model call and the reason is shown. |
+| `Stop` | `agent_before_settle` | A warning only. The extension never asks Pi to continue. |
+
+- Under `block`, a hook that cannot run refuses, like `onFailure: "block"`.
+- Under `ask`, Pi asks for confirmation before each tool call, and refuses when there is no UI to ask with (print and JSON modes).
+- Under `warn`, the extension skips tool calls and warns on prompts and at the end of each run. In print and JSON modes, warnings and reasons go to stderr.
+- Pi loads project extensions only for a trusted project (`/trust`, or `--approve` for one run).
+- Usage comes from Pi's own session files. The daily budget counts this project's sessions modified in the last 24 hours, from the directory holding the current session file, so a custom `--session-dir` works. The session budget counts the current session file.
+- The file is rewritten when `enforcement` changes and deleted when it is unset. Do not edit it.
+
+Not covered yet: refusing a `/model` switch to a pricier model. Claude Code has a `PreModelSwitch` hook for it, but `usage` has no tier ceiling to compare against. `profile_tiers` maps context profiles to tiers for budget fitting, not to a maximum. Codex and Pi budget files are not removed when you disable those agents in the project.
 
 ---
 

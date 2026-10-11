@@ -5,8 +5,8 @@
 // Budget hooks (budget.go) and the memory capture hook (memory.go) are the
 // exception: SquadAI owns them outright, so they are also updated and removed
 // to follow usage.enforcement and memory.capture_on_stop.
-// Only the Claude Code adapter emits actions; all other adapters are silently
-// skipped — hooks are a Claude Code-specific feature.
+// Codex and Pi get budget enforcement only (codex_budget.go, pi_budget.go);
+// all other adapters are silently skipped.
 package hooks
 
 import (
@@ -22,6 +22,7 @@ import (
 // Installer implements domain.ComponentInstaller for Claude Code hooks.
 type Installer struct {
 	desired domain.HooksConfig
+	usage   domain.UsageConfig
 }
 
 // New returns an Installer configured with the desired hooks state.
@@ -37,6 +38,9 @@ func (i *Installer) ID() domain.ComponentID {
 // Plan computes whether the hooks need to be added to settings.json.
 // Returns at most one action, only for the Claude Code adapter.
 func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]domain.PlannedAction, error) {
+	if budgetHarness(adapter.ID()) {
+		return i.planHarnessBudget(adapter, projectDir)
+	}
 	if adapter.ID() != domain.AgentClaudeCode {
 		return nil, nil
 	}
@@ -86,6 +90,9 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	if action.Action == domain.ActionSkip {
 		return nil
 	}
+	if budgetHarness(action.Agent) {
+		return i.applyHarnessBudget(action)
+	}
 	projectDir := filepath.Dir(filepath.Dir(action.TargetPath)) // strip /.claude/settings.json
 	if _, err := claudeadapter.SyncHooks(projectDir, i.desired, ownedCommand); err != nil {
 		return fmt.Errorf("set hooks: %w", err)
@@ -95,6 +102,9 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 
 // Verify reports whether every desired hook entry is present in settings.json.
 func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) ([]domain.VerifyResult, error) {
+	if budgetHarness(adapter.ID()) {
+		return i.verifyHarnessBudget(adapter, projectDir), nil
+	}
 	if adapter.ID() != domain.AgentClaudeCode {
 		return nil, nil
 	}
@@ -133,6 +143,9 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 
 // RenderContent returns the JSON bytes that Apply would write. Used by the diff renderer.
 func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
+	if budgetHarness(action.Agent) {
+		return i.renderHarnessBudget(action)
+	}
 	existing := make(map[string]any)
 	data, err := os.ReadFile(action.TargetPath)
 	if err != nil && !os.IsNotExist(err) {

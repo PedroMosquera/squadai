@@ -219,7 +219,7 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 			actions = append(actions, atActions...)
 		}
 
-		// Hooks (Claude Code only). The installer's Plan no-ops for other adapters.
+		// Hooks: Claude hooks plus Codex and Pi budget enforcement. Plan no-ops for other adapters.
 		if p.hooksInstaller != nil {
 			hooksActions, err := p.hooksInstaller.Plan(adapter, homeDir, projectDir)
 			if err != nil {
