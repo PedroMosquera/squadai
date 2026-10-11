@@ -30,6 +30,7 @@ var rules = []rule{
 	{Rule{"SCAN-004", SeverityHigh, "hook command executes or splits tool input"}, checkHookInjection},
 	{Rule{"SCAN-005", SeverityLow, "project setting Claude Code ignores"}, checkIgnoredProjectSettings},
 	{Rule{"SCAN-006", SeverityMedium, "MCP server over plain http to a remote host"}, checkPlainHTTP},
+	{Rule{"SCAN-007", SeverityHigh, "MCP server, hook or plugin outside the policy allow-lists"}, checkAllowLists},
 }
 
 // Rules returns the metadata of every rule, in ID order. Severity is the
@@ -477,6 +478,33 @@ func checkPlainHTTP(in inputs) []Finding {
 		}
 		out = append(out, serverFinding("SCAN-006", SeverityMedium, s, s.url,
 			fmt.Sprintf("connects to %s over plain http; requests and any auth headers are readable on the network. Use https", u.Host)))
+	}
+	return out
+}
+
+// checkAllowLists applies the policy allow-lists to the committed harness
+// files, which catches servers, hooks and plugins added by hand that squadai
+// never sees in project.json.
+func checkAllowLists(in inputs) []Finding {
+	var out []Finding
+	for _, s := range in.servers {
+		if v := in.allow.MCPServerViolation(s.name, s.commandLine(), s.url); v != "" {
+			out = append(out, serverFinding("SCAN-007", SeverityHigh, s, s.name, v))
+		}
+	}
+	for _, h := range in.hooks {
+		if !in.allow.HookCommandAllowed(h.command) {
+			out = append(out, hookFinding("SCAN-007", SeverityHigh, h, h.command, fmt.Sprintf("hook command %q is not in allowed.hook_commands", truncate(h.command, 80))))
+		}
+	}
+	for _, st := range in.settings {
+		for _, id := range st.plugins {
+			_, source, _ := strings.Cut(id, "@")
+			if !in.allow.PluginSourceAllowed(source) {
+				out = append(out, Finding{ID: "SCAN-007", Severity: SeverityHigh, File: st.file, Subject: fmt.Sprintf("plugin %q", id),
+					Message: fmt.Sprintf("marketplace %q is not in allowed.plugin_sources", source), locator: id})
+			}
+		}
 	}
 	return out
 }

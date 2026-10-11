@@ -9,7 +9,9 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/adapters/codex"
 	"github.com/PedroMosquera/squadai/internal/components/bundle"
+	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/modelcatalog"
 )
 
 // Verifier runs post-apply compliance checks across all components and adapters.
@@ -175,6 +177,8 @@ func (v *Verifier) VerifyWithSet(set *bundle.Set, cfg *domain.MergedConfig, adap
 	collectResults(report, healthResults)
 
 	report.Results = append(report.Results, PolicyResults(cfg)...)
+	cat, _ := modelcatalog.Load(homeDir, projectDir)
+	collectResults(report, AllowListResults(cfg, adapters, cat))
 
 	return report, nil
 }
@@ -189,6 +193,24 @@ func PolicyResults(cfg *domain.MergedConfig) []domain.VerifyResult {
 			Passed:    true,
 			Severity:  domain.SeverityWarning,
 			Component: "policy",
+			Message:   violation,
+		})
+	}
+	return results
+}
+
+// AllowListResults reports each declaration outside the policy allow-lists
+// as a failing error. Unlike overrides, the merge cannot fix these: the
+// project config itself has to change.
+func AllowListResults(cfg *domain.MergedConfig, adapters []domain.Adapter, cat *modelcatalog.Catalog) []domain.VerifyResult {
+	var results []domain.VerifyResult
+	for _, violation := range config.CheckAllowLists(cfg, adapters, cat) {
+		results = append(results, domain.VerifyResult{
+			Check:     "policy-allow-list",
+			Passed:    false,
+			Severity:  domain.SeverityError,
+			Component: "policy",
+			Path:      ".squadai/project.json",
 			Message:   violation,
 		})
 	}

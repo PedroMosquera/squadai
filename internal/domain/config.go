@@ -136,6 +136,7 @@ type PolicyConfig struct {
 	Mode     OperationalMode `json:"mode"`
 	Locked   []string        `json:"locked"`
 	Required RequiredBlock   `json:"required"`
+	Allowed  AllowLists      `json:"allowed,omitzero"`
 }
 
 // RequiredBlock defines the enforced values in a policy.
@@ -307,6 +308,10 @@ type MergedConfig struct {
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
 	Hooks       HooksConfig                `json:"hooks,omitempty"`
 	Marketplace MarketplaceConfig          `json:"marketplace,omitempty"`
+
+	// Allowed is copied from the policy so verify and scan can check config
+	// against it without reloading policy.json.
+	Allowed AllowLists `json:"allowed,omitzero"`
 
 	// Violations is populated during merge when user/project values conflicted
 	// with locked policy fields. These are informational — the policy value wins.

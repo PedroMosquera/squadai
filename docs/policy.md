@@ -47,6 +47,72 @@ Path: `.squadai/policy.json`
 | `mode` | string | Operational mode, typically `"team"` |
 | `locked` | string array | Dot-notation paths of fields that cannot be overridden |
 | `required` | object | Values enforced for locked fields |
+| `allowed` | object | Optional allow-lists for MCP servers, models, hook commands and plugin sources. See [Allow-lists](#allow-lists). |
+
+## Allow-lists
+
+The `allowed` block restricts what project config and committed harness files may declare. Each list is optional. An absent list means no restriction, so a policy without `allowed` behaves exactly as before. A present but empty list (`[]`) allows nothing.
+
+```json
+{
+  "version": 1,
+  "mode": "team",
+  "locked": [],
+  "required": {},
+  "allowed": {
+    "mcp_servers": {
+      "names": ["squadai", "context7", "docs"],
+      "commands": ["squadai mcp-server", "npx -y @upstash/context7-mcp@*"],
+      "urls": ["https://mcp.example.com/*"]
+    },
+    "models": ["claude-sonnet-5-*", "claude-haiku-4-5", "anthropic/claude-*"],
+    "hook_commands": ["squadai *", "./scripts/hooks/*"],
+    "plugin_sources": ["claude-plugins-official", "github.com/wshobson/agents"]
+  }
+}
+```
+
+Entries are globs matched against the whole value: `*` matches any run of characters, including `/` and spaces, and `?` matches one character. Matching is case-sensitive.
+
+| List | Checked against |
+|------|-----------------|
+| `mcp_servers.names` | The server name. |
+| `mcp_servers.commands` | The full command line of a stdio server: command and args joined by single spaces. Remote servers are not checked by this list. |
+| `mcp_servers.urls` | The URL of a remote server. Stdio servers are not checked by this list. |
+| `models` | Concrete model IDs: `model` on custom agents and commands, and the model each team role resolves to for every enabled agent that writes agent files (OpenCode and Pi use provider-qualified IDs such as `anthropic/claude-sonnet-5-5`). |
+| `hook_commands` | Every hook command string. |
+| `plugin_sources` | The marketplace of each enabled plugin (the part after `@` in `plugin_id`, or in an `enabledPlugins` key), and `marketplace.source` when marketplace plugins are installed (default `github.com/wshobson/agents`). Bundled plugins without a `plugin_id` are not checked. |
+
+A server must pass every `mcp_servers` list that is set. Set `commands` or `urls` as well as `names`: a hand-added server can reuse an allowed name.
+
+The lists apply to everything, including what SquadAI itself configures. If the project registers SquadAI's own MCP server, allow `squadai` and `squadai mcp-server`. If SquadAI installs hooks for you, allow `squadai *`.
+
+Where each list is enforced:
+
+| Command | What it checks | Exit code on a violation |
+|---------|----------------|--------------------------|
+| `squadai validate-policy` | `.squadai/project.json` merged with the policy (user config is ignored) | `3` (`E-201`) |
+| `squadai verify` and `squadai verify --ci` | The merged config, one `policy-allow-list` failure per declaration | `3` (`E-201`) under `--ci`, ahead of drift |
+| `squadai scan` | Committed harness files, as rule `SCAN-007` (high): MCP servers in every harness MCP file, hooks and `enabledPlugins` in `.claude/settings.json`. This catches servers and hooks added by hand that SquadAI never sees in `project.json`. | `3` (`E-203`) at the default `--fail-on high` |
+
+### Native controls
+
+Claude Code has model controls of its own. Only `availableModels` is honored in project settings, so it is the only one SquadAI writes:
+
+- When `allowed.models` is set and every pattern can be expressed as an `availableModels` entry, `apply` writes `availableModels` into `.claude/settings.json` through the settings component (enable the `settings` component), with managed-key ownership. A literal ID such as `claude-haiku-4-5` is written as is, and `claude-sonnet-5-*` becomes `claude-sonnet-5`, because Claude Code matches entries by prefix on segment boundaries. Provider-qualified patterns (containing `/`) are for other agents and are skipped. If any other pattern is present (for example `*sonnet*` or `claude-sonnet-5*`), nothing is written, because a partial list would block models the policy allows.
+- An explicit `required.adapters.claude-code.settings.availableModels` in the policy always wins over the derived list. Use it to write a different list, such as family aliases.
+- Project-scope `availableModels` is a guardrail, not enforcement: Claude Code merges the list across user, project and local settings, so a developer can widen it. It also restricts the interactive `/model` picker, not only agent files.
+
+The enforcing controls are managed-only. Claude Code ignores them in user, project and local settings, so SquadAI never writes them. To enforce the same allow-lists for an organization, deploy them in managed settings ([managed settings](https://code.claude.com/docs/en/managed-settings), [settings reference](https://code.claude.com/docs/en/settings-reference)):
+
+| SquadAI list | Managed setting |
+|--------------|-----------------|
+| `models` | `availableModels` with `availableModelsMatch: "exact"` (so a listed ID does not also admit later versions), plus `deniedModels` for versions to block. `allowedProviders` limits the API providers a machine may use. |
+| `mcp_servers` | `allowedMcpServers` with `allowManagedMcpServersOnly: true`, plus `deniedMcpServers`. |
+| `hook_commands` | `allowManagedHooksOnly: true`, delivering the allowed hooks from managed settings. |
+| `plugin_sources` | `strictKnownMarketplaces` (and `blockedMarketplaces`). |
+
+`maxEffortLevel` is honored from any scope (the lowest cap wins) but has no allow-list to map from; it belongs to a budget profile, not to `allowed`.
 
 ## Lockable Fields
 
@@ -109,6 +175,7 @@ Run `squadai validate-policy` to check the policy file for:
 - **Schema correctness** — required fields present, valid types
 - **Lock consistency** — every entry in `locked` has a corresponding value in `required`
 - **Required values** — locked values are valid (e.g., boolean for `enabled` fields)
+- **Allow-lists**: no empty patterns in `allowed`, and nothing in `.squadai/project.json` outside them (exit `3`)
 
 ```sh
 $ squadai validate-policy

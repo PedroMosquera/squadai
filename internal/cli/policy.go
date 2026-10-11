@@ -10,6 +10,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/exitcode"
+	"github.com/PedroMosquera/squadai/internal/modelcatalog"
 )
 
 // validatePolicyResult is the JSON representation of a validate-policy run.
@@ -32,6 +33,10 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Validate .squadai/policy.json in the current directory. Checks that the")
 			fmt.Fprintln(stdout, "schema is well-formed, that all locked component IDs are valid, and that required")
 			fmt.Fprintln(stdout, "component constraints are internally consistent. Exits non-zero when issues are found.")
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "When the policy has an 'allowed' block, .squadai/project.json is also checked")
+			fmt.Fprintln(stdout, "against it (MCP servers, models, hook commands, plugin sources). Declarations")
+			fmt.Fprintln(stdout, "outside the allow-lists exit 3 (policy violation).")
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, "Flags:")
 			fmt.Fprintln(stdout, "  --json  Output the validation result as JSON.")
@@ -62,6 +67,16 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 
 	issues := config.ValidatePolicy(policy)
 
+	outside, err := allowListViolations(projectDir, policy)
+	if err != nil {
+		return err
+	}
+	issues = append(issues, outside...)
+	failure := exitcode.ErrPolicyValidation(len(issues))
+	if len(outside) > 0 {
+		failure = errOutsideAllowLists(len(outside))
+	}
+
 	if jsonOut {
 		violations := issues
 		if violations == nil {
@@ -78,7 +93,7 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 		}
 		fmt.Fprintln(stdout, string(data))
 		if len(issues) > 0 {
-			return exitcode.ErrPolicyValidation(len(issues))
+			return failure
 		}
 		return nil
 	}
@@ -92,5 +107,27 @@ func RunValidatePolicy(args []string, stdout io.Writer) error {
 	for i, issue := range issues {
 		fmt.Fprintf(stdout, "  %d. %s\n", i+1, issue)
 	}
-	return exitcode.ErrPolicyValidation(len(issues))
+	return failure
+}
+
+func errOutsideAllowLists(n int) *exitcode.AppError {
+	return exitcode.ErrPolicyViolation(
+		fmt.Sprintf("%d declaration(s) in project config are outside the policy allow-lists", n),
+		"Remove them from .squadai/project.json, or extend 'allowed' in .squadai/policy.json.")
+}
+
+// allowListViolations checks the committed project config, without user
+// config, against the policy allow-lists. A missing project.json has nothing
+// to check.
+func allowListViolations(projectDir string, policy *domain.PolicyConfig) ([]string, error) {
+	project, err := config.LoadProject(projectDir)
+	if errors.Is(err, domain.ErrConfigNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load project config: %w", err)
+	}
+	// A nil catalog (broken override file) resolves against the embedded one.
+	cat, _ := modelcatalog.Load("", projectDir)
+	return config.CheckAllowLists(config.Merge(nil, project, policy), allAdapters(), cat), nil
 }

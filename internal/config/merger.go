@@ -283,6 +283,9 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 		if len(policy.Required.Hooks) > 0 {
 			merged.Hooks = mergeHooksConfig(merged.Hooks, policy.Required.Hooks)
 		}
+
+		merged.Allowed = policy.Allowed
+		emitClaudeAvailableModels(merged, policy)
 	}
 
 	return merged

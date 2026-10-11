@@ -13,6 +13,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/exitcode"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/modelcatalog"
 	"github.com/PedroMosquera/squadai/internal/planner"
 	"github.com/PedroMosquera/squadai/internal/verify"
 )
@@ -87,6 +88,12 @@ func runVerifyCI(stdout io.Writer, projectDir string, jsonOut bool) error {
 		})
 	}
 	report.Results = append(report.Results, verify.PolicyResults(merged)...)
+	cat, _ := modelcatalog.Load(bareHome, projectDir)
+	outside := verify.AllowListResults(merged, allAdapters(), cat)
+	if len(outside) > 0 {
+		report.AllPass = false
+		report.Results = append(report.Results, outside...)
+	}
 
 	if jsonOut {
 		data, err := json.MarshalIndent(report, "", "  ")
@@ -109,6 +116,11 @@ func runVerifyCI(stdout io.Writer, projectDir string, jsonOut bool) error {
 		}
 	}
 
+	// Policy wins over drift: re-running apply cannot fix a declaration the
+	// policy forbids, so the exit code points at the config instead.
+	if len(outside) > 0 {
+		return errOutsideAllowLists(len(outside))
+	}
 	if !report.AllPass {
 		return exitcode.New(exitcode.Drift, "E-401",
 			fmt.Sprintf("%d project file(s) differ from what apply would write", len(drifted)),

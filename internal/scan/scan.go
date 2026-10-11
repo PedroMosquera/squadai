@@ -6,12 +6,14 @@ package scan
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
 )
 
@@ -122,16 +124,22 @@ type projectSettings struct {
 	file        string
 	defaultMode string
 	env         map[string]string
+	// plugins are the enabledPlugins keys, "<plugin>@<marketplace>".
+	plugins []string
 }
 
 type inputs struct {
 	servers  []mcpServer
 	hooks    []hookCommand
 	settings []projectSettings
+	allow    domain.AllowLists
 }
 
 // Scan reads every agent config file the given adapters know about under
 // projectDir and runs all rules over them. Missing files are not an error.
+// The allow-lists in .squadai/policy.json, when present, feed SCAN-007; a
+// policy file that does not parse is an error, so the allow-lists can never
+// be skipped silently.
 func Scan(projectDir string, adapters []domain.Adapter) (Report, error) {
 	var (
 		in      inputs
@@ -139,6 +147,14 @@ func Scan(projectDir string, adapters []domain.Adapter) (Report, error) {
 		seen    = map[string]bool{}
 		sources = map[string][]byte{}
 	)
+
+	policy, err := config.LoadPolicy(projectDir)
+	switch {
+	case err == nil:
+		in.allow = policy.Allowed
+	case !errors.Is(err, domain.ErrConfigNotFound):
+		return Report{}, err
+	}
 
 	read := func(path string) ([]byte, bool, error) {
 		if seen[path] {
@@ -282,8 +298,9 @@ func parseClaudeSettings(file string, data []byte) ([]hookCommand, projectSettin
 		Permissions struct {
 			DefaultMode string `json:"defaultMode"`
 		} `json:"permissions"`
-		Env   map[string]any `json:"env"`
-		Hooks map[string][]struct {
+		Env            map[string]any `json:"env"`
+		EnabledPlugins map[string]any `json:"enabledPlugins"`
+		Hooks          map[string][]struct {
 			Hooks []struct {
 				Type    string `json:"type"`
 				Command string `json:"command"`
@@ -294,6 +311,14 @@ func parseClaudeSettings(file string, data []byte) ([]hookCommand, projectSettin
 		return nil, projectSettings{}, fmt.Errorf("parse JSON: %w", err)
 	}
 	settings := projectSettings{file: file, defaultMode: doc.Permissions.DefaultMode, env: stringMap(doc.Env)}
+	// Values are not always booleans; anything but false or null counts as
+	// enabled, and an unexpected shape must not cost the file its other rules.
+	for id, v := range doc.EnabledPlugins {
+		if v != nil && v != false {
+			settings.plugins = append(settings.plugins, id)
+		}
+	}
+	sort.Strings(settings.plugins)
 
 	events := make([]string, 0, len(doc.Hooks))
 	for e := range doc.Hooks {

@@ -268,7 +268,7 @@ Checks that the committed project files match what `apply` would write for every
 
 Each drifted file is one failed result with a `path`: `project-file-missing` (apply would create it), `project-file-drift` (content differs, the diff is printed after the summary) or `project-file-stale` (apply would remove it). Policy overrides are reported as warnings. With `GITHUB_ACTIONS=true` each failure is also printed as a `::error file=<path>::` annotation, with paths relative to `GITHUB_WORKSPACE`; annotations are not printed with `--json`.
 
-Exits 4 (`E-401`) on any drifted or missing file and 0 otherwise. `--strict` adds nothing under `--ci`. The repo's [`action.yml`](../action.yml) runs this command followed by `squadai scan`.
+Exits 4 (`E-401`) on any drifted or missing file and 0 otherwise. When the policy has an `allowed` block, each declaration outside it is a failing `policy-allow-list` result and the command exits 3 (`E-201`), ahead of drift, because `apply` cannot fix it. `--strict` adds nothing under `--ci`. The repo's [`action.yml`](../action.yml) runs this command followed by `squadai scan`.
 
 ---
 
@@ -290,8 +290,9 @@ It reads the project MCP config of every supported harness, whether or not the h
 | `SCAN-004` | high / medium | Hook commands that pass `tool_input` to `eval`, `sh -c` or a pipe into a shell (high), or expand it in an unquoted `$(...)` (medium). |
 | `SCAN-005` | low | `permissions.defaultMode: "bypassPermissions"` in project `.claude/settings.json`, which Claude Code has ignored since 2026-09-02. |
 | `SCAN-006` | medium | MCP servers reached over plain `http://` on a host other than localhost or a loopback address. |
+| `SCAN-007` | high | MCP servers, hook commands or `enabledPlugins` marketplaces outside the `allowed` lists in `.squadai/policy.json` (see [Allow-lists](policy.md#allow-lists)). Reports nothing when the policy has no `allowed` block. |
 
-Exit codes: `0` when no finding is at or above `--fail-on` (default `high`), `3` (`E-203`) when at least one is, `2` for an invalid flag. `--fail-on none` always exits `0` after a successful scan. A config file that cannot be parsed is listed as skipped and does not stop the scan.
+Exit codes: `0` when no finding is at or above `--fail-on` (default `high`), `3` (`E-203`) when at least one is, `2` for an invalid flag. `--fail-on none` always exits `0` after a successful scan. A config file that cannot be parsed is listed as skipped and does not stop the scan. A `.squadai/policy.json` that cannot be parsed fails the scan, so the allow-lists are never skipped silently.
 
 `--json` prints `{"scanned": [...], "skipped": [...], "findings": [...]}`. Each finding has `id`, `severity`, `file` (relative to the project), `line` (omitted when unknown), `subject` and `message`, sorted by severity, then file and line.
 
@@ -371,6 +372,10 @@ Checks:
 - `locked` array entries reference known fields
 - Every locked field has a corresponding entry in `required`
 - `required` values are valid types
+- `allowed` lists contain no empty patterns
+- `.squadai/project.json` declares no MCP server, model, hook command or plugin source outside the `allowed` lists (see [Allow-lists](policy.md#allow-lists))
+
+Exits `2` (`E-202`) when the policy file itself has issues and `3` (`E-201`) when project config is outside the allow-lists.
 
 **Example:**
 

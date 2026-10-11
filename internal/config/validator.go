@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -154,7 +156,30 @@ func ValidatePolicy(cfg *domain.PolicyConfig) []string {
 	// Validate required agents, MCP definitions.
 	issues = append(issues, validateAgentDefs(cfg.Required.Agents)...)
 	issues = append(issues, validateMCPDefs(cfg.Required.MCP)...)
+	issues = append(issues, validateAllowLists(cfg.Allowed)...)
 
+	return issues
+}
+
+// validateAllowLists rejects empty patterns: "" only matches an empty value,
+// so it is almost always a typo that silently denies everything.
+func validateAllowLists(a domain.AllowLists) []string {
+	lists := map[string][]string{
+		"models":         a.Models,
+		"hook_commands":  a.HookCommands,
+		"plugin_sources": a.PluginSources,
+	}
+	if a.MCPServers != nil {
+		lists["mcp_servers.names"] = a.MCPServers.Names
+		lists["mcp_servers.commands"] = a.MCPServers.Commands
+		lists["mcp_servers.urls"] = a.MCPServers.URLs
+	}
+	var issues []string
+	for _, key := range slices.Sorted(maps.Keys(lists)) {
+		if slices.Contains(lists[key], "") {
+			issues = append(issues, fmt.Sprintf("allowed.%s contains an empty pattern", key))
+		}
+	}
 	return issues
 }
 

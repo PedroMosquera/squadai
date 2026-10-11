@@ -327,10 +327,37 @@ func buildPolicySchema() ([]byte, error) {
 					"hooks": schemaHooksConfig(),
 				},
 			},
+			"allowed": schemaAllowLists(),
 		},
 		"additionalProperties": false,
 	}
 	return json.MarshalIndent(schema, "", "  ")
+}
+
+func schemaAllowLists() map[string]any {
+	globs := func(desc string) map[string]any {
+		return map[string]any{"type": "array", "items": map[string]any{"type": "string", "minLength": 1}, "description": desc}
+	}
+	return map[string]any{
+		"type":                 "object",
+		"description":          "Allow-lists checked by validate-policy, verify and scan (SCAN-007). An absent list means no restriction; an empty list allows nothing. Entries are globs: * matches any run of characters, ? matches one.",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"mcp_servers": map[string]any{
+				"type":                 "object",
+				"description":          "A server must pass every list that is set.",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"names":    globs("Allowed server names."),
+					"commands": globs("Allowed stdio command lines (command and args joined by spaces)."),
+					"urls":     globs("Allowed remote server URLs."),
+				},
+			},
+			"models":         globs("Allowed concrete model IDs, as written to agent frontmatter."),
+			"hook_commands":  globs("Allowed hook command strings."),
+			"plugin_sources": globs("Allowed plugin marketplaces (the part after @ in a plugin ID) and marketplace repositories."),
+		},
+	}
 }
 
 func schemaAgentDef() map[string]any {
