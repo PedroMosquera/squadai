@@ -278,7 +278,7 @@ Or edit `project.json`:
       "enabled": true,
       "supported_agents": ["claude-code"],
       "install_method": "claude_plugin",
-      "plugin_id": "code-review@anthropic"
+      "plugin_id": "code-review@claude-plugins-official"
     }
   }
 }
@@ -633,7 +633,7 @@ When a project or user value conflicts with a policy-locked field, the policy va
       "enabled": true,
       "supported_agents": ["claude-code"],
       "install_method": "claude_plugin",
-      "plugin_id": "code-review@anthropic"
+      "plugin_id": "code-review@claude-plugins-official"
     }
   }
 }

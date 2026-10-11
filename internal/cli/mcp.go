@@ -40,21 +40,21 @@ func AvailablePlugins() map[string]domain.PluginDef {
 			Enabled:         false,
 			SupportedAgents: []string{"claude-code"},
 			InstallMethod:   "claude_plugin",
-			PluginID:        "code-simplifier@anthropic",
+			PluginID:        "code-simplifier@claude-plugins-official",
 		},
 		"code-review": {
 			Description:     "Automated code review with actionable feedback",
 			Enabled:         false,
 			SupportedAgents: []string{"claude-code"},
 			InstallMethod:   "claude_plugin",
-			PluginID:        "code-review@anthropic",
+			PluginID:        "code-review@claude-plugins-official",
 		},
 		"frontend-design": {
 			Description:     "AI-assisted frontend design and component generation",
 			Enabled:         false,
 			SupportedAgents: []string{"claude-code"},
 			InstallMethod:   "claude_plugin",
-			PluginID:        "frontend-design@anthropic",
+			PluginID:        "frontend-design@claude-plugins-official",
 		},
 	}
 }
