@@ -443,9 +443,10 @@ func buildCommandRegistry() helpOutput {
 			{
 				Name:        "scan",
 				Group:       groupDaily,
-				Description: "Security scan of hooks, MCP configs and project settings (read-only).",
+				Description: "Security scan of hooks, MCP configs, settings, skills and Pi extensions (read-only).",
 				Flags: []cmdFlag{
 					{Name: "--json", Type: "bool", Description: "Output findings as JSON"},
+					{Name: "--user", Type: "bool", Description: "Also scan user-level config under the home directory"},
 					{Name: "--fail-on", Type: "string", Description: "Exit 3 at or above this severity: info, low, medium, high, none", Default: "high"},
 				},
 			},

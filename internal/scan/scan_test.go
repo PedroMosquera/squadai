@@ -79,7 +79,7 @@ env = { GITHUB_TOKEN = "`+fakeGHP+`" }
 url = "http://docs.example.com/mcp"
 `)
 
-	report, err := Scan(dir, AllAdapters())
+	report, err := Scan(dir, AllAdapters(), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestScan_SharedMCPFileIsReadOnce(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, ".mcp.json", `{"mcpServers": {"r": {"url": "http://mcp.example.com"}}}`)
 
-	report, err := Scan(dir, AllAdapters())
+	report, err := Scan(dir, AllAdapters(), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestScan_UnparsableFileIsSkippedNotFatal(t *testing.T) {
 	writeFile(t, dir, ".mcp.json", `{"mcpServers": {`)
 	writeFile(t, dir, ".pi/mcp.json", `{"mcpServers": {"r": {"url": "http://mcp.example.com"}}}`)
 
-	report, err := Scan(dir, AllAdapters())
+	report, err := Scan(dir, AllAdapters(), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestScan_UnparsableFileIsSkippedNotFatal(t *testing.T) {
 }
 
 func TestScan_EmptyProjectHasNoFindings(t *testing.T) {
-	report, err := Scan(t.TempDir(), AllAdapters())
+	report, err := Scan(t.TempDir(), AllAdapters(), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

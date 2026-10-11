@@ -18,13 +18,15 @@ const scanFailOnAllowed = "info, low, medium, high, none"
 // current directory. It returns an exitcode.Policy error when any finding is
 // at or above the --fail-on severity (default high).
 func RunScan(args []string, stdout io.Writer) error {
-	jsonOut := false
+	jsonOut, user := false, false
 	failOn := "high"
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
 		case arg == "--json":
 			jsonOut = true
+		case arg == "--user":
+			user = true
 		case arg == "--fail-on":
 			if i+1 >= len(args) {
 				return exitcode.ErrMissingArg("--fail-on value", "squadai scan --fail-on <"+strings.ReplaceAll(scanFailOnAllowed, ", ", "|")+">")
@@ -37,7 +39,7 @@ func RunScan(args []string, stdout io.Writer) error {
 			printScanUsage(stdout)
 			return nil
 		default:
-			return exitcode.ErrUnknownValue("squadai scan", arg, "--json, --fail-on <severity>")
+			return exitcode.ErrUnknownValue("squadai scan", arg, "--json, --user, --fail-on <severity>")
 		}
 	}
 
@@ -54,7 +56,13 @@ func RunScan(args []string, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
-	report, err := scan.Scan(projectDir, scan.AllAdapters())
+	var opts scan.Options
+	if user {
+		if opts.HomeDir, err = os.UserHomeDir(); err != nil {
+			return fmt.Errorf("resolve home directory: %w", err)
+		}
+	}
+	report, err := scan.Scan(projectDir, scan.AllAdapters(), opts)
 	if err != nil {
 		return fmt.Errorf("scan: %w", err)
 	}
@@ -116,11 +124,12 @@ func printScanReport(w io.Writer, r scan.Report) {
 }
 
 func printScanUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: squadai scan [--json] [--fail-on <info|low|medium|high|none>]")
+	fmt.Fprintln(w, "Usage: squadai scan [--json] [--user] [--fail-on <info|low|medium|high|none>]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Read-only security scan of the agent config in the current project: MCP server")
-	fmt.Fprintln(w, "definitions for every supported harness, Claude Code hooks, and project")
-	fmt.Fprintln(w, ".claude/settings.json. Nothing is written or executed.")
+	fmt.Fprintln(w, "definitions for every supported harness, Claude Code and Codex hooks, Claude Code")
+	fmt.Fprintln(w, "settings (settings.json and settings.local.json), skills (SKILL.md) and Pi")
+	fmt.Fprintln(w, "extensions. Nothing is written or executed.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Rules:")
 	for _, r := range scan.Rules() {
@@ -129,10 +138,13 @@ func printScanUsage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --json      Output the report as JSON (scanned, skipped, findings).")
+	fmt.Fprintln(w, "  --user      Also scan user-level config under your home directory, reported")
+	fmt.Fprintln(w, "              with absolute paths.")
 	fmt.Fprintln(w, "  --fail-on   Exit 3 when any finding is at or above this severity (default high).")
 	fmt.Fprintln(w, "              'none' always exits 0 after a successful scan.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  squadai scan")
 	fmt.Fprintln(w, "  squadai scan --json --fail-on medium")
+	fmt.Fprintln(w, "  squadai scan --user")
 }

@@ -24,7 +24,7 @@ type rule struct {
 }
 
 var rules = []rule{
-	{Rule{"SCAN-001", SeverityHigh, "secret literal in MCP server, hook or settings env"}, checkSecrets},
+	{Rule{"SCAN-001", SeverityHigh, "secret literal in MCP server, hook, settings env, skill or Pi extension"}, checkSecrets},
 	{Rule{"SCAN-002", SeverityHigh, "remote script fetched and executed at runtime"}, checkRemoteExec},
 	{Rule{"SCAN-003", SeverityMedium, "package runner without a pinned version"}, checkUnpinnedRunner},
 	{Rule{"SCAN-004", SeverityHigh, "hook command executes or splits tool input"}, checkHookInjection},
@@ -201,7 +201,24 @@ func checkSecrets(in inputs) []Finding {
 			}
 		}
 	}
+	for _, t := range in.texts {
+		t.eachLine(func(n int, line string) {
+			for _, h := range findSecrets("", line) {
+				out = append(out, textFinding("SCAN-001", t, n, secretMessage(h, t.where)))
+			}
+		})
+	}
 	return out
+}
+
+func (t textFile) eachLine(fn func(n int, line string)) {
+	for i, line := range strings.Split(t.content, "\n") {
+		fn(i+1, line)
+	}
+}
+
+func textFinding(id string, t textFile, line int, msg string) Finding {
+	return Finding{ID: id, Severity: SeverityHigh, File: t.file, Line: line, Subject: t.subject, Message: msg}
 }
 
 var remoteExecPatterns = []*regexp.Regexp{
@@ -246,6 +263,13 @@ func checkRemoteExec(in inputs) []Finding {
 		if m := remoteExec(h.command); m != "" {
 			out = append(out, hookFinding("SCAN-002", SeverityHigh, h, m, remoteExecMessage(m)))
 		}
+	}
+	for _, t := range in.texts {
+		t.eachLine(func(n int, line string) {
+			if m := remoteExec(line); m != "" {
+				out = append(out, textFinding("SCAN-002", t, n, remoteExecMessage(m)))
+			}
+		})
 	}
 	return out
 }
@@ -446,7 +470,9 @@ func afterAssignment(cmd string, i int) bool {
 func checkIgnoredProjectSettings(in inputs) []Finding {
 	var out []Finding
 	for _, s := range in.settings {
-		if s.defaultMode == "bypassPermissions" {
+		// The change covers project settings; user and local files are left
+		// out rather than guessed at.
+		if s.scope == scopeProject && s.defaultMode == "bypassPermissions" {
 			out = append(out, Finding{
 				ID: "SCAN-005", Severity: SeverityLow, File: s.file, Subject: "permissions.defaultMode",
 				Message: `"bypassPermissions" in project settings has been ignored by Claude Code since 2026-09-02; sessions start in the default mode, so do not rely on it`,

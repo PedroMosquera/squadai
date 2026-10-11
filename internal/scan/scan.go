@@ -1,6 +1,7 @@
 // Package scan is a read-only security scan of the agent configuration in a
-// project: MCP server definitions, Claude Code hooks and project settings. It
-// never writes files and never executes anything it finds.
+// project, and optionally the user's home: MCP server definitions, Claude Code
+// and Codex hooks, Claude Code settings, skills and Pi extensions. It never
+// writes files and never executes anything it finds.
 package scan
 
 import (
@@ -63,7 +64,8 @@ func ParseSeverity(name string) (Severity, bool) {
 	return 0, false
 }
 
-// Finding is one rule hit. File is relative to the scanned project directory.
+// Finding is one rule hit. File is relative to the scanned project directory,
+// or absolute for a user-level file outside it.
 // Line is 1-based and 0 when it could not be located cheaply. Message never
 // contains a full secret value.
 type Finding struct {
@@ -118,21 +120,47 @@ type hookCommand struct {
 	command string
 }
 
-// projectSettings is the subset of a project-scoped Claude Code settings file
-// the rules inspect.
+type settingsScope int
+
+const (
+	scopeProject settingsScope = iota // .claude/settings.json
+	scopeLocal                        // .claude/settings.local.json
+	scopeUser                         // ~/.claude/settings.json
+)
+
+// projectSettings is the subset of a Claude Code settings file the rules
+// inspect.
 type projectSettings struct {
 	file        string
+	scope       settingsScope
 	defaultMode string
 	env         map[string]string
 	// plugins are the enabledPlugins keys, "<plugin>@<marketplace>".
 	plugins []string
 }
 
+// textFile is free text an agent loads as instructions or code (a skill or a
+// Pi extension). Only rules that hold up on prose and source run over it.
+type textFile struct {
+	file    string
+	subject string
+	where   string
+	content string
+}
+
 type inputs struct {
 	servers  []mcpServer
 	hooks    []hookCommand
 	settings []projectSettings
+	texts    []textFile
 	allow    domain.AllowLists
+}
+
+// Options widens a scan beyond the project.
+type Options struct {
+	// HomeDir, when set, adds the user-level config the adapters know about
+	// under it. Those findings carry absolute paths.
+	HomeDir string
 }
 
 // Scan reads every agent config file the given adapters know about under
@@ -140,102 +168,36 @@ type inputs struct {
 // The allow-lists in .squadai/policy.json, when present, feed SCAN-007; a
 // policy file that does not parse is an error, so the allow-lists can never
 // be skipped silently.
-func Scan(projectDir string, adapters []domain.Adapter) (Report, error) {
-	var (
-		in      inputs
-		report  Report
-		seen    = map[string]bool{}
-		sources = map[string][]byte{}
-	)
+func Scan(projectDir string, adapters []domain.Adapter, opts Options) (Report, error) {
+	s := &scanner{projectDir: projectDir, seen: map[string]bool{}, sources: map[string][]byte{}}
 
 	policy, err := config.LoadPolicy(projectDir)
 	switch {
 	case err == nil:
-		in.allow = policy.Allowed
+		s.in.allow = policy.Allowed
 	case !errors.Is(err, domain.ErrConfigNotFound):
 		return Report{}, err
 	}
 
-	read := func(path string) ([]byte, bool, error) {
-		if seen[path] {
-			return nil, false, nil
-		}
-		seen[path] = true
-		data, err := os.ReadFile(path)
-		if os.IsNotExist(err) {
-			return nil, false, nil
-		}
-		if err != nil {
-			return nil, false, fmt.Errorf("read %s: %w", path, err)
-		}
-		rel := relPath(projectDir, path)
-		report.Scanned = append(report.Scanned, rel)
-		sources[rel] = data
-		return data, true, nil
-	}
-	skip := func(path string, err error) {
-		report.Skipped = append(report.Skipped, Skipped{File: relPath(projectDir, path), Reason: err.Error()})
-	}
-
 	for _, a := range adapters {
-		if a.ID() == domain.AgentClaudeCode {
-			path := a.ProjectConfigFile(projectDir)
-			data, ok, err := read(path)
-			if err != nil {
-				return Report{}, err
-			}
-			if ok {
-				hooks, settings, err := parseClaudeSettings(relPath(projectDir, path), data)
-				if err != nil {
-					skip(path, err)
-				} else {
-					in.hooks = append(in.hooks, hooks...)
-					in.settings = append(in.settings, settings)
-				}
-			}
-		}
-
-		if a.ID() == domain.AgentCodex {
-			// Codex has no project MCP path on the adapter interface; the
-			// project-scoped TOML is the same file verify already reads.
-			path := filepath.Join(projectDir, ".codex", "config.toml")
-			data, ok, err := read(path)
-			if err != nil {
-				return Report{}, err
-			}
-			if ok {
-				in.servers = append(in.servers, parseCodexTOML(relPath(projectDir, path), data)...)
-			}
-			continue
-		}
-
-		path := a.MCPConfigPath(projectDir)
-		if path == "" {
-			path = a.ProjectConfigFile(projectDir)
-		}
-		if path == "" || filepath.Ext(path) != ".json" {
-			continue
-		}
-		data, ok, err := read(path)
-		if err != nil {
+		if err := s.project(a); err != nil {
 			return Report{}, err
 		}
-		if !ok {
-			continue
+	}
+	if opts.HomeDir != "" {
+		for _, a := range adapters {
+			if err := s.user(a, opts.HomeDir); err != nil {
+				return Report{}, err
+			}
 		}
-		servers, err := parseMCPJSON(relPath(projectDir, path), data, a.MCPRootKey(), a.MCPEnvKey(), a.MCPURLKey())
-		if err != nil {
-			skip(path, err)
-			continue
-		}
-		in.servers = append(in.servers, servers...)
 	}
 
-	report.Findings = runRules(in)
+	report := s.report
+	report.Findings = runRules(s.in)
 	for i := range report.Findings {
 		f := &report.Findings[i]
 		if f.Line == 0 {
-			f.Line = locate(sources[f.File], f)
+			f.Line = locate(s.sources[f.File], f)
 		}
 	}
 	sortFindings(report.Findings)
@@ -243,6 +205,209 @@ func Scan(projectDir string, adapters []domain.Adapter) (Report, error) {
 		report.Findings = []Finding{}
 	}
 	return report, nil
+}
+
+type scanner struct {
+	projectDir string
+	in         inputs
+	report     Report
+	seen       map[string]bool
+	sources    map[string][]byte
+}
+
+// tomlMCPConfigurer is the Codex adapter's user-level MCP file, which is not
+// on the domain.Adapter interface.
+type tomlMCPConfigurer interface {
+	MCPTOMLConfigPath(homeDir string) string
+}
+
+func (s *scanner) project(a domain.Adapter) error {
+	dir := s.projectDir
+	var err error
+	switch a.ID() {
+	case domain.AgentClaudeCode:
+		err = errors.Join(
+			s.claudeSettings(a.ProjectConfigFile(dir), scopeProject),
+			s.claudeSettings(filepath.Join(dir, ".claude", "settings.local.json"), scopeLocal),
+		)
+	case domain.AgentCodex:
+		// Codex has no project MCP path on the adapter interface; the
+		// project-scoped TOML is the same file verify already reads.
+		err = errors.Join(
+			s.codexTOML(filepath.Join(dir, ".codex", "config.toml")),
+			s.codexHooks(filepath.Join(dir, ".codex", "hooks.json")),
+		)
+	case domain.AgentPi:
+		err = s.piExtensions(filepath.Join(dir, ".pi", "extensions"))
+	}
+	if err != nil {
+		return err
+	}
+	if a.ID() != domain.AgentCodex {
+		path := a.MCPConfigPath(dir)
+		if path == "" {
+			path = a.ProjectConfigFile(dir)
+		}
+		if err := s.mcpJSON(path, a); err != nil {
+			return err
+		}
+	}
+	return s.skills(a.ProjectSkillsDir(dir))
+}
+
+func (s *scanner) user(a domain.Adapter, home string) error {
+	var err error
+	switch a.ID() {
+	case domain.AgentClaudeCode:
+		err = s.claudeSettings(a.SettingsPath(home), scopeUser)
+	case domain.AgentCodex:
+		if tc, ok := a.(tomlMCPConfigurer); ok {
+			err = s.codexTOML(tc.MCPTOMLConfigPath(home))
+		}
+		err = errors.Join(err, s.codexHooks(filepath.Join(a.GlobalConfigDir(home), "hooks.json")))
+	case domain.AgentPi:
+		err = errors.Join(
+			s.mcpJSON(a.SettingsPath(home), a),
+			s.piExtensions(filepath.Join(a.GlobalConfigDir(home), "extensions")),
+		)
+	case domain.AgentVSCodeCopilot:
+		// The user settings file is JSONC and squadai writes no MCP there.
+	default:
+		err = s.mcpJSON(a.SettingsPath(home), a)
+	}
+	if err != nil {
+		return err
+	}
+	return s.skills(a.SkillsDir(home))
+}
+
+// display is the path findings and the scanned list carry: relative inside
+// the project, absolute outside it.
+func (s *scanner) display(path string) string {
+	rel, err := filepath.Rel(s.projectDir, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return path
+	}
+	return filepath.ToSlash(rel)
+}
+
+func (s *scanner) read(path string) ([]byte, bool, error) {
+	if path == "" || s.seen[path] {
+		return nil, false, nil
+	}
+	s.seen[path] = true
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("read %s: %w", path, err)
+	}
+	file := s.display(path)
+	s.report.Scanned = append(s.report.Scanned, file)
+	s.sources[file] = data
+	return data, true, nil
+}
+
+func (s *scanner) skip(path string, err error) {
+	s.report.Skipped = append(s.report.Skipped, Skipped{File: s.display(path), Reason: err.Error()})
+}
+
+func (s *scanner) claudeSettings(path string, scope settingsScope) error {
+	data, ok, err := s.read(path)
+	if err != nil || !ok {
+		return err
+	}
+	hooks, settings, err := parseClaudeSettings(s.display(path), data)
+	if err != nil {
+		s.skip(path, err)
+		return nil
+	}
+	settings.scope = scope
+	s.in.hooks = append(s.in.hooks, hooks...)
+	s.in.settings = append(s.in.settings, settings)
+	return nil
+}
+
+func (s *scanner) codexHooks(path string) error {
+	data, ok, err := s.read(path)
+	if err != nil || !ok {
+		return err
+	}
+	var doc struct {
+		Hooks hookGroups `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		s.skip(path, fmt.Errorf("parse JSON: %w", err))
+		return nil
+	}
+	s.in.hooks = append(s.in.hooks, doc.Hooks.commands(s.display(path))...)
+	return nil
+}
+
+func (s *scanner) codexTOML(path string) error {
+	data, ok, err := s.read(path)
+	if err != nil || !ok {
+		return err
+	}
+	s.in.servers = append(s.in.servers, parseCodexTOML(s.display(path), data)...)
+	return nil
+}
+
+func (s *scanner) mcpJSON(path string, a domain.Adapter) error {
+	if path == "" || filepath.Ext(path) != ".json" {
+		return nil
+	}
+	data, ok, err := s.read(path)
+	if err != nil || !ok {
+		return err
+	}
+	servers, err := parseMCPJSON(s.display(path), data, a.MCPRootKey(), a.MCPEnvKey(), a.MCPURLKey())
+	if err != nil {
+		s.skip(path, err)
+		return nil
+	}
+	s.in.servers = append(s.in.servers, servers...)
+	return nil
+}
+
+func (s *scanner) skills(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	paths, _ := filepath.Glob(filepath.Join(dir, "*", "SKILL.md"))
+	for _, p := range paths {
+		if err := s.text(p, "skill "+filepath.Base(filepath.Dir(p)), "skill instructions"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// piExtensions reads both layouts Pi auto-discovers: a single .ts file and a
+// directory with an index.ts.
+func (s *scanner) piExtensions(dir string) error {
+	single, _ := filepath.Glob(filepath.Join(dir, "*.ts"))
+	nested, _ := filepath.Glob(filepath.Join(dir, "*", "index.ts"))
+	for _, p := range append(single, nested...) {
+		name := filepath.Base(p)
+		if name == "index.ts" {
+			name = filepath.Base(filepath.Dir(p))
+		}
+		if err := s.text(p, "pi extension "+name, "extension source"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *scanner) text(path, subject, where string) error {
+	data, ok, err := s.read(path)
+	if err != nil || !ok {
+		return err
+	}
+	s.in.texts = append(s.in.texts, textFile{file: s.display(path), subject: subject, where: where, content: string(data)})
+	return nil
 }
 
 func runRules(in inputs) []Finding {
@@ -269,13 +434,6 @@ func sortFindings(fs []Finding) {
 	})
 }
 
-func relPath(projectDir, path string) string {
-	if rel, err := filepath.Rel(projectDir, path); err == nil {
-		return filepath.ToSlash(rel)
-	}
-	return path
-}
-
 // locate finds the first line containing the finding's needle. It is a
 // heuristic for JSON sources, where the decoder does not keep positions.
 func locate(src []byte, f *Finding) int {
@@ -300,12 +458,7 @@ func parseClaudeSettings(file string, data []byte) ([]hookCommand, projectSettin
 		} `json:"permissions"`
 		Env            map[string]any `json:"env"`
 		EnabledPlugins map[string]any `json:"enabledPlugins"`
-		Hooks          map[string][]struct {
-			Hooks []struct {
-				Type    string `json:"type"`
-				Command string `json:"command"`
-			} `json:"hooks"`
-		} `json:"hooks"`
+		Hooks          hookGroups     `json:"hooks"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, projectSettings{}, fmt.Errorf("parse JSON: %w", err)
@@ -319,15 +472,27 @@ func parseClaudeSettings(file string, data []byte) ([]hookCommand, projectSettin
 		}
 	}
 	sort.Strings(settings.plugins)
+	return doc.Hooks.commands(file), settings, nil
+}
 
-	events := make([]string, 0, len(doc.Hooks))
-	for e := range doc.Hooks {
+// hookGroups is the "hooks" object of the Claude Code hooks schema, which
+// Codex's hooks.json shares.
+type hookGroups map[string][]struct {
+	Hooks []struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+	} `json:"hooks"`
+}
+
+func (g hookGroups) commands(file string) []hookCommand {
+	events := make([]string, 0, len(g))
+	for e := range g {
 		events = append(events, e)
 	}
 	sort.Strings(events)
 	var hooks []hookCommand
 	for _, e := range events {
-		for _, group := range doc.Hooks[e] {
+		for _, group := range g[e] {
 			for _, h := range group.Hooks {
 				if h.Command != "" {
 					hooks = append(hooks, hookCommand{file: file, event: e, command: h.Command})
@@ -335,7 +500,7 @@ func parseClaudeSettings(file string, data []byte) ([]hookCommand, projectSettin
 			}
 		}
 	}
-	return hooks, settings, nil
+	return hooks
 }
 
 // parseMCPJSON reads the servers under rootKey. command may be a string with a

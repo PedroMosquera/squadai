@@ -11,7 +11,7 @@ const twoServersMCP = `{
 
 func scanAllowListHits(t *testing.T, dir string) map[string]Finding {
 	t.Helper()
-	r, err := Scan(dir, AllAdapters())
+	r, err := Scan(dir, AllAdapters(), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestScan_NonBooleanEnabledPluginsKeepsTheFileScanned(t *testing.T) {
 func TestScan_UnparseablePolicyIsAnError(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, ".squadai/policy.json", `{"allowed": `)
-	if _, err := Scan(dir, AllAdapters()); err == nil {
+	if _, err := Scan(dir, AllAdapters(), Options{}); err == nil {
 		t.Error("a broken policy.json must fail the scan rather than skip the allow-lists")
 	}
 }
