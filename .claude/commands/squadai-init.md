@@ -8,8 +8,8 @@ installed.
 
 **Playbook**: the detailed procedure for every phase lives in the
 `squadai-init-playbook` skill. Find `SKILL.md` under your skills
-directory at `shared/squadai-init-playbook/` (glob for
-`**/shared/squadai-init-playbook/SKILL.md` if unsure). Load it once after
+directory at `squadai-init-playbook/` (glob for
+`**/squadai-init-playbook/SKILL.md` if unsure). Load it once after
 the user confirms, then follow the phase procedures from it as you go.
 
 ## Token-cost disclosure (FIRST ACTION, DO NOT SKIP)
