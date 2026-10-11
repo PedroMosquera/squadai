@@ -377,10 +377,11 @@ func schemaMCPDef() map[string]any {
 		"type":        "object",
 		"description": "MCP server definition.",
 		"properties": map[string]any{
-			"command": map[string]any{"type": "string"},
-			"args":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"env":     map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
-			"url":     map[string]any{"type": "string"},
+			"command":     map[string]any{"type": "string"},
+			"args":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"env":         map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+			"url":         map[string]any{"type": "string"},
+			"forward_env": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Env vars passed through from the agent environment (Codex forwards only these plus a fixed allowlist)."},
 		},
 	}
 }

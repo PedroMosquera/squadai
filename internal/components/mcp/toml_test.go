@@ -556,3 +556,35 @@ func TestApplyTOML_StripAll_RoundTrip(t *testing.T) {
 		t.Errorf("StripAll should preserve user content, got:\n%s", stripped)
 	}
 }
+
+// Codex starts stdio servers with only a fixed env allowlist plus env_vars
+// (codex-rs/rmcp-client/src/utils.rs DEFAULT_ENV_VARS), so a token the server
+// needs must be listed or it never arrives.
+func TestRenderTOMLServers_ForwardEnvBecomesEnvVars(t *testing.T) {
+	got := renderTOMLServers("mcp_servers", map[string]domain.MCPServerDef{
+		"internal": {
+			Type:       "local",
+			Command:    []string{"internal-mcp"},
+			ForwardEnv: []string{"INTERNAL_TOKEN"},
+			Enabled:    true,
+		},
+	})
+	if !strings.Contains(got, "env_vars = [\"INTERNAL_TOKEN\"]") {
+		t.Errorf("renderTOMLServers = \n%s\nwant env_vars listing INTERNAL_TOKEN", got)
+	}
+}
+
+func TestRenderTOMLServers_CatalogServerWithoutForwardEnvGetsCatalogVars(t *testing.T) {
+	var github domain.CuratedMCPServer
+	for _, s := range domain.DefaultMCPCatalog() {
+		if s.Name == "github" {
+			github = s
+		}
+	}
+	got := renderTOMLServers("mcp_servers", map[string]domain.MCPServerDef{
+		"github": {Type: "local", Command: append([]string{github.Command}, github.Args...), Enabled: true},
+	})
+	if !strings.Contains(got, "env_vars = [\"GITHUB_PERSONAL_ACCESS_TOKEN\"]") {
+		t.Errorf("project.json written before forward_env existed must still forward the catalog token; got\n%s", got)
+	}
+}

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -51,8 +52,26 @@ func renderTOMLServers(rootKey string, servers map[string]domain.MCPServerDef) s
 		if len(def.Environment) > 0 {
 			fmt.Fprintf(&b, "env = %s\n", tomlInlineTable(def.Environment))
 		}
+		if forward := forwardEnv(name, def); len(forward) > 0 {
+			fmt.Fprintf(&b, "env_vars = %s\n", tomlStringArray(forward))
+		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// forwardEnv falls back to the catalog for a server whose command is the
+// catalog's own, because project.json files written before forward_env
+// existed carry no list and Codex would start the server without its token.
+func forwardEnv(name string, def domain.MCPServerDef) []string {
+	if len(def.ForwardEnv) > 0 || def.URL != "" {
+		return def.ForwardEnv
+	}
+	for _, s := range domain.DefaultMCPCatalog() {
+		if s.Name == name && slices.Equal(def.Command, append([]string{s.Command}, s.Args...)) {
+			return s.RequiredEnvVars
+		}
+	}
+	return nil
 }
 
 // tomlKey renders a table-key segment. Bare keys (letters, digits, dashes,

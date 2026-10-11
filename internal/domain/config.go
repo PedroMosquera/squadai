@@ -287,6 +287,9 @@ type MCPServerDef struct {
 	Enabled     bool              `json:"enabled"`
 	Environment map[string]string `json:"environment,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
+	// ForwardEnv names env vars to pass through from the agent's environment.
+	// Codex forwards only a fixed allowlist to stdio servers unless listed.
+	ForwardEnv []string `json:"forward_env,omitempty"`
 }
 
 // ProjectMeta holds project metadata used for template rendering.

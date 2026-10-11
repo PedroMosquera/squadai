@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
@@ -174,5 +175,15 @@ func TestFilterPlugins_NoAgents_EmptyResult(t *testing.T) {
 	filtered := FilterPlugins(AvailablePlugins(), nil, domain.MethodologyConventional)
 	if len(filtered) != 0 {
 		t.Errorf("FilterPlugins with no agents should return empty, got %d plugins", len(filtered))
+	}
+}
+
+func TestDefaultMCPServers_ForwardsRequiredEnvVars(t *testing.T) {
+	servers := DefaultMCPServers()
+	for _, s := range domain.DefaultMCPCatalog() {
+		got := servers[s.Name].ForwardEnv
+		if !slices.Equal(got, s.RequiredEnvVars) {
+			t.Errorf("%s ForwardEnv = %v, want the catalog's required env vars %v", s.Name, got, s.RequiredEnvVars)
+		}
 	}
 }

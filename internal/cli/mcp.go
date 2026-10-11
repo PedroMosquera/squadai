@@ -1,6 +1,10 @@
 package cli
 
-import "github.com/PedroMosquera/squadai/internal/domain"
+import (
+	"slices"
+
+	"github.com/PedroMosquera/squadai/internal/domain"
+)
 
 // DefaultMCPServers returns all MCP server configurations from the curated catalog.
 // Each catalog entry is converted to an MCPServerDef with Enabled=true.
@@ -10,8 +14,9 @@ func DefaultMCPServers() map[string]domain.MCPServerDef {
 	servers := make(map[string]domain.MCPServerDef, len(catalog))
 	for _, s := range catalog {
 		def := domain.MCPServerDef{
-			Type:    s.Type,
-			Enabled: true,
+			Type:       s.Type,
+			Enabled:    true,
+			ForwardEnv: slices.Clone(s.RequiredEnvVars),
 		}
 		if s.URL != "" {
 			def.URL = s.URL
