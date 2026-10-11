@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
+	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/app"
 	"github.com/PedroMosquera/squadai/internal/exitcode"
@@ -11,8 +13,21 @@ import (
 
 var version = "dev"
 
+// resolveVersion prefers the goreleaser ldflags value and falls back to the
+// module version Go records for `go install pkg@vX`, which the action uses.
+func resolveVersion(ldflags string, info *debug.BuildInfo) string {
+	if ldflags != "dev" || info == nil {
+		return ldflags
+	}
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return strings.TrimPrefix(v, "v")
+	}
+	return ldflags
+}
+
 func main() {
-	app.Version = version
+	info, _ := debug.ReadBuildInfo()
+	app.Version = resolveVersion(version, info)
 	if err := app.Run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		var ae *exitcode.AppError
 		if errors.As(err, &ae) {
