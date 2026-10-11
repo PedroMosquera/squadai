@@ -193,7 +193,7 @@ func TestProjectPaths(t *testing.T) {
 		// documents no root .instructions.md:
 		// https://code.visualstudio.com/docs/copilot/customization/custom-instructions
 		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".github", "copilot-instructions.md")},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".copilot", "skills")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".agents", "skills")},
 	}
 
 	for _, tt := range tests {

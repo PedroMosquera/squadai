@@ -124,9 +124,11 @@ func (a *Adapter) ProjectAgentsDir(_ string) string {
 	return ""
 }
 
-// ProjectSkillsDir returns <projectDir>/.windsurf/skills.
+// ProjectSkillsDir returns <projectDir>/.agents/skills, the Agent Skills
+// standard location, which this harness reads natively:
+// https://docs.devin.ai/desktop/cascade/skills
 func (a *Adapter) ProjectSkillsDir(projectDir string) string {
-	return filepath.Join(projectDir, ".windsurf", "skills")
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
 // ProjectCommandsDir returns empty string — Windsurf does not support commands.

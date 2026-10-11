@@ -116,9 +116,11 @@ func (a *Adapter) ProjectAgentsDir(projectDir string) string {
 	return filepath.Join(projectDir, ".opencode", "agents")
 }
 
-// ProjectSkillsDir returns <projectDir>/.opencode/skills.
+// ProjectSkillsDir returns <projectDir>/.agents/skills, the Agent Skills
+// standard location, which this harness reads natively:
+// https://opencode.ai/docs/skills/
 func (a *Adapter) ProjectSkillsDir(projectDir string) string {
-	return filepath.Join(projectDir, ".opencode", "skills")
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
 // ProjectCommandsDir returns <projectDir>/.opencode/commands.

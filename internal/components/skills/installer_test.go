@@ -60,7 +60,7 @@ func TestPlan_OpenCode_NewSkills_ReturnsCreate(t *testing.T) {
 	if actions[0].Action != domain.ActionCreate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
 	}
-	expected := filepath.Join(project, ".opencode", "skills", "deploy", "SKILL.md")
+	expected := filepath.Join(project, ".agents", "skills", "deploy", "SKILL.md")
 	if actions[0].TargetPath != expected {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
 	}
@@ -72,7 +72,7 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	skillDefs := testSkills()
 	inst := New(skillDefs, nil, project)
 
-	targetPath := filepath.Join(project, ".opencode", "skills", "deploy", "SKILL.md")
+	targetPath := filepath.Join(project, ".agents", "skills", "deploy", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +417,7 @@ func TestPlanMethodologySkills_TDD_CorrectPaths(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	skillsDir := filepath.Join(project, ".opencode", "skills")
+	skillsDir := filepath.Join(project, ".agents", "skills")
 	expectedPaths := map[string]bool{
 		filepath.Join(skillsDir, "shared", "code-review", "SKILL.md"):              false,
 		filepath.Join(skillsDir, "shared", "find-skills", "SKILL.md"):              false,
@@ -490,7 +490,7 @@ func TestApplyMethodologySkills_WritesEmbeddedContent(t *testing.T) {
 	}
 
 	// Verify a shared skill file was written with YAML frontmatter.
-	codeReviewPath := filepath.Join(project, ".opencode", "skills", "shared", "code-review", "SKILL.md")
+	codeReviewPath := filepath.Join(project, ".agents", "skills", "shared", "code-review", "SKILL.md")
 	data, err := os.ReadFile(codeReviewPath)
 	if err != nil {
 		t.Fatalf("code-review skill not written: %v", err)

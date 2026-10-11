@@ -118,9 +118,11 @@ func (a *Adapter) ProjectAgentsDir(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "agents")
 }
 
-// ProjectSkillsDir returns <projectDir>/.cursor/skills.
+// ProjectSkillsDir returns <projectDir>/.agents/skills, the Agent Skills
+// standard location, which this harness reads natively:
+// https://cursor.com/docs/context/skills
 func (a *Adapter) ProjectSkillsDir(projectDir string) string {
-	return filepath.Join(projectDir, ".cursor", "skills")
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
 // ProjectCommandsDir returns empty string — Cursor does not support project commands.

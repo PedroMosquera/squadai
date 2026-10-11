@@ -967,7 +967,7 @@ func TestVerify_Plugins_PassesWhenSkillFilePresent(t *testing.T) {
 	adapter := opencode.New()
 
 	// Write the expected skill file content.
-	skillsDir := filepath.Join(project, ".opencode", "skills", "superpowers")
+	skillsDir := filepath.Join(project, ".agents", "skills", "superpowers")
 	if err := os.MkdirAll(skillsDir, 0755); err != nil {
 		t.Fatal(err)
 	}

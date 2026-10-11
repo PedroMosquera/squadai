@@ -33,7 +33,7 @@ Everything below is ranked by how much it moves that sentence.
 |---|---|---|
 | Codex adapter | Partial | AGENTS.md, global `~/.codex/config.toml` MCP, size check. No skills, hooks or subagents. |
 | AGENTS.md canonical | Not started | Claude gets full content in CLAUDE.md. VS Code gets a file it does not read (see 4.1). |
-| Skills in one place | Partial | SKILL.md format, but written per harness. Nothing in `.agents/skills`; Codex gets none. |
+| Skills in one place | Done | Written once to `.agents/skills`, read by every harness but Claude Code, which keeps a copy in `.claude/skills`. Codex gets skills. |
 | Harness-native plugin install | Partial | Claude plugins are declared in `enabledPlugins`. Registry still pinned to `wshobson/agents`. |
 | Cross-harness usage | Partial, now deprioritized | Reads Claude, OpenCode, Pi. ccusage covers the rest. |
 | Budget enforcement | CLI only | `--against-budget`. No hooks. |
@@ -61,7 +61,7 @@ Size: 4 agent sessions in parallel, about one day of wall-clock including review
 ## 5. Phase 1: one instruction file, one skills directory
 
 1. **AGENTS.md is the canonical instruction file.** `apply` writes all shared content to AGENTS.md. CLAUDE.md becomes `@AGENTS.md` plus Claude-only blocks. VS Code, Cursor, Windsurf, Pi, OpenCode and Codex read AGENTS.md natively. Claude Code also reads AGENTS.md when no CLAUDE.md exists (2.1.277), so the import keeps working for users who keep their own CLAUDE.md. This fixes 4.1 properly and removes one copy of every instruction block. Keep the 32 KiB check in mind: one file now carries everything.
-2. **Skills in `.agents/skills`.** Write SKILL.md once to `.agents/skills` (Agent Skills standard, read by Codex and Pi), then link or copy into harness-specific directories only where a harness does not read it. Codex gains skills.
+2. **Skills in `.agents/skills`.** (Done.) Write SKILL.md once to `.agents/skills` (Agent Skills standard, read by Codex and Pi), then link or copy into harness-specific directories only where a harness does not read it. Codex gains skills.
 3. **Shrink role files after skills land.** Today: tdd 6, sdd 8, conventional 4 role files per harness for Claude, Cursor, OpenCode and Pi. With roles as skills, generate one orchestrator stub per harness.
 
 Size: 2 to 3 sessions, about one day. Bottleneck: a live check in Claude Code, VS Code and Codex that each actually loads the new files.

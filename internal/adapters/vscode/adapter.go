@@ -127,9 +127,11 @@ func (a *Adapter) ProjectAgentsDir(_ string) string {
 	return ""
 }
 
-// ProjectSkillsDir returns <projectDir>/.copilot/skills.
+// ProjectSkillsDir returns <projectDir>/.agents/skills, the Agent Skills
+// standard location, which this harness reads natively:
+// https://code.visualstudio.com/docs/copilot/customization/agent-skills
 func (a *Adapter) ProjectSkillsDir(projectDir string) string {
-	return filepath.Join(projectDir, ".copilot", "skills")
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
 // ProjectCommandsDir returns empty string — VS Code Copilot does not support project commands.

@@ -191,7 +191,7 @@ func TestProjectPaths(t *testing.T) {
 	}{
 		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".windsurf", "mcp_config.json")},
 		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".windsurf", "rules", "squadai.md")},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".windsurf", "skills")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".agents", "skills")},
 	}
 
 	for _, tt := range tests {

@@ -168,7 +168,7 @@ func TestProjectPaths(t *testing.T) {
 		{"ProjectConfigFile", a.ProjectConfigFile(project), ""},
 		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, "AGENTS.md")},
 		{"ProjectAgentsDir", a.ProjectAgentsDir(project), ""},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), ""},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".agents", "skills")},
 		{"ProjectCommandsDir", a.ProjectCommandsDir(project), ""},
 	}
 
@@ -189,6 +189,7 @@ func TestSupportsComponent_Supported(t *testing.T) {
 		domain.ComponentMCP,
 		domain.ComponentBrand,
 		domain.ComponentEfficiency,
+		domain.ComponentSkills,
 	}
 	for _, c := range components {
 		if !a.SupportsComponent(c) {
@@ -201,7 +202,6 @@ func TestSupportsComponent_Unsupported(t *testing.T) {
 	a := New()
 	components := []domain.ComponentID{
 		domain.ComponentAgents,
-		domain.ComponentSkills,
 		domain.ComponentCommands,
 		domain.ComponentPermissions,
 		domain.ComponentSettings,

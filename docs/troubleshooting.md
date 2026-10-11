@@ -318,7 +318,7 @@ Confirm the `skills` component is enabled in `project.json` and re-run apply:
 squadai apply
 ```
 
-Skills are written to each adapter's project skills directory (e.g., `.opencode/skills/`, `.claude/skills/`). Check that the target agent is detected.
+Skills are written to `.agents/skills/`, plus `.claude/skills/` when Claude Code is enabled. Check that the target agent is detected.
 
 **Installing community skills**
 

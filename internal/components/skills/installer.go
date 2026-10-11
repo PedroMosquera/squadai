@@ -22,7 +22,7 @@ type Options struct {
 }
 
 // Installer implements domain.ComponentInstaller for skill definitions.
-// It writes .opencode/skills/<name>/SKILL.md files with YAML frontmatter.
+// It writes <ProjectSkillsDir>/<name>/SKILL.md files with YAML frontmatter.
 // When config.Methodology is set, it also installs embedded methodology skills.
 type Installer struct {
 	skills     map[string]domain.SkillDef // custom skills from config
@@ -162,7 +162,92 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		})
 	}
 
+	removals, err := i.planLegacyRemoval(adapter, projectDir, skillsDir)
+	if err != nil {
+		return nil, err
+	}
+	return append(actions, removals...), nil
+}
+
+// legacyProjectSkillsDirs are the per-harness directories squadai wrote skills
+// to before it wrote them once to .agents/skills, which these harnesses read.
+var legacyProjectSkillsDirs = map[domain.AgentID]string{
+	domain.AgentOpenCode:      ".opencode/skills",
+	domain.AgentPi:            ".pi/skills",
+	domain.AgentCursor:        ".cursor/skills",
+	domain.AgentVSCodeCopilot: ".copilot/skills",
+	domain.AgentWindsurf:      ".windsurf/skills",
+}
+
+// planLegacyRemoval returns delete actions for skill files in the adapter's
+// legacy directory that are byte-identical to what Plan now writes to
+// skillsDir. A copy the user edited is not squadai's to remove and stays.
+func (i *Installer) planLegacyRemoval(adapter domain.Adapter, projectDir, skillsDir string) ([]domain.PlannedAction, error) {
+	legacy, ok := legacyProjectSkillsDirs[adapter.ID()]
+	if !ok {
+		return nil, nil
+	}
+	legacyDir := filepath.Join(projectDir, filepath.FromSlash(legacy))
+	if legacyDir == skillsDir {
+		return nil, nil
+	}
+
+	desired, err := i.desired()
+	if err != nil {
+		return nil, err
+	}
+	rels := make([]string, 0, len(desired))
+	for rel := range desired {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+
+	var actions []domain.PlannedAction
+	for _, rel := range rels {
+		targetPath := filepath.Join(legacyDir, filepath.FromSlash(rel), "SKILL.md")
+		existing, err := fileutil.ReadFileOrEmpty(targetPath)
+		if err != nil {
+			return nil, fmt.Errorf("read legacy skill %s: %w", targetPath, err)
+		}
+		if string(existing) != desired[rel] {
+			continue
+		}
+		actions = append(actions, domain.PlannedAction{
+			ID:          fmt.Sprintf("%s-skill-legacy-%s", adapter.ID(), rel),
+			Agent:       adapter.ID(),
+			Component:   domain.ComponentSkills,
+			Action:      domain.ActionDelete,
+			TargetPath:  targetPath,
+			Description: fmt.Sprintf("delete skill %s from %s (now read from .agents/skills)", rel, legacy),
+		})
+	}
 	return actions, nil
+}
+
+// desired returns the content Plan writes for each in-scope skill, keyed by
+// its slash-separated path relative to the skills directory.
+func (i *Installer) desired() (map[string]string, error) {
+	out := make(map[string]string)
+	if i.config != nil && i.config.Methodology != "" {
+		paths := append(sharedSkillPaths(), methodologySkillPaths(i.config.Methodology)...)
+		for _, assetDir := range paths {
+			rel := strings.TrimPrefix(assetDir, "skills/")
+			if !i.inScope(rel) {
+				continue
+			}
+			content, err := assets.Read(assetDir + "/SKILL.md")
+			if err != nil {
+				return nil, fmt.Errorf("read embedded skill %s: %w", assetDir, err)
+			}
+			out[rel] = content
+		}
+	}
+	for name, def := range i.skills {
+		if i.inScope(name) {
+			out[name] = renderSkill(name, def)
+		}
+	}
+	return out, nil
 }
 
 // planEmbeddedSkill produces a PlannedAction for a single embedded skill asset.
@@ -223,11 +308,11 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	}
 
 	if action.Action == domain.ActionDelete {
-		// Delete the skill directory.
-		dir := filepath.Dir(action.TargetPath)
-		if err := os.RemoveAll(dir); err != nil {
+		if err := os.Remove(action.TargetPath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("delete skill: %w", err)
 		}
+		// Not RemoveAll: the folder may also hold the user's scripts or references.
+		_ = os.Remove(filepath.Dir(action.TargetPath))
 		return nil
 	}
 

@@ -305,7 +305,7 @@ Plugins are automatically filtered during init based on:
 | Settings | `opencode.json` (project root) |
 | MCP | `opencode.json` `"mcp"` key |
 | Agents (native) | `.opencode/agents/<role>.md` |
-| Skills | `.opencode/skills/<name>/SKILL.md` |
+| Skills | `.agents/skills/<name>/SKILL.md` (shared, see [Installation Layout](#installation-layout)) |
 | Commands | `.opencode/commands/<name>.md` |
 
 Supported components: memory, rules, settings, mcp, agents, skills, commands, plugins.
@@ -318,7 +318,7 @@ Supported components: memory, rules, settings, mcp, agents, skills, commands, pl
 | Agents (native) | `.claude/agents/<name>.md` (team roles, your `agents`, plus SquadAI's `squadai-manager`) |
 | Settings | `.claude/settings.json` |
 | MCP | `.mcp.json` `"mcpServers"` key (shared with VS Code) |
-| Skills | `.claude/skills/<name>/SKILL.md` |
+| Skills | `.claude/skills/<name>/SKILL.md` (Claude Code does not read `.agents/skills`) |
 | Commands | `.claude/commands/<name>.md` (your `commands` plus SquadAI's `/squadai-*` and `/memory-*`) |
 
 Supported components: memory, rules, settings, skills, mcp, plugins, agents, commands. Does not support workflows.
@@ -335,7 +335,7 @@ Disabling the commands component (`"commands": {"enabled": false}`) makes the ne
 | Settings | `.cursor/mcp.json` |
 | MCP | `.cursor/mcp.json` `"mcpServers"` key |
 | Agents (native) | `.cursor/agents/<role>.md` |
-| Skills | `.cursor/skills/<name>/SKILL.md` |
+| Skills | `.agents/skills/<name>/SKILL.md` (shared, see [Installation Layout](#installation-layout)) |
 
 Supported components: memory, rules, settings, mcp, agents, skills, plugins.
 
@@ -347,7 +347,7 @@ Supported components: memory, rules, settings, mcp, agents, skills, plugins.
 | Team (solo) | `.github/copilot-instructions.md` (marker block) |
 | Settings | `.vscode/settings.json` |
 | MCP | `.mcp.json` `"mcpServers"` key (shared with Claude Code) |
-| Skills | `.copilot/skills/<name>/SKILL.md` |
+| Skills | `.agents/skills/<name>/SKILL.md` (shared, see [Installation Layout](#installation-layout)) |
 
 Supported components: memory, rules, settings, mcp, skills.
 
@@ -359,7 +359,7 @@ Supported components: memory, rules, settings, mcp, skills.
 | Team (solo) | `.windsurfrules` (marker block) |
 | Settings | `.windsurf/mcp_config.json` |
 | MCP | `.windsurf/mcp_config.json` `"mcpServers"` key |
-| Skills | `.windsurf/skills/<name>/SKILL.md` |
+| Skills | `.agents/skills/<name>/SKILL.md` (shared, see [Installation Layout](#installation-layout)) |
 | Workflows | `.windsurf/workflows/` |
 
 Supported components: memory, rules, settings, mcp, skills, plugins, workflows. Windsurf is the only agent that supports workflow files.
@@ -408,10 +408,10 @@ Conventional uses only shared skills (code-review, testing, pr-description). No 
 
 ### Installation Layout
 
-Skills are installed to each agent's project skills directory:
+Skills are written once to `.agents/skills/`, the [Agent Skills](https://agentskills.io) standard location:
 
 ```
-.opencode/skills/
+.agents/skills/
   shared/code-review/SKILL.md
   shared/testing/SKILL.md
   shared/pr-description/SKILL.md
@@ -420,7 +420,21 @@ Skills are installed to each agent's project skills directory:
   ...
 ```
 
-The same skills are mirrored to `.cursor/skills/`, `.claude/skills/`, `.copilot/skills/`, and `.windsurf/skills/` for their respective agents.
+Every supported agent except Claude Code reads that directory natively, per its docs as of 2026-10-11:
+
+| Agent | Reads `.agents/skills` | Source |
+|-------|------------------------|--------|
+| Codex | yes (its only project location) | https://learn.chatgpt.com/docs/build-skills |
+| Pi | yes | https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md |
+| OpenCode | yes | https://opencode.ai/docs/skills/ |
+| Cursor | yes | https://cursor.com/docs/context/skills |
+| VS Code Copilot | yes | https://code.visualstudio.com/docs/copilot/customization/agent-skills |
+| Windsurf | yes | https://docs.devin.ai/desktop/cascade/skills |
+| Claude Code | no, reads `.claude/skills` only | https://code.claude.com/docs/en/skills |
+
+When Claude Code is enabled, apply also writes a copy of each skill to `.claude/skills/`. It is a plain copy, not a symlink, so it behaves the same on every OS and in every git checkout. The orchestrator each agent receives points at the directory that agent reads (`{{.SkillsDir}}`).
+
+Projects applied with an earlier release have per-agent copies in `.opencode/skills/`, `.pi/skills/`, `.cursor/skills/`, `.copilot/skills/` or `.windsurf/skills/`. The next apply deletes each copy that is still byte-identical to what SquadAI writes, so agents do not load the same skill twice. A copy you edited, and any file SquadAI did not write, stays where it is.
 
 ---
 
@@ -765,7 +779,7 @@ Team orchestrator and sub-agent templates are Go `text/template` files rendered 
 | `{{.TestCommand}}` | `meta.test_command` | `go test -race ./...` |
 | `{{.BuildCommand}}` | `meta.build_command` | `go build ./...` |
 | `{{.LintCommand}}` | `meta.lint_command` | `golangci-lint run` |
-| `{{.SkillsDir}}` | Adapter-specific path | `.opencode/skills` |
+| `{{.SkillsDir}}` | Project skills directory the agent reads | `.agents/skills` (`.claude/skills` for Claude Code) |
 | `{{.AgentsDir}}` | Adapter-specific path | `.opencode/agents` |
 | `{{.HasContext7}}` | MCP config | `true` |
 

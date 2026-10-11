@@ -171,7 +171,7 @@ func TestProjectPaths(t *testing.T) {
 		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, "pi.json")},
 		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, "AGENTS.md")},
 		{"ProjectAgentsDir", a.ProjectAgentsDir(project), filepath.Join(project, ".pi", "agents")},
-		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".pi", "skills")},
+		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".agents", "skills")},
 		{"ProjectCommandsDir", a.ProjectCommandsDir(project), filepath.Join(project, ".pi", "prompts")},
 	}
 

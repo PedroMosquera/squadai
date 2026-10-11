@@ -102,7 +102,7 @@ func TestPlan_SkillFiles_ForOpenCode_Planned(t *testing.T) {
 	if actions[0].Action != domain.ActionCreate {
 		t.Errorf("Action = %q, want %q", actions[0].Action, domain.ActionCreate)
 	}
-	expectedPath := filepath.Join(project, ".opencode", "skills", "superpowers", "SKILL.md")
+	expectedPath := filepath.Join(project, ".agents", "skills", "superpowers", "SKILL.md")
 	if actions[0].TargetPath != expectedPath {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expectedPath)
 	}
@@ -467,7 +467,7 @@ func TestPluginInstaller_OpenCode_ClaudePlugin_FallsToSkillFiles(t *testing.T) {
 	}
 
 	// Target path must be inside the project skills dir, not a settings.json.
-	expectedPath := filepath.Join(project, ".opencode", "skills", "superpowers", "SKILL.md")
+	expectedPath := filepath.Join(project, ".agents", "skills", "superpowers", "SKILL.md")
 	if action.TargetPath != expectedPath {
 		t.Errorf("TargetPath = %q, want %q", action.TargetPath, expectedPath)
 	}

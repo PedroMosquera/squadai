@@ -116,9 +116,11 @@ func (a *Adapter) ProjectAgentsDir(projectDir string) string {
 	return filepath.Join(projectDir, ".pi", "agents")
 }
 
-// ProjectSkillsDir returns <projectDir>/.pi/skills.
+// ProjectSkillsDir returns <projectDir>/.agents/skills, the Agent Skills
+// standard location, which this harness reads natively:
+// https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md
 func (a *Adapter) ProjectSkillsDir(projectDir string) string {
-	return filepath.Join(projectDir, ".pi", "skills")
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
 // ProjectCommandsDir returns <projectDir>/.pi/prompts — Pi renders commands as prompt templates.

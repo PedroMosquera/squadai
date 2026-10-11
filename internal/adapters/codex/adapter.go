@@ -92,13 +92,13 @@ func (a *Adapter) SettingsPath(homeDir string) string {
 }
 
 // SupportsComponent reports whether Codex supports a given component.
-// Codex has no sub-agent files, skills, commands, or permission policy;
+// Codex has no sub-agent files, commands, or permission policy;
 // team orchestration is injected into the rules file via the solo
 // delegation strategy, which bypasses the ComponentAgents guard.
 func (a *Adapter) SupportsComponent(c domain.ComponentID) bool {
 	switch c {
 	case domain.ComponentMemory, domain.ComponentRules, domain.ComponentMCP,
-		domain.ComponentBrand, domain.ComponentEfficiency:
+		domain.ComponentBrand, domain.ComponentEfficiency, domain.ComponentSkills:
 		return true
 	default:
 		return false
@@ -121,9 +121,10 @@ func (a *Adapter) ProjectAgentsDir(_ string) string {
 	return ""
 }
 
-// ProjectSkillsDir returns empty string — Codex does not support skills.
-func (a *Adapter) ProjectSkillsDir(_ string) string {
-	return ""
+// ProjectSkillsDir returns <projectDir>/.agents/skills, the only project
+// skills location Codex reads: https://learn.chatgpt.com/docs/build-skills
+func (a *Adapter) ProjectSkillsDir(projectDir string) string {
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
 // ProjectCommandsDir returns empty string — Codex does not support commands.
