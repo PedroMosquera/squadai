@@ -2,6 +2,8 @@
 //
 // Hooks are additive: SquadAI-managed entries are merged into any existing user
 // hooks. Deduplication is by Command string within a matched Matcher group.
+// Budget hooks (see budget.go) are the exception: SquadAI owns them outright,
+// so they are also updated and removed to follow usage.enforcement.
 // Only the Claude Code adapter emits actions; all other adapters are silently
 // skipped — hooks are a Claude Code-specific feature.
 package hooks
@@ -37,15 +39,14 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	if adapter.ID() != domain.AgentClaudeCode {
 		return nil, nil
 	}
-	if len(i.desired) == 0 {
-		return nil, nil
-	}
-
 	settingsPath := filepath.Join(projectDir, ".claude", "settings.json")
 
-	installed, err := claudeadapter.HooksInstalled(projectDir, i.desired)
+	installed, err := claudeadapter.HooksInSync(projectDir, i.desired, ownedCommand)
 	if err != nil {
 		return nil, fmt.Errorf("check hooks installed: %w", err)
+	}
+	if len(i.desired) == 0 && installed {
+		return nil, nil
 	}
 
 	actionID := "claude-hooks"
@@ -64,6 +65,10 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	if _, statErr := os.Stat(settingsPath); os.IsNotExist(statErr) {
 		actionType = domain.ActionCreate
 	}
+	desc := fmt.Sprintf("merge %d hook event(s) into .claude/settings.json", len(i.desired))
+	if len(i.desired) == 0 {
+		desc = "remove SquadAI budget hooks from .claude/settings.json"
+	}
 
 	return []domain.PlannedAction{{
 		ID:          actionID,
@@ -71,7 +76,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		Component:   domain.ComponentHooks,
 		Action:      actionType,
 		TargetPath:  settingsPath,
-		Description: fmt.Sprintf("merge %d hook event(s) into .claude/settings.json", len(i.desired)),
+		Description: desc,
 	}}, nil
 }
 
@@ -81,7 +86,7 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		return nil
 	}
 	projectDir := filepath.Dir(filepath.Dir(action.TargetPath)) // strip /.claude/settings.json
-	if _, err := claudeadapter.SetHooks(projectDir, i.desired); err != nil {
+	if _, err := claudeadapter.SyncHooks(projectDir, i.desired, ownedCommand); err != nil {
 		return fmt.Errorf("set hooks: %w", err)
 	}
 	return nil
@@ -96,7 +101,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	installed, err := claudeadapter.HooksInstalled(projectDir, i.desired)
+	installed, err := claudeadapter.HooksInSync(projectDir, i.desired, ownedCommand)
 	if err != nil {
 		return []domain.VerifyResult{{
 			Check:     "hooks-installed",
@@ -138,24 +143,12 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 		}
 	}
 
-	// Simulate the additive merge that SetHooks performs.
-	existingHooks := claudeadapter.DecodeHooksMap(existing["hooks"])
-	for event, wantMatchers := range i.desired {
-		for _, wm := range wantMatchers {
-			existingMatchers := existingHooks[event]
-			idx := claudeadapter.FindMatcherIdx(existingMatchers, wm.Matcher)
-			if idx < 0 {
-				existingHooks[event] = append(existingHooks[event], wm)
-				continue
-			}
-			for _, wantEntry := range wm.Hooks {
-				if !claudeadapter.HasCommand(existingMatchers[idx].Hooks, wantEntry.Command) {
-					existingHooks[event][idx].Hooks = append(existingHooks[event][idx].Hooks, wantEntry)
-				}
-			}
-		}
+	merged, _ := claudeadapter.ReconcileHooks(claudeadapter.DecodeHooksMap(existing["hooks"]), i.desired, ownedCommand)
+	if len(merged) == 0 {
+		delete(existing, "hooks")
+	} else {
+		existing["hooks"] = claudeadapter.EncodeHooksMap(merged)
 	}
-	existing["hooks"] = claudeadapter.EncodeHooksMap(existingHooks)
 
 	out, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {

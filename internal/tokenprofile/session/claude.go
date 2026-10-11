@@ -95,6 +95,15 @@ func scanClaudeSessions(homeDir string, cutoff time.Time, projectDir string, agg
 	}
 }
 
+// ClaudeTranscriptTokens returns the input plus output tokens recorded in one
+// Claude Code transcript: the per-session figure MaxSessionTokens tracks. An
+// unreadable file counts as zero.
+func ClaudeTranscriptTokens(path string) int {
+	agg := &Aggregation{ByModel: map[string]Usage{}}
+	scanClaudeTranscript(path, agg)
+	return agg.MaxSessionTokens
+}
+
 // scanClaudeTranscript streams one .jsonl transcript, accumulating usage
 // from assistant events. Malformed lines and non-assistant events are
 // skipped silently. Each model that appears in the file counts one session.

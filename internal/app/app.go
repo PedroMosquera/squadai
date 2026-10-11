@@ -33,6 +33,13 @@ func init() {
 // Run is the top-level entry point. It parses args and dispatches to subcommands.
 // When no args are given, it launches the interactive TUI.
 func Run(args []string, stdout, stderr io.Writer) error {
+	// budget-hook answers Claude Code hook events, as often as once per tool
+	// call, so it skips the pending-update step: no added latency and no stray
+	// stderr, which Claude Code would show as the block reason on exit 2.
+	if len(args) > 0 && args[0] == "budget-hook" {
+		return cli.RunBudgetHook(args[1:], os.Stdin, stdout)
+	}
+
 	// Phase 1: apply any pending update before doing anything else.
 	// (Non-fatal — apply writes its own warnings to stderr.)
 	if err := update.Apply(stderr); err != nil {

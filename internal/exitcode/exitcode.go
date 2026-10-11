@@ -16,6 +16,10 @@ const (
 	Network      = 7 // network / GitHub API error
 	Permission   = 8 // file permission denied or write protected
 	Budget       = 9 // token budget exceeded under block enforcement
+
+	// HookBlock shares Config's value because the Claude Code hook contract
+	// fixes it: exit 2 blocks the action. Only budget-hook returns it.
+	HookBlock = 2
 )
 
 // AppError is returned by CLI functions when the error maps to a known exit
@@ -152,4 +156,12 @@ func ErrPermission(path string, cause error) *AppError {
 func ErrBudgetExceeded(kinds string) *AppError {
 	return New(Budget, "E-901", "token budget exceeded: "+kinds,
 		"Lower usage or raise usage.daily_token_budget / usage.session_token_budget in .squadai/project.json.")
+}
+
+// ErrBudgetHookBlock is budget-hook's block response. Claude Code shows the
+// stderr main.go prints for it as the reason the tool call or prompt was
+// refused.
+func ErrBudgetHookBlock(reason string) *AppError {
+	return New(HookBlock, "E-902", reason,
+		"Raise usage.daily_token_budget / usage.session_token_budget in .squadai/project.json, or set usage.enforcement to warn.")
 }

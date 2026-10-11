@@ -145,11 +145,10 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 		s.AgentTeams = agent_teams.New(cfg.Claude.AgentTeams.Enabled)
 	}
 
-	// Hooks installer runs whenever Claude is enabled and hooks are configured.
+	// Runs even with nothing desired so budget hooks left behind by an earlier
+	// enforcement setting are removed.
 	if claudeCfg, ok := cfg.Adapters[string(domain.AgentClaudeCode)]; ok && claudeCfg.Enabled {
-		if len(cfg.Hooks) > 0 {
-			s.Hooks = hooks.New(cfg.Hooks)
-		}
+		s.Hooks = hooks.New(hooks.WithBudgetHooks(cfg.Hooks, cfg.Usage))
 	}
 
 	return s, nil

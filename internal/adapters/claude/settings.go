@@ -136,10 +136,13 @@ func writeAtomicFile(path string, data []byte) error {
 // hooks are preserved. Matcher groups are matched by their Matcher field
 // (empty matches empty). Returns true when the file was written.
 func SetHooks(projectDir string, want domain.HooksConfig) (bool, error) {
-	if len(want) == 0 {
-		return false, nil
-	}
+	return SyncHooks(projectDir, want, nil)
+}
 
+// SyncHooks is SetHooks plus ownership: entries whose command satisfies owned
+// are rewritten to match want and removed when want no longer lists them.
+// A nil owned behaves exactly like SetHooks.
+func SyncHooks(projectDir string, want domain.HooksConfig, owned func(command string) bool) (bool, error) {
 	settingsPath := filepath.Join(projectDir, ".claude", "settings.json")
 
 	existing := make(map[string]any)
@@ -153,33 +156,16 @@ func SetHooks(projectDir string, want domain.HooksConfig) (bool, error) {
 		}
 	}
 
-	// Decode existing hooks map into a normalised Go structure.
-	existingHooks := DecodeHooksMap(existing["hooks"])
-	changed := false
-
-	for event, wantMatchers := range want {
-		for _, wm := range wantMatchers {
-			existingMatchers := existingHooks[event]
-			idx := FindMatcherIdx(existingMatchers, wm.Matcher)
-			if idx < 0 {
-				existingHooks[event] = append(existingHooks[event], wm)
-				changed = true
-				continue
-			}
-			for _, wantEntry := range wm.Hooks {
-				if !HasCommand(existingMatchers[idx].Hooks, wantEntry.Command) {
-					existingHooks[event][idx].Hooks = append(existingHooks[event][idx].Hooks, wantEntry)
-					changed = true
-				}
-			}
-		}
-	}
-
+	merged, changed := ReconcileHooks(DecodeHooksMap(existing["hooks"]), want, owned)
 	if !changed {
 		return false, nil
 	}
 
-	existing["hooks"] = EncodeHooksMap(existingHooks)
+	if len(merged) == 0 {
+		delete(existing, "hooks")
+	} else {
+		existing["hooks"] = EncodeHooksMap(merged)
+	}
 	out, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
 		return false, fmt.Errorf("marshal claude settings: %w", err)
@@ -229,6 +215,111 @@ func HooksInstalled(projectDir string, want domain.HooksConfig) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// HooksInSync reports whether SyncHooks with the same arguments would leave
+// .claude/settings.json unchanged. An unparseable settings file is out of sync
+// only when want is non-empty, so a broken file nobody asked SquadAI to touch
+// does not turn into a failing apply.
+func HooksInSync(projectDir string, want domain.HooksConfig, owned func(command string) bool) (bool, error) {
+	data, err := os.ReadFile(filepath.Join(projectDir, ".claude", "settings.json"))
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read claude settings: %w", err)
+	}
+	doc := map[string]any{}
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &doc); err != nil {
+			return len(want) == 0, nil
+		}
+	}
+	_, changed := ReconcileHooks(DecodeHooksMap(doc["hooks"]), want, owned)
+	return !changed, nil
+}
+
+// ReconcileHooks merges want into existing without mutating it. Entries are
+// keyed by command within a matcher group. Commands not satisfying owned are
+// only ever added; owned ones are also updated in place and removed when want
+// drops them, along with any group or event left empty by that removal.
+func ReconcileHooks(existing map[string][]domain.HookMatcher, want domain.HooksConfig, owned func(command string) bool) (map[string][]domain.HookMatcher, bool) {
+	isOwned := func(cmd string) bool { return owned != nil && owned(cmd) }
+	out := make(map[string][]domain.HookMatcher, len(existing))
+	for ev, ms := range existing {
+		cp := make([]domain.HookMatcher, len(ms))
+		for i, m := range ms {
+			cp[i] = domain.HookMatcher{Matcher: m.Matcher, Hooks: append([]domain.HookEntry(nil), m.Hooks...)}
+		}
+		out[ev] = cp
+	}
+
+	changed := false
+	wanted := map[[3]string]bool{}
+	for event, wantMatchers := range want {
+		for _, wm := range wantMatchers {
+			for _, we := range wm.Hooks {
+				wanted[[3]string{event, wm.Matcher, we.Command}] = true
+			}
+			idx := FindMatcherIdx(out[event], wm.Matcher)
+			if idx < 0 {
+				out[event] = append(out[event], domain.HookMatcher{Matcher: wm.Matcher, Hooks: append([]domain.HookEntry(nil), wm.Hooks...)})
+				changed = true
+				continue
+			}
+			group := &out[event][idx]
+			for _, we := range wm.Hooks {
+				i := commandIdx(group.Hooks, we.Command)
+				switch {
+				case i < 0:
+					group.Hooks = append(group.Hooks, we)
+					changed = true
+				case isOwned(we.Command) && !sameHook(group.Hooks[i], we):
+					group.Hooks[i] = we
+					changed = true
+				}
+			}
+		}
+	}
+
+	if owned == nil {
+		return out, changed
+	}
+	for event, ms := range out {
+		keptGroups := ms[:0]
+		for _, m := range ms {
+			kept := m.Hooks[:0]
+			for _, h := range m.Hooks {
+				if isOwned(h.Command) && !wanted[[3]string{event, m.Matcher, h.Command}] {
+					changed = true
+					continue
+				}
+				kept = append(kept, h)
+			}
+			if len(kept) == 0 && len(m.Hooks) > 0 {
+				continue
+			}
+			m.Hooks = kept
+			keptGroups = append(keptGroups, m)
+		}
+		if len(keptGroups) == 0 {
+			delete(out, event)
+			continue
+		}
+		out[event] = keptGroups
+	}
+	return out, changed
+}
+
+func commandIdx(entries []domain.HookEntry, cmd string) int {
+	for i, e := range entries {
+		if e.Command == cmd {
+			return i
+		}
+	}
+	return -1
+}
+
+func sameHook(a, b domain.HookEntry) bool {
+	return a.Type == b.Type && a.Command == b.Command && a.Async == b.Async &&
+		a.Timeout == b.Timeout && a.OnFailure == b.OnFailure
 }
 
 // DecodeHooksMap normalises the raw JSON hooks value into a typed map.

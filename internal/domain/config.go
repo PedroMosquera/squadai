@@ -115,14 +115,6 @@ type AgentTeamsConfig struct {
 	Enabled bool `json:"enabled"`
 }
 
-// HookEntry is a single hook action — currently only "command" type is supported.
-type HookEntry struct {
-	Type    string `json:"type"` // always "command"
-	Command string `json:"command"`
-	Async   bool   `json:"async,omitempty"`
-	Timeout int    `json:"timeout,omitempty"` // seconds; 0 = agent default (60 s)
-}
-
 // HookMatcher is a group of hooks optionally scoped to a specific tool.
 // Matcher values match Claude Code's matcher field: "Bash", "Write", "Edit", etc.
 // Empty Matcher means the hook fires for every tool in the event.

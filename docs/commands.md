@@ -559,6 +559,36 @@ Error: --force is required to remove managed files.
 
 ---
 
+## Budget enforcement in Claude Code sessions
+
+`squadai token-usage --against-budget` checks budgets after the fact. For Claude Code, `squadai apply` also moves the check into the session through hooks in the project's `.claude/settings.json`, using the `usage` block of `.squadai/project.json`:
+
+```json
+"usage": {
+  "daily_token_budget": 200000,
+  "session_token_budget": 50000,
+  "enforcement": "block"
+}
+```
+
+Hooks are installed only when `enforcement` is `warn`, `ask` or `block` and at least one token budget is set. With `enforcement` unset or `off`, nothing is installed, and an earlier install is removed on the next apply. Your own hooks in the same file are kept as they are.
+
+| `enforcement` | Hook events | Over budget |
+|---------------|-------------|-------------|
+| `block` | `PreToolUse`, `UserPromptSubmit`, `Stop` | Tool calls and prompts are refused (exit 2) with the exceeded budget as the reason. Entries carry `onFailure: "block"`, so a hook that cannot start or times out also refuses (Claude Code 2.1.295 or later). |
+| `ask` | `PreToolUse`, `UserPromptSubmit`, `Stop` | Claude Code asks before each tool call. Prompts get a warning. |
+| `warn` | `UserPromptSubmit`, `Stop` | A warning is shown once per prompt and at the end of each turn. Nothing is refused. |
+
+`Stop` never blocks: in Claude Code a blocking `Stop` hook keeps Claude working, the opposite of what a budget wants. It only warns.
+
+The daily budget counts the last 24 hours of usage for this project, the same total `token-usage --against-budget` reports. The session budget counts the current session's transcript.
+
+Each entry runs `squadai budget-hook --event <name>`, an internal command that reads the hook input on stdin. It needs `squadai` on the `PATH` Claude Code runs hooks with. It reads only the project config and local transcripts, makes no network calls, and has a 10 second timeout.
+
+Not covered yet: refusing a `/model` switch to a pricier model. Claude Code has a `PreModelSwitch` hook for it, but `usage` has no tier ceiling to compare against. `profile_tiers` maps context profiles to tiers for budget fitting, not to a maximum. Codex and Pi hooks are not written either.
+
+---
+
 ## `squadai version`
 
 Print the version.
