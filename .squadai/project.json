@@ -85,7 +85,7 @@
       "command": [
         "npx",
         "-y",
-        "@upstash/context7-mcp@latest"
+        "@upstash/context7-mcp@4.3.0"
       ],
       "enabled": true
     }

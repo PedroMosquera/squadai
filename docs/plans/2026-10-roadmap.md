@@ -1,6 +1,6 @@
 # SquadAI roadmap (October 2026)
 
-Status as of 2026-10-09, main at `03b720d`. Supersedes the uncommitted September relevance draft.
+Written 2026-10-09 at `03b720d`; status sections updated 2026-10-11. Supersedes the uncommitted September relevance draft.
 
 ## 1. Thesis, revised
 
@@ -26,25 +26,34 @@ Everything below is ranked by how much it moves that sentence.
 | Verify warns when AGENTS.md exceeds Codex `project_doc_max_bytes` (32 KiB) | `4a1a1f9` |
 | Model catalog refreshed: Claude 5.5 family, Fable 5.1, GPT-6 / 6.1, Gemini 3.8 Flash, corrected Opus 4.5 to 4.7 prices | `3345d2c` |
 | VS Code MCP moved to root `.mcp.json`, Pi MCP to `.pi/mcp.json` (the old Pi target was never read by Pi), with migration that keeps user servers | `03b720d` |
+| Phase 0: VS Code instructions path, `diff --exit-code`, per-server MCP ownership, disable strips instead of deleting, dead code and removals | `16e2852`..`576a8e0`, `068a97f` |
+| `squadai scan` (SCAN-001..007), with Codex hooks, local settings, skills, Pi extensions and `--user` | `2adc6c7`, `a959e2d` |
+| `verify --ci` and the reusable `action.yml` | `9ee7a93`, `7a70bfa` |
+| Policy allow-lists for MCP servers, models, hooks and plugin sources | `47a31d2` |
+| AGENTS.md canonical, flat skills in `.agents/skills`, role files as stubs | `0a827ba`, `2cdf2b6`, `d923c06`, `0a56560` |
+| Budget enforcement in Claude, Codex and Pi sessions | `8b8b03e`, `e72a06d` |
+| Opt-in memory capture at session end for Claude and Codex | `3599674`, `6ba08dc` |
+| Native Claude plugin declarations; pinned plugin registry removed | `1676c8f`, `61fd157` |
+| Home paths kept out of the project sidecar; MCP catalog pinned; assets without dashes | `738096e`, `49bbcf7`, `305bef0` |
 
 ## 3. Status of the September items
 
 | Item | Status | Note |
 |---|---|---|
-| Codex adapter | Partial | AGENTS.md, global `~/.codex/config.toml` MCP, size check. No skills, hooks or subagents. |
-| AGENTS.md canonical | Not started | Claude gets full content in CLAUDE.md. VS Code gets a file it does not read (see 4.1). |
+| Codex adapter | Done for this roadmap | AGENTS.md, skills, project budget and memory hooks in `.codex/hooks.json`, global MCP, size check. Subagents not planned. |
+| AGENTS.md canonical | Done | Shared blocks once in AGENTS.md; CLAUDE.md imports it; apply migrates old copies. |
 | Skills in one place | Done | Written once to `.agents/skills`, read by every harness but Claude Code, which keeps a copy in `.claude/skills`. Codex gets skills. |
 | Harness-native plugin install | Partial | Claude plugins and marketplaces are declared in project `.claude/settings.json` (`enabledPlugins`, `extraKnownMarketplaces`). Codex, Pi and OpenCode have project-scope mechanisms that SquadAI does not write yet. The pinned registry is gone. |
 | Cross-harness usage | Partial, now deprioritized | Reads Claude, OpenCode, Pi. ccusage covers the rest. |
-| Budget enforcement | CLI only | `--against-budget`. No hooks. |
-| Verify in CI | Partial and broken | `verify --strict` exists. No reusable action, no `--ci`, no allow-lists. The repo's own workflow is broken (4.2). |
-| Config security scan | Not started | |
-| Memory over MCP | Done | `squadai mcp-server` exposes `memory_search` and `memory_add`, auto-registered in every agent. No capture hook. |
+| Budget enforcement | Done | CLI `--against-budget` plus in-session hooks for Claude, Codex (usage via ccusage) and Pi. |
+| Verify in CI | Done, unreleased | `verify --ci`, `action.yml`, allow-lists. The action installs the latest release, which predates `--ci`. |
+| Config security scan | Done | `squadai scan`, SCAN-001..007, gated in the action. |
+| Memory over MCP | Done | MCP tools plus opt-in `memory.capture_on_stop` for Claude and Codex. |
 | Session handoff | Not started | `context --format prompt` dumps config, not session state. |
 | Runtime profile switch | Done at config time | `squadai profile`, `apply --profile`. Include/exclude globs not enforced. |
 | Context providers | Partial | MCP catalog has context7, github, sentry. No providers component. |
 | Attention events | Partial | `watch` streams governance events, not agent state. |
-| Removal list | Only `enforcement=warn` done | Banner still on by default, `explain` still exists, per-role files still generated. |
+| Removal list | Done | Banner off by default; `explain`, `install-commands` and the pinned plugin registry removed; role files are stubs. |
 
 ## 4. Phase 0: correctness (do first)
 

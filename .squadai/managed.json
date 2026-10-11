@@ -9,7 +9,12 @@
     ".mcp.json": {
       "managed_keys": [
         "mcpServers"
-      ]
+      ],
+      "managed_entries": {
+        "mcpServers": [
+          "context7"
+        ]
+      }
     },
     ".pi/mcp.json": {
       "managed_keys": [
@@ -26,7 +31,12 @@
         "_squadai_permissions",
         "mcp",
         "permission"
-      ]
+      ],
+      "managed_entries": {
+        "mcp": [
+          "context7"
+        ]
+      }
     }
   },
   "created_files": [
