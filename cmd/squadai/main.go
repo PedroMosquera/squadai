@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime/debug"
 	"strings"
 
@@ -13,16 +14,21 @@ import (
 
 var version = "dev"
 
+var pseudoVersion = regexp.MustCompile(`\d{14}-[0-9a-f]{12}$`)
+
 // resolveVersion prefers the goreleaser ldflags value and falls back to the
 // module version Go records for `go install pkg@vX`, which the action uses.
+// Local builds get a VCS pseudo-version or +dirty from the go tool; those
+// stay "dev" so they are never mistaken for a release.
 func resolveVersion(ldflags string, info *debug.BuildInfo) string {
 	if ldflags != "dev" || info == nil {
 		return ldflags
 	}
-	if v := info.Main.Version; v != "" && v != "(devel)" {
-		return strings.TrimPrefix(v, "v")
+	v := info.Main.Version
+	if v == "" || v == "(devel)" || strings.Contains(v, "+") || pseudoVersion.MatchString(v) {
+		return ldflags
 	}
-	return ldflags
+	return strings.TrimPrefix(v, "v")
 }
 
 func main() {

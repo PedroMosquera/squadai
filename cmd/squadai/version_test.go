@@ -15,6 +15,9 @@ func TestResolveVersion(t *testing.T) {
 		{"ldflags win", "0.9.0", &debug.BuildInfo{Main: debug.Module{Version: "v0.9.0"}}, "0.9.0"},
 		{"go install module version", "dev", &debug.BuildInfo{Main: debug.Module{Version: "v0.9.0"}}, "0.9.0"},
 		{"local build", "dev", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, "dev"},
+		{"local vcs pseudo-version", "dev", &debug.BuildInfo{Main: debug.Module{Version: "v0.9.1-0.20261011133000-2393c6f12345"}}, "dev"},
+		{"local dirty build", "dev", &debug.BuildInfo{Main: debug.Module{Version: "v0.9.0+dirty"}}, "dev"},
+		{"prerelease tag", "dev", &debug.BuildInfo{Main: debug.Module{Version: "v1.0.0-rc.1"}}, "1.0.0-rc.1"},
 		{"no build info", "dev", nil, "dev"},
 	}
 	for _, c := range cases {
