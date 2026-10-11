@@ -39,7 +39,19 @@ func CodexBudgetHooks(usage domain.UsageConfig) domain.HooksConfig {
 	return out
 }
 
-// renderCodexHooks returns hooks.json with the budget entries reconciled and
+// codexDesired is every entry SquadAI owns in .codex/hooks.json.
+func (i *Installer) codexDesired() domain.HooksConfig {
+	out := CodexBudgetHooks(i.usage)
+	for ev, ms := range CodexMemoryHooks(i.captureOnStop) {
+		if out == nil {
+			out = domain.HooksConfig{}
+		}
+		out[ev] = append(out[ev], ms...)
+	}
+	return out
+}
+
+// renderCodexHooks returns hooks.json with the owned entries reconciled and
 // user entries kept. A nil result with changed set means nothing is left and
 // the file should go.
 func (i *Installer) renderCodexHooks(path string) (out []byte, changed bool, err error) {
@@ -53,7 +65,7 @@ func (i *Installer) renderCodexHooks(path string) (out []byte, changed bool, err
 			return nil, false, fmt.Errorf("parse %s: %w", path, err)
 		}
 	}
-	merged, changed := claudeadapter.ReconcileHooks(claudeadapter.DecodeHooksMap(doc["hooks"]), CodexBudgetHooks(i.usage), ownedCommand)
+	merged, changed := claudeadapter.ReconcileHooks(claudeadapter.DecodeHooksMap(doc["hooks"]), i.codexDesired(), ownedCommand)
 	if !changed {
 		return data, false, nil
 	}
@@ -78,7 +90,7 @@ func (i *Installer) planCodexBudget(projectDir string) ([]domain.PlannedAction, 
 	if err != nil {
 		return nil, err
 	}
-	desired := CodexBudgetHooks(i.usage)
+	desired := i.codexDesired()
 	if !changed && len(desired) == 0 {
 		return nil, nil
 	}
@@ -87,19 +99,19 @@ func (i *Installer) planCodexBudget(projectDir string) ([]domain.PlannedAction, 
 	switch {
 	case !changed:
 		action.Action = domain.ActionSkip
-		action.Description = "codex budget hooks already installed"
+		action.Description = "codex hooks already installed"
 	case out == nil:
 		action.Action = domain.ActionDelete
-		action.Description = "remove SquadAI budget hooks and the now empty .codex/hooks.json"
+		action.Description = "remove SquadAI hooks and the now empty .codex/hooks.json"
 	case len(desired) == 0:
 		action.Action = domain.ActionUpdate
-		action.Description = "remove SquadAI budget hooks from .codex/hooks.json"
+		action.Description = "remove SquadAI hooks from .codex/hooks.json"
 	case os.IsNotExist(statErr):
 		action.Action = domain.ActionCreate
-		action.Description = fmt.Sprintf("merge %d budget hook event(s) into .codex/hooks.json", len(desired))
+		action.Description = fmt.Sprintf("merge %d hook event(s) into .codex/hooks.json", len(desired))
 	default:
 		action.Action = domain.ActionUpdate
-		action.Description = fmt.Sprintf("merge %d budget hook event(s) into .codex/hooks.json", len(desired))
+		action.Description = fmt.Sprintf("merge %d hook event(s) into .codex/hooks.json", len(desired))
 	}
 	return []domain.PlannedAction{action}, nil
 }
@@ -125,13 +137,13 @@ func (i *Installer) applyCodexBudget(action domain.PlannedAction) error {
 }
 
 func (i *Installer) verifyCodexBudget(projectDir string) []domain.VerifyResult {
-	if len(CodexBudgetHooks(i.usage)) == 0 {
+	if len(i.codexDesired()) == 0 {
 		return nil
 	}
 	r := domain.VerifyResult{Check: "codex-budget-hooks", Passed: true, Severity: domain.SeverityInfo, Component: string(domain.ComponentHooks)}
 	if _, changed, err := i.renderCodexHooks(CodexHooksPath(projectDir)); err != nil || changed {
 		r.Passed, r.Severity = false, domain.SeverityError
-		r.Message = "SquadAI budget hooks in .codex/hooks.json are missing or out of date"
+		r.Message = "SquadAI hooks in .codex/hooks.json are missing or out of date"
 	}
 	return []domain.VerifyResult{r}
 }

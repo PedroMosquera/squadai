@@ -631,9 +631,9 @@ Not covered yet: refusing a `/model` switch to a pricier model. Claude Code has 
 
 ---
 
-## Memory capture at the end of Claude Code sessions
+## Memory capture at the end of Claude Code and Codex sessions
 
-A hook cannot summarize a session, so this one asks Claude to. Opt in through the `memory` block of `.squadai/project.json`:
+A hook cannot summarize a session, so this one asks the agent to. Opt in through the `memory` block of `.squadai/project.json`:
 
 ```json
 "memory": {
@@ -653,7 +653,15 @@ The hook stays silent, and Claude stops normally, when:
 - Claude is already continuing because of a `Stop` hook (`stop_hook_active`),
 - the session was already asked. A marker per session id is kept under `~/.squadai/memory-hook/` for 30 days.
 
-Like `budget-hook`, it needs `squadai` on the `PATH` Claude Code runs hooks with, reads only the project config and the session transcript, and has a 10 second timeout. Codex and Pi are not covered yet.
+Like `budget-hook`, it needs `squadai` on the `PATH` the harness runs hooks with, reads only the project config and the session transcript, and has a 10 second timeout.
+
+### Codex
+
+With Codex enabled in the project, the same flag adds `squadai memory-hook --harness codex --event Stop` to the project's `.codex/hooks.json`, beside any budget hooks and your own entries, and the next apply removes only that entry when the flag is off. Codex reads project hooks once the project is trusted.
+
+Codex has no `additionalContext` for `Stop`. The hook answers `{"decision":"block","reason":"..."}` instead, which Codex records as a new prompt and uses to continue the turn, with `stop_hook_active` set on the next `Stop` ([`codex-rs/hooks/src/events/stop.rs`](https://github.com/openai/codex/blob/a07c8ebd57feedc4cf5dfe854c8e9101de54186b/codex-rs/hooks/src/events/stop.rs), [`codex-rs/core/src/session/turn.rs`](https://github.com/openai/codex/blob/a07c8ebd57feedc4cf5dfe854c8e9101de54186b/codex-rs/core/src/session/turn.rs)). The Codex session file format is not a documented contract, so the 10 tool call threshold does not apply: the hook asks on the first `Stop` whose `last_assistant_message` is not empty. The `stop_hook_active` and per-session marker rules above still keep it to once per session.
+
+Pi is not covered yet.
 
 ---
 

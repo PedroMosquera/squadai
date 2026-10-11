@@ -5,8 +5,8 @@
 // Budget hooks (budget.go) and the memory capture hook (memory.go) are the
 // exception: SquadAI owns them outright, so they are also updated and removed
 // to follow usage.enforcement and memory.capture_on_stop.
-// Codex and Pi get budget enforcement only (codex_budget.go, pi_budget.go);
-// all other adapters are silently skipped.
+// Codex gets budget and memory capture hooks (codex_budget.go), Pi budget
+// enforcement only (pi_budget.go); all other adapters are silently skipped.
 package hooks
 
 import (
@@ -23,6 +23,8 @@ import (
 type Installer struct {
 	desired domain.HooksConfig
 	usage   domain.UsageConfig
+	// captureOnStop drives the Codex memory hook, see WithMemoryCapture.
+	captureOnStop bool
 }
 
 // New returns an Installer configured with the desired hooks state.

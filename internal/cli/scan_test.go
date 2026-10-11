@@ -168,9 +168,11 @@ func TestRunScan_DefaultApplyHasNoHighOrUnpinnedFindings(t *testing.T) {
 			if err := RunInit([]string{"--preset=" + string(preset), "--agents=" + agents, "--json"}, &initOut); err != nil {
 				t.Fatalf("RunInit: %v\n%s", err, initOut.String())
 			}
-			// Budget enforcement is opt-in; turn it on so the Codex hooks
-			// and the Pi extension squadai writes are scanned too.
+			// Budget enforcement and memory capture are opt-in; turn them on
+			// so the Codex hooks and the Pi extension squadai writes are
+			// scanned too.
 			setBudgetUsage(t, project, map[string]any{"daily_token_budget": 1000, "enforcement": "block"})
+			setCaptureOnStop(t, project, true)
 			var applyOut bytes.Buffer
 			if err := RunApply([]string{"--no-review", "--json"}, &applyOut); err != nil {
 				t.Fatalf("RunApply: %v\n%s", err, applyOut.String())

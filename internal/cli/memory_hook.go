@@ -24,7 +24,8 @@ const memoryHookMinToolCalls = 10
 // are rarely resumed after this long, and markers are a few bytes each.
 const memoryHookMarkerTTL = 30 * 24 * time.Hour
 
-// memoryHookPrompt is shown to Claude, not the user, as Stop hook feedback.
+// memoryHookPrompt goes to the agent, not the user: Stop hook feedback in
+// Claude Code, the continuation prompt in Codex.
 const memoryHookPrompt = "squadai: before you finish, record anything from this session a future session should know: " +
 	"decisions and why they were made, non-obvious fixes, dead ends worth not repeating. " +
 	"Call the memory_add tool of the squadai MCP server once per item, or run `squadai memory add \"<note>\"` if the tool is unavailable. " +
@@ -33,27 +34,36 @@ const memoryHookPrompt = "squadai: before you finish, record anything from this 
 
 var memoryHookSessionID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
-// memoryHookInput is the subset of the Claude Code Stop payload memory-hook
-// reads (https://code.claude.com/docs/en/hooks).
+// memoryHookInput is the subset of the Stop payload memory-hook reads. Claude
+// Code: https://code.claude.com/docs/en/hooks. Codex: StopCommandInput in
+// codex-rs/hooks/src/schema.rs (github.com/openai/codex), where
+// transcript_path may be null and last_assistant_message is Codex's own.
 type memoryHookInput struct {
-	SessionID      string `json:"session_id"`
-	TranscriptPath string `json:"transcript_path"`
-	Cwd            string `json:"cwd"`
-	StopHookActive bool   `json:"stop_hook_active"`
+	SessionID            string `json:"session_id"`
+	TranscriptPath       string `json:"transcript_path"`
+	Cwd                  string `json:"cwd"`
+	StopHookActive       bool   `json:"stop_hook_active"`
+	LastAssistantMessage string `json:"last_assistant_message"`
 }
 
-// RunMemoryHook implements the hidden `squadai memory-hook --event Stop` that
-// the hooks component installs when memory.capture_on_stop is true. A hook
-// cannot summarize a session itself, so it asks Claude to: on the first Stop
-// of a session with at least memoryHookMinToolCalls tool calls it exits 0
-// with hookSpecificOutput.additionalContext, which keeps Claude going for one
-// more turn to call memory_add. Every other case exits 0 with no output and
-// Claude stops. It never re-asks: stop_hook_active short-circuits the
-// continuation turn, and a marker under ~/.squadai/memory-hook records each
-// session already asked. Failures exit 1, which Claude Code treats as
-// non-blocking.
+// RunMemoryHook implements the hidden `squadai memory-hook --event Stop
+// [--harness claude|codex]` that the hooks component installs when
+// memory.capture_on_stop is true. A hook cannot summarize a session itself,
+// so it asks the agent to, once per session, then exits 0 with no output on
+// every other Stop so the agent stops. It never re-asks: stop_hook_active
+// short-circuits the continuation turn, and a marker under
+// ~/.squadai/memory-hook records each session already asked. Failures exit 1,
+// which both harnesses treat as non-blocking.
+//
+// Claude Code: asked once the transcript has memoryHookMinToolCalls tool
+// calls, through hookSpecificOutput.additionalContext.
+//
+// Codex: asked on the first Stop with a non-empty last_assistant_message,
+// through {"decision":"block","reason":...}, which Codex records as the next
+// prompt (codex-rs/hooks/src/events/stop.rs). The Codex rollout format is not
+// a documented contract, so no tool-call threshold is applied there.
 func RunMemoryHook(args []string, stdin io.Reader, stdout io.Writer) error {
-	event := ""
+	event, harness := "", "claude"
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--event" && i+1 < len(args):
@@ -61,10 +71,18 @@ func RunMemoryHook(args []string, stdin io.Reader, stdout io.Writer) error {
 			event = args[i]
 		case strings.HasPrefix(args[i], "--event="):
 			event = strings.TrimPrefix(args[i], "--event=")
+		case args[i] == "--harness" && i+1 < len(args):
+			i++
+			harness = args[i]
+		case strings.HasPrefix(args[i], "--harness="):
+			harness = strings.TrimPrefix(args[i], "--harness=")
 		}
 	}
 	if event != "Stop" {
 		return fmt.Errorf("memory-hook: unsupported --event %q (want Stop)", event)
+	}
+	if harness != "claude" && harness != "codex" {
+		return fmt.Errorf("memory-hook: unsupported --harness %q (want claude or codex)", harness)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(stdin, budgetHookMaxInput))
@@ -85,7 +103,7 @@ func RunMemoryHook(args []string, stdin io.Reader, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("memory-hook: resolve home directory: %w", err)
 	}
-	merged, err := loadAndMerge(homeDir, hookProjectDir(budgetHookInput{Cwd: in.Cwd}, "claude"))
+	merged, err := loadAndMerge(homeDir, hookProjectDir(budgetHookInput{Cwd: in.Cwd}, harness))
 	if err != nil {
 		return fmt.Errorf("memory-hook: %w", err)
 	}
@@ -94,7 +112,11 @@ func RunMemoryHook(args []string, stdin io.Reader, stdout io.Writer) error {
 	if !bundle.MemoryEnabled(merged) || !merged.Memory.CaptureOnStop {
 		return nil
 	}
-	if session.ClaudeTranscriptToolCalls(in.TranscriptPath) < memoryHookMinToolCalls {
+	if harness == "codex" {
+		if strings.TrimSpace(in.LastAssistantMessage) == "" {
+			return nil
+		}
+	} else if session.ClaudeTranscriptToolCalls(in.TranscriptPath) < memoryHookMinToolCalls {
 		return nil
 	}
 
@@ -104,6 +126,9 @@ func RunMemoryHook(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	if !first {
 		return nil
+	}
+	if harness == "codex" {
+		return writeHookJSON(stdout, map[string]any{"decision": "block", "reason": memoryHookPrompt})
 	}
 	return writeHookJSON(stdout, map[string]any{"hookSpecificOutput": map[string]any{
 		"hookEventName":     "Stop",

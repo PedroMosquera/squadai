@@ -163,7 +163,7 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 		if a, ok := cfg.Adapters[string(id)]; ok && a.Enabled {
 			desired := hooks.WithBudgetHooks(cfg.Hooks, cfg.Usage)
 			desired = hooks.WithMemoryHooks(desired, MemoryEnabled(cfg) && cfg.Memory.CaptureOnStop)
-			s.Hooks = hooks.New(desired).WithUsage(cfg.Usage)
+			s.Hooks = hooks.New(desired).WithUsage(cfg.Usage).WithMemoryCapture(MemoryEnabled(cfg) && cfg.Memory.CaptureOnStop)
 			break
 		}
 	}

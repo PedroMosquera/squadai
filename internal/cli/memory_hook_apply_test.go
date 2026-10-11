@@ -170,3 +170,47 @@ func TestRunApply_CaptureOnStopNeedsTheMemoryComponent(t *testing.T) {
 		t.Errorf("memory component disabled but the memory hook is installed: %q", cmds)
 	}
 }
+
+func TestRunApply_CaptureOnStopInstallsCodexHookBesideBudgetAndUserHooksAndRemovesIt(t *testing.T) {
+	project := setupCodexPiProject(t)
+	setBudgetUsage(t, project, map[string]any{"daily_token_budget": 1000, "enforcement": "block"})
+	setCaptureOnStop(t, project, true)
+	if err := os.MkdirAll(filepath.Join(project, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".codex", "hooks.json"), []byte(userCodexHooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	applyNoReview(t)
+
+	stop := strings.Join(codexHookCommands(t, project)["Stop"], "\n")
+	for _, want := range []string{"./notify.sh", "squadai budget-hook --harness codex --event Stop", "squadai memory-hook --harness codex --event Stop"} {
+		if !strings.Contains(stop, want) {
+			t.Errorf(".codex/hooks.json Stop hooks lack %q:\n%s", want, stop)
+		}
+	}
+	var scanOut bytes.Buffer
+	_ = RunScan([]string{"--json"}, &scanOut)
+	var report struct {
+		Findings []map[string]any `json:"findings"`
+	}
+	if err := json.Unmarshal(scanOut.Bytes(), &report); err != nil {
+		t.Fatalf("scan output is not JSON: %v\n%s", err, scanOut.String())
+	}
+	if len(report.Findings) != 0 {
+		t.Errorf("scan flags the generated config: %v", report.Findings)
+	}
+
+	setCaptureOnStop(t, project, false)
+	applyNoReview(t)
+	stop = strings.Join(codexHookCommands(t, project)["Stop"], "\n")
+	if strings.Contains(stop, "memory-hook") {
+		t.Errorf("turning capture_on_stop off left the Codex memory hook:\n%s", stop)
+	}
+	for _, want := range []string{"./notify.sh", "squadai budget-hook --harness codex --event Stop"} {
+		if !strings.Contains(stop, want) {
+			t.Errorf("removing the memory hook dropped %q:\n%s", want, stop)
+		}
+	}
+}

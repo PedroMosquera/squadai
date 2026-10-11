@@ -39,3 +39,22 @@ func WithMemoryHooks(base domain.HooksConfig, captureOnStop bool) domain.HooksCo
 	}
 	return out
 }
+
+// CodexMemoryHooks returns the Codex Stop entry for the same capture, or nil
+// unless captureOnStop is true. Codex answers differently from Claude Code,
+// hence --harness codex. No onFailure: Codex does not define it.
+func CodexMemoryHooks(captureOnStop bool) domain.HooksConfig {
+	if !captureOnStop {
+		return nil
+	}
+	e := domain.HookEntry{Type: "command", Command: memoryHookPrefix + "--harness codex --event Stop", Timeout: memoryHookTimeout}
+	return domain.HooksConfig{"Stop": []domain.HookMatcher{{Hooks: []domain.HookEntry{e}}}}
+}
+
+// WithMemoryCapture sets whether .codex/hooks.json carries the memory capture
+// Stop hook. The Claude Code entry comes through New's desired set instead,
+// see WithMemoryHooks.
+func (i *Installer) WithMemoryCapture(captureOnStop bool) *Installer {
+	i.captureOnStop = captureOnStop
+	return i
+}

@@ -40,9 +40,9 @@ type MemoryConfig struct {
 	AutoCapture        bool   `json:"auto_capture,omitempty"`
 	ProjectKeyStrategy string `json:"project_key_strategy,omitempty"` // git-remote, repo-name
 	ExportPath         string `json:"export_path,omitempty"`
-	// CaptureOnStop installs a Claude Code Stop hook that asks the agent to
-	// record the session's decisions in memory before it stops. Off by
-	// default: it changes how every qualifying session ends.
+	// CaptureOnStop installs Claude Code and Codex Stop hooks that ask the
+	// agent to record the session's decisions in memory before it stops. Off
+	// by default: it changes how every qualifying session ends.
 	CaptureOnStop bool `json:"capture_on_stop,omitempty"`
 }
 
