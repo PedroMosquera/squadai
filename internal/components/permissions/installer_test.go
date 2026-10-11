@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/claude"
@@ -12,6 +13,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/adapters/vscode"
 	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
 // ─── Interface compliance ───────────────────────────────────────────────────
@@ -452,4 +454,37 @@ func readJSON(t *testing.T, path string) map[string]interface{} {
 		t.Fatalf("readJSON unmarshal: %v", err)
 	}
 	return out
+}
+
+func TestApply_KeepsOtherComponentsOwnershipInSharedFile(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := managed.WriteManagedEntries(projectDir, "opencode.json", "mcp", []string{"context7"}); err != nil {
+		t.Fatal(err)
+	}
+
+	inst := New()
+	actions, err := inst.Plan(opencode.New(), "", projectDir)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	for _, a := range actions {
+		if err := inst.Apply(a); err != nil {
+			t.Fatalf("apply: %v", err)
+		}
+	}
+
+	names, tracked, err := managed.ReadManagedEntries(projectDir, "opencode.json", "mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tracked || len(names) != 1 || names[0] != "context7" {
+		t.Errorf("permissions apply dropped MCP ownership in opencode.json: tracked=%v names=%v", tracked, names)
+	}
+	keys, err := managed.ReadManagedKeys(projectDir, "opencode.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(keys, "permission") || !slices.Contains(keys, "mcp") {
+		t.Errorf("managed keys = %v, want both permission and mcp", keys)
+	}
 }

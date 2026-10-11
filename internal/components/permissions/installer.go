@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
@@ -139,7 +140,18 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 		if err != nil {
 			relPath = action.TargetPath
 		}
-		managedKeys := managedKeyNames(action.Agent)
+		// The file is shared with other components (MCP, plugins, hooks), so
+		// keep the keys they recorded; replacing the list drops their ownership.
+		existing, err := managed.ReadManagedKeys(i.projectDir, relPath)
+		if err != nil {
+			return fmt.Errorf("read permissions managed keys sidecar: %w", err)
+		}
+		managedKeys := existing
+		for _, k := range managedKeyNames(action.Agent) {
+			if !slices.Contains(managedKeys, k) {
+				managedKeys = append(managedKeys, k)
+			}
+		}
 		if err := managed.WriteManagedKeys(i.projectDir, relPath, managedKeys); err != nil {
 			return fmt.Errorf("write permissions managed keys sidecar: %w", err)
 		}
