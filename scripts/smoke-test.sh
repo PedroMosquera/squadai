@@ -347,7 +347,7 @@ assert_file_contains "$TDD_PROJECT/.squadai/project.json" '"context7"' "scenario
 log "  Running: squadai apply (TDD)"
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 
-assert_file_exists "$TDD_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario6: find-skills skill installed"
+assert_file_exists "$TDD_PROJECT/.agents/skills/find-skills/SKILL.md" "scenario6: find-skills skill installed"
 assert_file_exists "$TDD_PROJECT/.opencode/commands/review.md" "scenario6: review command installed"
 assert_file_exists "$TDD_PROJECT/.opencode/commands/run-tests.md" "scenario6: run-tests command installed"
 assert_file_exists "$TDD_PROJECT/.opencode/commands/tdd-cycle.md" "scenario6: tdd-cycle command installed"
@@ -376,7 +376,7 @@ assert_file_contains "$SDD_PROJECT/.squadai/project.json" '"verifier"' "scenario
 log "  Running: squadai apply (SDD)"
 APPLY_OUT=$("$BIN" apply 2>&1) || true
 
-assert_file_exists "$SDD_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario7: find-skills skill installed"
+assert_file_exists "$SDD_PROJECT/.agents/skills/find-skills/SKILL.md" "scenario7: find-skills skill installed"
 assert_file_exists "$SDD_PROJECT/.opencode/commands/review.md" "scenario7: review command installed"
 assert_file_exists "$SDD_PROJECT/.opencode/commands/spec.md" "scenario7: spec command installed"
 
@@ -401,7 +401,7 @@ APPLY_OUT=$("$BIN" apply 2>&1) || true
 assert_file_exists "$CONV_PROJECT/AGENTS.md" "scenario8: AGENTS.md created after apply"
 assert_file_contains "$CONV_PROJECT/AGENTS.md" "squadai" "scenario8: AGENTS.md has marker"
 assert_output_contains "$APPLY_OUT" "written" "scenario8: apply reports written files"
-assert_file_exists "$CONV_PROJECT/.opencode/skills/shared/find-skills/SKILL.md" "scenario8: find-skills skill installed"
+assert_file_exists "$CONV_PROJECT/.agents/skills/find-skills/SKILL.md" "scenario8: find-skills skill installed"
 assert_file_exists "$CONV_PROJECT/.opencode/commands/review.md" "scenario8: review command installed"
 assert_file_exists "$CONV_PROJECT/.opencode/commands/implement.md" "scenario8: implement command installed"
 
