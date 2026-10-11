@@ -7,7 +7,7 @@ methodology: sdd
 # SDD Verify Skill
 
 Verify that the implementation matches the specification exactly. This is
-the final phase of the SDD pipeline — a systematic compliance check.
+the final phase of the SDD pipeline: a systematic compliance check.
 
 ## Steps
 
@@ -26,7 +26,7 @@ the final phase of the SDD pipeline — a systematic compliance check.
 
 3. **Verify success criteria**: Test each acceptance criterion.
    - Write a test for each "Given/When/Then" in the spec if not already present
-   - Run the tests — each must pass
+   - Run the tests; each must pass
    - If a criterion has no test, flag it as untested
 
 4. **Verify edge case behavior**: Test the edge case table.
@@ -79,7 +79,7 @@ the final phase of the SDD pipeline — a systematic compliance check.
 2. **Addition**: <behavior> not in spec. Should be removed or spec updated.
 
 ### Verdict
-PASS / FAIL — <summary>
+PASS / FAIL: <summary>
 
 ### Required Actions Before Merge
 1. <action>

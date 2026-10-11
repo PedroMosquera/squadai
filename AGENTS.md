@@ -3,7 +3,7 @@
 
 `docs/memory/` is this project's persistent, indexed memory store for
 decisions, learnings, and incidents. It is shared by every agent working in
-this repository — use it.
+this repository. Use it.
 
 **Search first.** Before any research, planning, or implementation task, run
 `/memory-search <query>` (or `squadai memory search <query>`) and pass the
@@ -47,10 +47,10 @@ errored; trust that result instead of re-opening the file to check.
 the relevant findings instead of pasting the whole output into the transcript.
 
 **Delegate exploration.** Send open-ended codebase exploration to sub-agents
-and request a compact report (files, symbols, one-line conclusions) — keep
+and request a compact report (files, symbols, one-line conclusions), and keep
 raw file dumps out of the main context.
 
-**Memory first.** Run a memory search before exploring the codebase — prior
+**Memory first.** Run a memory search before exploring the codebase: prior
 decisions often answer the question faster than fresh exploration.
 
 **Response discipline.** Answer, then stop. Prefer code over prose; do not
@@ -65,7 +65,7 @@ before starting anything new.
 ## Project Memory Protocol
 
 `docs/memory/` is this project's persistent, indexed memory store for
-decisions, learnings, and incidents. It survives across sessions — use it.
+decisions, learnings, and incidents. It survives across sessions. Use it.
 
 **Search first.** Before starting significant work, run
 `squadai memory search <query>` (or `/memory-search <query>` where slash
@@ -109,10 +109,10 @@ errored; trust that result instead of re-opening the file to check.
 the relevant findings instead of pasting the whole output into the transcript.
 
 **Delegate exploration.** Send open-ended codebase exploration to sub-agents
-and request a compact report (files, symbols, one-line conclusions) — keep
+and request a compact report (files, symbols, one-line conclusions), and keep
 raw file dumps out of the main context.
 
-**Memory first.** Run a memory search before exploring the codebase — prior
+**Memory first.** Run a memory search before exploring the codebase: prior
 decisions often answer the question faster than fresh exploration.
 
 **Response discipline.** Answer, then stop. Prefer code over prose; do not

@@ -50,7 +50,7 @@ the best approach.
 ### Option 1: <name>
 **Summary**: <one sentence description>
 **Effort**: <estimate>
-**Risk**: <low|medium|high> — <reason>
+**Risk**: <low|medium|high> (<reason>)
 **Reversibility**: <easy|hard|irreversible>
 **Testability**: <easy|medium|hard>
 **Pros**: <bullet list>
@@ -67,7 +67,7 @@ the best approach.
 | Option 2 | | | | |
 
 ### Recommendation
-**Recommended**: Option <N> — <rationale in 2-3 sentences>
+**Recommended**: Option <N>. <rationale in 2-3 sentences>
 
 ### Open Questions
 1. <question>

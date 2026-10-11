@@ -1,6 +1,6 @@
 ---
 name: squadai-init-playbook
-description: Detailed procedures for the /squadai-init refinement routine — signal collection, refinement templates, consistency checks, re-run handling, and write protocol. Loaded on demand by the /squadai-init driver command.
+description: Detailed procedures for the /squadai-init refinement routine: signal collection, refinement templates, consistency checks, re-run handling, and write protocol. Loaded on demand by the /squadai-init driver command.
 ---
 
 # /squadai-init Playbook
@@ -12,7 +12,7 @@ procedure per phase.
 ## Phase: Methodology fingerprinting (first run + when project.json changed)
 
 Confirm the methodology in `project.json` matches what the repo actually
-practices — misidentifying it produces wrong advice.
+practices. Misidentifying it produces wrong advice.
 
 | Signal | Suggests |
 |---|---|
@@ -29,22 +29,22 @@ Project.json says methodology=<X>, but the repo looks more like <Y>
 [c]ontinue / [a]bort
 ```
 
-Default abort — never silently refine for the wrong methodology.
+Default abort. Never silently refine for the wrong methodology.
 
 ## Phase: Repo signal collection
 
 Read in order, stopping early when a signal yields nothing new:
 
-1. **Language manifest(s)** matching `meta.language`/`meta.languages` —
+1. **Language manifest(s)** matching `meta.language`/`meta.languages`:
    Go: `go.mod` (+ `go.sum` tail); Node/TS: `package.json` (scripts +
    dependencies); Python: `pyproject.toml`/`setup.py`/`requirements.txt`;
    Rust: `Cargo.toml`; Java/Kotlin: `pom.xml`/`build.gradle.kts`; Ruby:
    `Gemfile` (+ lock tail); PHP: `composer.json`; otherwise skip and
    sample source instead.
-2. **Top-level layout** — depth-2 directory structure (Glob `*` and `*/*`,
+2. **Top-level layout**: depth-2 directory structure (Glob `*` and `*/*`,
    else `find -maxdepth 2`).
-3. **CLAUDE.md / AGENTS.md** — read in full if present.
-4. **Representative files (structured sampling)** — pick at most one per
+3. **CLAUDE.md / AGENTS.md**: read in full if present.
+4. **Representative files (structured sampling)**: pick at most one per
    row, in order, skipping rows that don't apply:
 
    | Slot | What to pick | How |
@@ -61,7 +61,7 @@ Read in order, stopping early when a signal yields nothing new:
    sort | uniq -c | sort -rn | head -5`).
 
 **Sampling cap**: ~50 KB total. If approaching the cap early, stop and
-disclose: `Sampled X KB / 50 KB budget — refining from this slice. For
+disclose: `Sampled X KB / 50 KB budget, refining from this slice. For
 deeper coverage of a specific subsystem, run /squadai-init again from that
 subdirectory.` Always declare which files were actually read.
 
@@ -77,15 +77,15 @@ subdirectory.` Always declare which files were actually read.
 
 Locate the `<!-- squadai:refinement -->` / `<!-- /squadai:refinement -->`
 block in each target. **If markers are absent, skip the file with a logged
-warning** — never invent markers.
+warning**. Never invent markers.
 
 ## Phase: Refinement content
 
 Aim for 40-100 lines per file (longer for the orchestrator). Include only
-what changes how the role behaves in THIS repo — no methodology content, no
+what changes how the role behaves in THIS repo: no methodology content, no
 generic best practices. Two pieces are required:
 
-### Piece 1 — Repo Context (every role)
+### Piece 1: Repo Context (every role)
 
 ```markdown
 ## Repo Context
@@ -99,20 +99,20 @@ generic best practices. Two pieces are required:
   - <generated dirs, vendored deps, asset blobs, dist outputs>
 ```
 
-### Piece 2 — Role Contract (orchestrator)
+### Piece 2: Role Contract (orchestrator)
 
 ```markdown
-## Delegation Contract (orchestrator-only — overrides defaults)
+## Delegation Contract (orchestrator-only, overrides defaults)
 
 ### Delegation-first rule
 You implement nothing directly when a sub-agent exists for the task.
 Trivial exceptions: ≤10-line doc fixes, single-line config edits, pure
-renames. Everything else delegates — if you're writing code that belongs
+renames. Everything else delegates. If you're writing code that belongs
 to a sub-agent, STOP and delegate.
 
 ### Parallelism (deploy as many sub-agents as the work allows)
 Decompose into the largest set of independent units; spawn sub-agents in
-PARALLEL — one tool call per unit, all in the same turn. Examples:
+PARALLEL: one tool call per unit, all in the same turn. Examples:
 - <repo-specific parallel decomposition examples>
 - Multiple unrelated bug reports → one debugger per report, in parallel
 - Test failures across separate packages → one implementer per package
@@ -120,7 +120,7 @@ NEVER parallelize across pipeline phases; NEVER let two sub-agents race
 on the same file.
 
 ### Model-tier per task
-Pass an explicit model hint per delegation — cheapest tier that fits:
+Pass an explicit model hint per delegation, using the cheapest tier that fits:
 - brainstormer/explorer/proposer → cheapest (exploration is short)
 - planner/spec-writer/task-planner → standard (structured output)
 - implementer/designer → standard; flagship for refactors > 200 lines
@@ -130,7 +130,7 @@ Pass an explicit model hint per delegation — cheapest tier that fits:
 Override when the task calls for it (<repo-specific hot spots>).
 
 ### Token budgets per delegation
-- Pass ≤ ~500 tokens of context per sub-agent — paths and decisions,
+- Pass ≤ ~500 tokens of context per sub-agent: paths and decisions,
   not file contents.
 - Record a 3-5 line summary per return; never paste full returns.
 - At 60% of your own context, delegate remaining phases and exit.
@@ -140,10 +140,10 @@ Override when the task calls for it (<repo-specific hot spots>).
 - <e.g. "test suite is fast (<10s); strict TDD is cheap here">
 ```
 
-### Piece 2 — Role Contract (sub-agent)
+### Piece 2: Role Contract (sub-agent)
 
 ```markdown
-## Task Contract (sub-agent — single-purpose)
+## Task Contract (sub-agent, single-purpose)
 
 ### Scope
 One task per invocation, exactly as specified. In scope here:
@@ -152,16 +152,16 @@ Out of scope (return to orchestrator instead):
 - <adjacent work belonging to another role>
 
 ### Input you should expect
-Short task statement + pointers (paths, function/test names — NOT full
+Short task statement + pointers (paths, function/test names, NOT full
 contents; read what you need) + prior-phase summary (3-5 lines). If
 ambiguous, return `status: blocked` with a one-line clarification
-request — do NOT guess.
+request. Do NOT guess.
 
 ### Return contract
 Exactly: one-line status (`succeeded`/`blocked`/`failed`) + 3-5 lines
 (files modified as paths, test count / decision / metric, deviations) +
 blockers. NEVER return full file contents, full test output, full
-diffs, or running commentary — the orchestrator pays for every token.
+diffs, or running commentary. The orchestrator pays for every token.
 
 ### Token efficiency
 Read only what you need (`grep` before `read`, `head` before
@@ -174,7 +174,7 @@ whole-file). Honor the orchestrator's model-tier hint.
 ### Solo-strategy adapters (VS Code Copilot, Windsurf)
 
 Produce ONE consolidated refinement: Repo Context + a condensed Delegation
-Contract (the solo agent plays both roles — emphasize "decompose mentally,
+Contract (the solo agent plays both roles; emphasize "decompose mentally,
 work one focused task at a time, summarize before pivoting"). Marker block
 position: AFTER any Project/Team Rules or Methodology block, BEFORE any
 role-specific rules, NOT at file end (users add personal notes there).
@@ -190,7 +190,7 @@ regenerate the offending file once if found:
 4. Stack commands cited that the project does not define.
 
 If a second pass still shows a contradiction: `Cross-role check found N
-contradictions across adapter <X>. Showing diffs anyway — review carefully.`
+contradictions across adapter <X>. Showing diffs anyway; review carefully.`
 
 ## Phase: Self-verification before diffs
 
@@ -198,7 +198,7 @@ contradictions across adapter <X>. Showing diffs anyway — review carefully.`
 - [ ] Test/build commands referenced actually exist?
 - [ ] Contract assumptions align with the methodology fingerprint?
 
-Fix failures before showing the diff — never emit a refinement that
+Fix failures before showing the diff. Never emit a refinement that
 contradicts the sampled signals.
 
 ## Phase: Re-run handling
@@ -214,7 +214,7 @@ If `.squadai/.squad-refined` exists:
 3. Non-interactive runs default to **keep** for every mismatch; report
    `Skipped N hand-edited files; re-run interactively to merge.`
 4. If `methodology_at_last_run` differs from current methodology, treat
-   every target as needing fresh refinement and skip hand-edit prompts —
+   every target as needing fresh refinement and skip hand-edit prompts:
    methodology change invalidates prior content even when hashes match.
 
 ## Phase: Diff, accept, atomic write, state
@@ -241,8 +241,8 @@ Then update `.squadai/.squad-refined` (preserve unrelated fields):
 
 ```
 Refined N of M targets across K adapters.
-  ✓ <file> — refinement updated
-  - <file> — skipped (kept hand-edits)
-  ✗ <file> — failed: <reason>
+  ✓ <file>: refinement updated
+  - <file>: skipped (kept hand-edits)
+  ✗ <file>: failed: <reason>
 State recorded in .squadai/.squad-refined.
 ```

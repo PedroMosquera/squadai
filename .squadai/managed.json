@@ -11,16 +11,21 @@
         "mcpServers"
       ]
     },
+    ".pi/mcp.json": {
+      "managed_keys": [
+        "mcpServers"
+      ],
+      "managed_entries": {
+        "mcpServers": [
+          "context7"
+        ]
+      }
+    },
     "opencode.json": {
       "managed_keys": [
         "_squadai_permissions",
         "mcp",
         "permission"
-      ]
-    },
-    "pi.json": {
-      "managed_keys": [
-        "mcp"
       ]
     }
   },
@@ -31,8 +36,22 @@
     ".claude/agents/orchestrator.md",
     ".claude/agents/proposer.md",
     ".claude/agents/spec-writer.md",
+    ".claude/agents/squadai-manager.md",
     ".claude/agents/task-planner.md",
     ".claude/agents/verifier.md",
+    ".claude/commands/memory-add.md",
+    ".claude/commands/memory-promote.md",
+    ".claude/commands/memory-reindex.md",
+    ".claude/commands/memory-search.md",
+    ".claude/commands/review.md",
+    ".claude/commands/spec.md",
+    ".claude/commands/squadai-apply.md",
+    ".claude/commands/squadai-context.md",
+    ".claude/commands/squadai-doctor.md",
+    ".claude/commands/squadai-init.md",
+    ".claude/commands/squadai-plan.md",
+    ".claude/commands/squadai-status.md",
+    ".claude/commands/squadai-verify.md",
     ".claude/settings.json",
     ".claude/skills/code-review/SKILL.md",
     ".claude/skills/find-skills/SKILL.md",
@@ -87,6 +106,7 @@
     ".pi/agents/spec-writer.md",
     ".pi/agents/task-planner.md",
     ".pi/agents/verifier.md",
+    ".pi/mcp.json",
     ".pi/prompts/review.md",
     ".pi/prompts/spec.md",
     ".pi/skills/code-review/SKILL.md",
@@ -108,7 +128,6 @@
     ".pi/skills/testing/SKILL.md",
     "AGENTS.md",
     "CLAUDE.md",
-    "opencode.json",
-    "pi.json"
+    "opencode.json"
   ]
 }

@@ -7,7 +7,7 @@ methodology: sdd
 # SDD Explore Skill
 
 Analyze an existing codebase to gather context before proposing solutions.
-This is the first phase of the SDD pipeline — understand before proposing.
+This is the first phase of the SDD pipeline: understand before proposing.
 
 ## Steps
 
