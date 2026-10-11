@@ -316,20 +316,6 @@ func buildToolDefs() []toolDef {
 			}),
 		},
 		{
-			Name:        "plugins_sync",
-			Description: "Fetch the latest plugin registry from the community marketplace.",
-			InputSchema: schema(nil, map[string]any{
-				"json": boolProp("Return result as JSON"),
-			}),
-		},
-		{
-			Name:        "plugins_list",
-			Description: "List available plugins from the registry. Shows which are installed.",
-			InputSchema: schema(nil, map[string]any{
-				"json": boolProp("Return list as JSON"),
-			}),
-		},
-		{
 			Name:        "install_hooks",
 			Description: "Install a Git pre-commit hook that runs 'squadai verify --strict'.",
 			InputSchema: schema(nil, map[string]any{

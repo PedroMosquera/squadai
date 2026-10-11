@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,11 +19,17 @@ var pluginSkillContent = map[string]string{
 
 // Installer implements domain.ComponentInstaller for third-party plugin installation.
 // It supports two install methods:
-//   - claude_plugin: writes to the adapter's settings.json under "enabledPlugins"
+//   - claude_plugin: declares the plugin, and optionally its marketplace, in
+//     Claude Code's project settings; Claude Code installs it. Other agents
+//     have no way to load a Claude plugin, so nothing is written for them.
 //   - skill_files: writes a skill markdown file to the adapter's skills directory
 type Installer struct {
 	plugins map[string]domain.PluginDef
 	config  *domain.MergedConfig
+
+	// projectDir is captured during Plan so Apply can record ownership in the
+	// managed sidecar.
+	projectDir string
 }
 
 // New returns a plugin installer. cfg may be nil for backward compatibility.
@@ -45,89 +50,43 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	if !adapter.SupportsComponent(domain.ComponentPlugins) {
 		return nil, nil
 	}
-
-	if len(i.plugins) == 0 {
-		return nil, nil
-	}
+	i.projectDir = projectDir
 
 	var actions []domain.PlannedAction
-	agentID := string(adapter.ID())
+	if adapter.ID() == domain.AgentClaudeCode {
+		a, err := i.planClaudeSettings(adapter, projectDir)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, a...)
+	}
 
 	for _, name := range sortedPluginNames(i.plugins) {
 		plugin := i.plugins[name]
-
-		// Skip disabled plugins.
-		if !plugin.Enabled {
+		if plugin.InstallMethod != "skill_files" || !i.active(plugin, adapter.ID()) {
 			continue
 		}
-
-		// Skip if methodology is excluded.
-		if i.config != nil && plugin.ExcludesMethodology != "" &&
-			plugin.ExcludesMethodology == string(i.config.Methodology) {
-			continue
+		a, err := i.planSkillFile(adapter, name, plugin, projectDir)
+		if err != nil {
+			return nil, err
 		}
-
-		// Skip if adapter is not in supported agents list.
-		if !isAgentSupported(agentID, plugin.SupportedAgents) {
-			continue
-		}
-
-		switch effectiveInstallMethod(plugin, adapter) {
-		case "claude_plugin":
-			a, err := i.planClaudePlugin(adapter, name, plugin, homeDir)
-			if err != nil {
-				return nil, err
-			}
-			actions = append(actions, a)
-
-		case "skill_files":
-			a, err := i.planSkillFile(adapter, name, plugin, projectDir)
-			if err != nil {
-				return nil, err
-			}
-			actions = append(actions, a)
-		}
+		actions = append(actions, a)
 	}
 
 	return actions, nil
 }
 
-// planClaudePlugin plans an update to the adapter's settings.json to enable the plugin.
-func (i *Installer) planClaudePlugin(adapter domain.Adapter, name string, plugin domain.PluginDef, homeDir string) (domain.PlannedAction, error) {
-	targetPath := adapter.SettingsPath(homeDir)
-	actionID := fmt.Sprintf("%s-plugin-%s", adapter.ID(), name)
-	description := fmt.Sprintf("plugin:claude:%s", name)
-
-	// Check if already enabled.
-	existing, err := fileutil.ReadJSONFile(targetPath)
-	if err != nil {
-		return domain.PlannedAction{}, fmt.Errorf("read settings for plugin %s: %w", name, err)
+// active reports whether a declaration applies to the agent: enabled, not
+// excluded by the methodology, and listed in supported_agents.
+func (i *Installer) active(plugin domain.PluginDef, agent domain.AgentID) bool {
+	if !plugin.Enabled {
+		return false
 	}
-
-	if existing != nil && isPluginEnabled(existing, plugin.PluginID) {
-		return domain.PlannedAction{
-			ID:          actionID,
-			Agent:       adapter.ID(),
-			Component:   domain.ComponentPlugins,
-			Action:      domain.ActionSkip,
-			TargetPath:  targetPath,
-			Description: description,
-		}, nil
+	if i.config != nil && plugin.ExcludesMethodology != "" &&
+		plugin.ExcludesMethodology == string(i.config.Methodology) {
+		return false
 	}
-
-	action := domain.ActionCreate
-	if existing != nil {
-		action = domain.ActionUpdate
-	}
-
-	return domain.PlannedAction{
-		ID:          actionID,
-		Agent:       adapter.ID(),
-		Component:   domain.ComponentPlugins,
-		Action:      action,
-		TargetPath:  targetPath,
-		Description: description,
-	}, nil
+	return isAgentSupported(string(agent), plugin.SupportedAgents)
 }
 
 // planSkillFile plans writing a skill file for a plugin.
@@ -189,57 +148,13 @@ func (i *Installer) Apply(action domain.PlannedAction) error {
 	}
 
 	switch {
-	case strings.HasPrefix(action.Description, "plugin:claude:"):
-		return i.applyClaudePlugin(action)
+	case action.Description == claudeSettingsDescription:
+		return i.applyClaudeSettings(action)
 	case strings.HasPrefix(action.Description, "plugin:skill:"):
 		return i.applySkillFile(action)
 	default:
 		return fmt.Errorf("unknown plugin action: %s", action.Description)
 	}
-}
-
-// applyClaudePlugin enables a plugin in the adapter's settings.json.
-func (i *Installer) applyClaudePlugin(action domain.PlannedAction) error {
-	// Extract plugin name from description: "plugin:claude:<name>"
-	name := strings.TrimPrefix(action.Description, "plugin:claude:")
-
-	plugin, ok := i.plugins[name]
-	if !ok {
-		return fmt.Errorf("plugin %q not found in config", name)
-	}
-
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return fmt.Errorf("read settings: %w", err)
-	}
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-
-	// Get or create enabledPlugins map.
-	enabledPlugins, _ := existing["enabledPlugins"].(map[string]interface{})
-	if enabledPlugins == nil {
-		enabledPlugins = make(map[string]interface{})
-	}
-	enabledPlugins[plugin.PluginID] = true
-	existing["enabledPlugins"] = enabledPlugins
-
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal settings: %w", err)
-	}
-	data = append(data, '\n')
-
-	dir := filepath.Dir(action.TargetPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create settings dir: %w", err)
-	}
-
-	if _, err := fileutil.WriteAtomic(action.TargetPath, data, 0644); err != nil {
-		return fmt.Errorf("write settings: %w", err)
-	}
-
-	return nil
 }
 
 // applySkillFile writes a skill file for a plugin.
@@ -265,75 +180,24 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, nil
 	}
 
-	if len(i.plugins) == 0 {
-		return nil, nil
-	}
-
 	var results []domain.VerifyResult
-	agentID := string(adapter.ID())
+	if adapter.ID() == domain.AgentClaudeCode {
+		r, err := i.verifyClaudeSettings(adapter, projectDir)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, r...)
+	}
 
 	for _, name := range sortedPluginNames(i.plugins) {
 		plugin := i.plugins[name]
-
-		if !plugin.Enabled {
+		if plugin.InstallMethod != "skill_files" || !i.active(plugin, adapter.ID()) {
 			continue
 		}
-
-		if i.config != nil && plugin.ExcludesMethodology != "" &&
-			plugin.ExcludesMethodology == string(i.config.Methodology) {
-			continue
-		}
-
-		if !isAgentSupported(agentID, plugin.SupportedAgents) {
-			continue
-		}
-
-		switch effectiveInstallMethod(plugin, adapter) {
-		case "claude_plugin":
-			r := i.verifyClaudePlugin(adapter, name, plugin, homeDir)
-			results = append(results, r)
-
-		case "skill_files":
-			r := i.verifySkillFile(adapter, name, projectDir)
-			results = append(results, r)
-		}
+		results = append(results, i.verifySkillFile(adapter, name, projectDir))
 	}
 
 	return results, nil
-}
-
-// verifyClaudePlugin checks that the plugin is enabled in settings.
-func (i *Installer) verifyClaudePlugin(adapter domain.Adapter, name string, plugin domain.PluginDef, homeDir string) domain.VerifyResult {
-	targetPath := adapter.SettingsPath(homeDir)
-	checkName := fmt.Sprintf("plugin-%s-enabled", name)
-
-	existing, err := fileutil.ReadJSONFile(targetPath)
-	if err != nil || existing == nil {
-		return domain.VerifyResult{
-			Check:     checkName,
-			Passed:    false,
-			Severity:  domain.SeverityError,
-			Component: "plugins",
-			Message:   fmt.Sprintf("settings file not found: %s", targetPath),
-		}
-	}
-
-	if isPluginEnabled(existing, plugin.PluginID) {
-		return domain.VerifyResult{
-			Check:     checkName,
-			Passed:    true,
-			Severity:  domain.SeverityInfo,
-			Component: "plugins",
-		}
-	}
-
-	return domain.VerifyResult{
-		Check:     checkName,
-		Passed:    false,
-		Severity:  domain.SeverityError,
-		Component: "plugins",
-		Message:   fmt.Sprintf("plugin %s not found in enabledPlugins", plugin.PluginID),
-	}
 }
 
 // verifySkillFile checks that the skill file for a plugin exists and matches.
@@ -387,8 +251,8 @@ func (i *Installer) verifySkillFile(adapter domain.Adapter, name string, project
 // without performing the write. Used by the diff renderer.
 func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 	switch {
-	case strings.HasPrefix(action.Description, "plugin:claude:"):
-		return i.renderClaudePluginContent(action)
+	case action.Description == claudeSettingsDescription:
+		return i.renderClaudeSettings(action)
 	case strings.HasPrefix(action.Description, "plugin:skill:"):
 		name := strings.TrimPrefix(action.Description, "plugin:skill:")
 		return []byte(pluginSkillContentFor(name)), nil
@@ -397,47 +261,7 @@ func (i *Installer) RenderContent(action domain.PlannedAction) ([]byte, error) {
 	}
 }
 
-// renderClaudePluginContent computes what applyClaudePlugin would write.
-func (i *Installer) renderClaudePluginContent(action domain.PlannedAction) ([]byte, error) {
-	name := strings.TrimPrefix(action.Description, "plugin:claude:")
-	plugin, ok := i.plugins[name]
-	if !ok {
-		return nil, fmt.Errorf("plugin %q not found in config", name)
-	}
-
-	existing, err := fileutil.ReadJSONFile(action.TargetPath)
-	if err != nil {
-		return nil, fmt.Errorf("read settings: %w", err)
-	}
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-
-	enabledPlugins, _ := existing["enabledPlugins"].(map[string]interface{})
-	if enabledPlugins == nil {
-		enabledPlugins = make(map[string]interface{})
-	}
-	enabledPlugins[plugin.PluginID] = true
-	existing["enabledPlugins"] = enabledPlugins
-
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal settings: %w", err)
-	}
-	data = append(data, '\n')
-	return data, nil
-}
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-// effectiveInstallMethod returns the install method to use for a plugin on a given adapter.
-// claude_plugin is only valid for Claude Code; other agents fall back to skill_files.
-func effectiveInstallMethod(plugin domain.PluginDef, adapter domain.Adapter) string {
-	if plugin.InstallMethod == "claude_plugin" && adapter.ID() != domain.AgentClaudeCode {
-		return "skill_files"
-	}
-	return plugin.InstallMethod
-}
 
 // isAgentSupported checks if agentID is in the supported agents list.
 func isAgentSupported(agentID string, supported []string) bool {
@@ -447,20 +271,6 @@ func isAgentSupported(agentID string, supported []string) bool {
 		}
 	}
 	return false
-}
-
-// isPluginEnabled checks if a plugin ID is enabled in the settings document.
-func isPluginEnabled(doc map[string]interface{}, pluginID string) bool {
-	plugins, ok := doc["enabledPlugins"].(map[string]interface{})
-	if !ok {
-		return false
-	}
-	val, ok := plugins[pluginID]
-	if !ok {
-		return false
-	}
-	enabled, ok := val.(bool)
-	return ok && enabled
 }
 
 // pluginSkillContentFor returns the skill file content for a plugin.

@@ -67,7 +67,7 @@ The `allowed` block restricts what project config and committed harness files ma
     },
     "models": ["claude-sonnet-5-*", "claude-haiku-4-5", "anthropic/claude-*"],
     "hook_commands": ["squadai *", "./scripts/hooks/*"],
-    "plugin_sources": ["claude-plugins-official", "github.com/wshobson/agents"]
+    "plugin_sources": ["claude-plugins-official", "team-tools", "github.com/example-org/*"]
   }
 }
 ```
@@ -81,7 +81,7 @@ Entries are globs matched against the whole value: `*` matches any run of charac
 | `mcp_servers.urls` | The URL of a remote server. Stdio servers are not checked by this list. |
 | `models` | Concrete model IDs: `model` on custom agents and commands, and the model each team role resolves to for every enabled agent that writes agent files (OpenCode and Pi use provider-qualified IDs such as `anthropic/claude-sonnet-5-5`). |
 | `hook_commands` | Every hook command string. |
-| `plugin_sources` | The marketplace of each enabled plugin (the part after `@` in `plugin_id`, or in an `enabledPlugins` key), and `marketplace.source` when marketplace plugins are installed (default `github.com/wshobson/agents`). Bundled plugins without a `plugin_id` are not checked. |
+| `plugin_sources` | The marketplace of each enabled plugin (the part after `@` in `plugin_id`, or in an `enabledPlugins` key). When a declaration sets `marketplace`, its location is checked too: `github.com/<repo>` for a `github` source, otherwise its `url` or `path`. This stops an allowed marketplace name from being pointed at another repository. Bundled plugins without a `plugin_id` are not checked. |
 
 A server must pass every `mcp_servers` list that is set. Set `commands` or `urls` as well as `names`: a hand-added server can reuse an allowed name.
 

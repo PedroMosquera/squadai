@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/domain"
-	"github.com/PedroMosquera/squadai/internal/marketplace"
 	"github.com/PedroMosquera/squadai/internal/model"
 	"github.com/PedroMosquera/squadai/internal/modelcatalog"
 )
@@ -17,8 +16,11 @@ import (
 // outside cfg.Allowed, in a stable order. It checks enabled MCP servers,
 // custom agent and command models, the model each team role resolves to for
 // every enabled adapter that writes agents, hook commands, and the source of
-// every enabled plugin. Plugins without a plugin_id ship inside squadai and
-// have no source to check. A nil cat resolves tiers with the embedded catalog.
+// every enabled plugin: the marketplace named in its plugin_id and, when the
+// declaration says where to fetch that marketplace, that location too, so an
+// allowed name cannot be pointed at another repository. Plugins without a
+// plugin_id ship inside squadai and have no source to check. A nil cat
+// resolves tiers with the embedded catalog.
 func CheckAllowLists(cfg *domain.MergedConfig, adapters []domain.Adapter, cat *modelcatalog.Catalog) []string {
 	allow := cfg.Allowed
 	var out []string
@@ -56,14 +58,8 @@ func CheckAllowLists(cfg *domain.MergedConfig, adapters []domain.Adapter, cat *m
 		if !allow.PluginSourceAllowed(source) {
 			out = append(out, fmt.Sprintf("plugin %q comes from %q, which is not in allowed.plugin_sources", name, source))
 		}
-	}
-	if len(cfg.Marketplace.Plugins) > 0 {
-		source := cfg.Marketplace.Source
-		if source == "" {
-			source = marketplace.DefaultSource
-		}
-		if !allow.PluginSourceAllowed(source) {
-			out = append(out, fmt.Sprintf("marketplace source %q is not in allowed.plugin_sources", source))
+		if loc := def.Marketplace.Location(); loc != "" && !allow.PluginSourceAllowed(loc) {
+			out = append(out, fmt.Sprintf("plugin %q marketplace %q is fetched from %q, which is not in allowed.plugin_sources", name, source, loc))
 		}
 	}
 	return out

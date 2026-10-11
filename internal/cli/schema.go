@@ -220,16 +220,8 @@ func buildProjectSchema() ([]byte, error) {
 			"hooks": schemaHooksConfig(),
 			"plugins": map[string]any{
 				"type":                 "object",
-				"description":          "Plugin definitions for community marketplace plugins.",
+				"description":          "Plugin declarations. apply writes claude_plugin entries into Claude Code's project settings; Claude Code installs them.",
 				"additionalProperties": schemaPluginDef(),
-			},
-			"marketplace": map[string]any{
-				"type":        "object",
-				"description": "Marketplace tracking — which plugins are installed.",
-				"properties": map[string]any{
-					"source":  map[string]any{"type": "string"},
-					"plugins": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
-				},
 			},
 			"meta": map[string]any{
 				"type":        "object",
@@ -402,8 +394,20 @@ func schemaPluginDef() map[string]any {
 			"enabled":              map[string]any{"type": "boolean"},
 			"supported_agents":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"install_method":       map[string]any{"type": "string", "enum": []string{"claude_plugin", "skill_files"}},
-			"plugin_id":            map[string]any{"type": "string"},
+			"plugin_id":            map[string]any{"type": "string", "description": "<plugin>@<marketplace>, the key written to enabledPlugins."},
 			"excludes_methodology": map[string]any{"type": "string"},
+			"marketplace": map[string]any{
+				"type":        "object",
+				"description": "Where Claude Code fetches the marketplace named in plugin_id, written to extraKnownMarketplaces. Omit for marketplaces Claude Code already knows.",
+				"required":    []string{"source"},
+				"properties": map[string]any{
+					"source": map[string]any{"type": "string", "enum": []string{"github", "git", "url", "file", "directory"}},
+					"repo":   map[string]any{"type": "string", "description": "owner/repo, for github."},
+					"url":    map[string]any{"type": "string", "description": "For git and url."},
+					"path":   map[string]any{"type": "string", "description": "For file and directory."},
+					"ref":    map[string]any{"type": "string"},
+				},
+			},
 		},
 	}
 }

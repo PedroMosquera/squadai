@@ -284,6 +284,44 @@ Or edit `project.json`:
 }
 ```
 
+### How apply writes plugins
+
+A plugin declaration delegates installation to the agent. SquadAI writes the declaration into the agent's own config and never downloads plugin content or touches the network during apply.
+
+For `claude_plugin`, `apply` writes into the project's `.claude/settings.json` (enable the `plugins` component):
+
+- `plugin_id` (`<plugin>@<marketplace>`) becomes an `enabledPlugins` entry set to `true`.
+- `marketplace`, when present, becomes an `extraKnownMarketplaces` entry named after the part of `plugin_id` after `@`. Omit it for marketplaces Claude Code already knows, such as `claude-plugins-official`.
+
+```json
+{
+  "plugins": {
+    "formatter": {
+      "enabled": true,
+      "supported_agents": ["claude-code"],
+      "install_method": "claude_plugin",
+      "plugin_id": "formatter@team-tools",
+      "marketplace": { "source": "github", "repo": "example-org/claude-plugins" }
+    }
+  }
+}
+```
+
+`marketplace.source` is one of `github` (with `repo`), `git` or `url` (with `url`), `file` or `directory` (with `path`), plus an optional `ref`. These are the source types Claude Code documents for `extraKnownMarketplaces` ([settings reference](https://code.claude.com/docs/en/settings-reference), [plugin marketplaces](https://code.claude.com/docs/en/plugin-marketplaces)).
+
+SquadAI owns individual entries, not the two maps. Plugins and marketplaces you add by hand stay as they are, and removing a declaration removes only the entry SquadAI wrote. If you already set a declared plugin to a different value (for example `false`), apply reports a conflict instead of overwriting it.
+
+Claude Code does the rest. It registers a declared marketplace once you accept the folder trust prompt. A plugin stored inside that marketplace loads from there. A plugin whose marketplace entry points at an external source still has to be installed by each user (`claude plugin install <plugin>@<marketplace> --scope project`). To opt out of a project plugin locally, set it to `false` in `.claude/settings.local.json`.
+
+Other agents have their own plugin systems, and a Claude plugin cannot be loaded by them, so `claude_plugin` declarations write nothing for them:
+
+| Agent | Native mechanism | What SquadAI writes |
+|-------|------------------|---------------------|
+| Claude Code | `enabledPlugins` and `extraKnownMarketplaces` in `.claude/settings.json` | Both, as above |
+| Codex | `[plugins."<plugin>@<marketplace>"]` and `[marketplaces.<name>]` in `.codex/config.toml` ([config reference](https://developers.openai.com/codex/config-reference), [plugins](https://developers.openai.com/codex/plugins)) | Nothing. SquadAI configures Codex globally and does not write project `.codex/config.toml`. |
+| Pi | `packages` in `.pi/settings.json` ([packages](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md)) | Nothing yet. Pi packages are npm or git sources, not Claude plugins. |
+| OpenCode | `plugin` in `opencode.json` ([plugins](https://opencode.ai/docs/plugins/)) | Nothing yet. OpenCode plugins are npm packages, not Claude plugins. |
+
 ### Plugin Filtering
 
 Plugins are automatically filtered during init based on:

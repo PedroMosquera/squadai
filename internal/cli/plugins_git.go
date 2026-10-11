@@ -237,3 +237,15 @@ func refOrDefault(ref string) string {
 	}
 	return ref
 }
+
+// writeJSONResult writes a uniform JSON envelope to stdout: {"success": ...}
+// with extra merged in at the top level.
+func writeJSONResult(w io.Writer, success bool, extra map[string]any) {
+	out := make(map[string]any, len(extra)+1)
+	out["success"] = success
+	for k, v := range extra {
+		out[k] = v
+	}
+	data, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Fprintln(w, string(data))
+}

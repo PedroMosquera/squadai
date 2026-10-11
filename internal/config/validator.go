@@ -493,6 +493,52 @@ func validatePluginDefs(plugins map[string]domain.PluginDef, methodology domain.
 		if def.ExcludesMethodology != "" && def.Enabled && methodology != "" && string(methodology) == def.ExcludesMethodology {
 			issues = append(issues, fmt.Sprintf("plugin %q is incompatible with methodology %q", name, methodology))
 		}
+		if def.Marketplace != nil {
+			issues = append(issues, validatePluginMarketplace(name, def)...)
+		}
+	}
+	return append(issues, conflictingMarketplaces(plugins)...)
+}
+
+// conflictingMarketplaces reports a marketplace name declared with two
+// different sources: the settings file can hold only one.
+func conflictingMarketplaces(plugins map[string]domain.PluginDef) []string {
+	var issues []string
+	seen := make(map[string]domain.PluginMarketplace)
+	for _, name := range slices.Sorted(maps.Keys(plugins)) {
+		def := plugins[name]
+		_, market, _ := strings.Cut(def.PluginID, "@")
+		if def.Marketplace == nil || market == "" {
+			continue
+		}
+		if prev, ok := seen[market]; ok && prev != *def.Marketplace {
+			issues = append(issues, fmt.Sprintf("plugin %q declares marketplace %q with a different source than another plugin", name, market))
+			continue
+		}
+		seen[market] = *def.Marketplace
+	}
+	return issues
+}
+
+// validatePluginMarketplace checks a declared marketplace against the source
+// types Claude Code documents for extraKnownMarketplaces.
+func validatePluginMarketplace(name string, def domain.PluginDef) []string {
+	var issues []string
+	if def.InstallMethod != "claude_plugin" {
+		issues = append(issues, fmt.Sprintf("plugin %q declares a marketplace, which needs install_method claude_plugin", name))
+	}
+	if _, market, ok := strings.Cut(def.PluginID, "@"); !ok || market == "" {
+		issues = append(issues, fmt.Sprintf("plugin %q declares a marketplace, so plugin_id must be <plugin>@<marketplace>", name))
+	}
+	m := def.Marketplace
+	required := map[string]string{"github": m.Repo, "git": m.URL, "url": m.URL, "file": m.Path, "directory": m.Path}
+	field := map[string]string{"github": "repo", "git": "url", "url": "url", "file": "path", "directory": "path"}
+	value, known := required[m.Source]
+	switch {
+	case !known:
+		issues = append(issues, fmt.Sprintf("plugin %q marketplace has unknown source %q (expected: github, git, url, file, directory)", name, m.Source))
+	case value == "":
+		issues = append(issues, fmt.Sprintf("plugin %q marketplace source %q needs %s", name, m.Source, field[m.Source]))
 	}
 	return issues
 }

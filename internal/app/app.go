@@ -154,16 +154,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			return nil
 		}
 		switch args[1] {
-		case "sync":
-			return cli.RunPluginsSync(args[2:], stdout, stderr)
-		case "list":
-			return cli.RunPluginsList(args[2:], stdout)
-		case "add":
-			return cli.RunPluginsAdd(args[2:], stdout, stderr)
 		case "add-git":
 			return cli.RunPluginsAddGit(args[2:], stdout, stderr)
-		case "remove":
-			return cli.RunPluginsRemove(args[2:], stdout)
 		case "remove-git":
 			return cli.RunPluginsRemoveGit(args[2:], stdout)
 		default:
@@ -257,12 +249,11 @@ func printPluginsUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage: squadai plugins <subcommand> [flags]
 
 Subcommands:
-  sync             Fetch the plugin registry from github.com/wshobson/agents
-  list             List available plugins (--json for machine output)
-  add <name>       Download and install a marketplace plugin; updates project.json
   add-git <url>    Clone a git-based plugin (git:github.com/user/repo[@sha]) into .squadai/plugins/
-  remove <name>    Remove an installed plugin's files; updates project.json
   remove-git <id>  Delete a git-based plugin from .squadai/plugins/
+
+Agent plugins (Claude Code plugins and marketplaces) are declared under
+"plugins" in .squadai/project.json and written by apply.
 
 `)
 }
@@ -329,12 +320,6 @@ func buildMCPRunners(stdout, stderr io.Writer) map[string]mcpserver.ToolRunner {
 		},
 		"doctor": func(args []string, w io.Writer) error {
 			return cli.RunDoctor(args, w)
-		},
-		"plugins_sync": func(args []string, w io.Writer) error {
-			return cli.RunPluginsSync(args, w, stderr)
-		},
-		"plugins_list": func(args []string, w io.Writer) error {
-			return cli.RunPluginsList(args, w)
 		},
 		"install_hooks": func(args []string, w io.Writer) error {
 			return cli.RunInstallHooks(args, w)
@@ -526,13 +511,9 @@ func buildCommandRegistry() helpOutput {
 			{
 				Name:        "plugins",
 				Group:       groupAdvanced,
-				Description: "Manage plugins from the community marketplace.",
+				Description: "Manage git-based plugins in .squadai/plugins/.",
 				Subcommands: []cmdEntry{
-					{Name: "sync", Description: "Fetch the plugin registry from github.com/wshobson/agents.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
-					{Name: "list", Description: "List available plugins (✓ = installed in this project).", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output list as JSON"}}},
-					{Name: "add", Description: "Download and install a marketplace plugin.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 					{Name: "add-git", Description: "Clone a git-based plugin (git:github.com/user/repo[@sha]) into .squadai/plugins/.", Flags: []cmdFlag{{Name: "--yes", Type: "bool", Description: "Skip the interactive confirmation"}, {Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
-					{Name: "remove", Description: "Remove an installed plugin's files.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 					{Name: "remove-git", Description: "Delete a git-based plugin from .squadai/plugins/.", Flags: []cmdFlag{{Name: "--json", Type: "bool", Description: "Output result as JSON"}}},
 				},
 			},

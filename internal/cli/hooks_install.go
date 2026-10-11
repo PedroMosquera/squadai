@@ -151,5 +151,3 @@ func installHookWithBody(hooksDir, name, body string) error {
 
 	return os.WriteFile(hookPath, []byte(content), 0755)
 }
-
-// ─── Plugins marketplace ──────────────────────────────────────────────────────

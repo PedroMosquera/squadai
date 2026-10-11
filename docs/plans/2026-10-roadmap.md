@@ -34,7 +34,7 @@ Everything below is ranked by how much it moves that sentence.
 | Codex adapter | Partial | AGENTS.md, global `~/.codex/config.toml` MCP, size check. No skills, hooks or subagents. |
 | AGENTS.md canonical | Not started | Claude gets full content in CLAUDE.md. VS Code gets a file it does not read (see 4.1). |
 | Skills in one place | Done | Written once to `.agents/skills`, read by every harness but Claude Code, which keeps a copy in `.claude/skills`. Codex gets skills. |
-| Harness-native plugin install | Partial | Claude plugins are declared in `enabledPlugins`. Registry still pinned to `wshobson/agents`. |
+| Harness-native plugin install | Partial | Claude plugins and marketplaces are declared in project `.claude/settings.json` (`enabledPlugins`, `extraKnownMarketplaces`). Codex, Pi and OpenCode have project-scope mechanisms that SquadAI does not write yet. The pinned registry is gone. |
 | Cross-harness usage | Partial, now deprioritized | Reads Claude, OpenCode, Pi. ccusage covers the rest. |
 | Budget enforcement | CLI only | `--against-budget`. No hooks. |
 | Verify in CI | Partial and broken | `verify --strict` exists. No reusable action, no `--ci`, no allow-lists. The repo's own workflow is broken (4.2). |
@@ -86,7 +86,7 @@ Each removal is its own small change. Do them alongside Phase 0.
 | Banner and `brand` component | Default off in every preset. Keep the flag. |
 | `explain` | Remove. `--help` and docs cover it. |
 | `install-commands` | Fold into `apply` as the commands component for Claude (today Claude's `ProjectCommandsDir` is empty, which is why the separate command exists). Done: the commands component writes the slash commands, the agents component writes `squadai-manager`, and the command is removed. |
-| `plugins sync` from `wshobson/agents` | Replace with declarations in project.json that delegate to each harness (`enabledPlugins` for Claude, marketplace installs for Codex and Pi). |
+| `plugins sync` from `wshobson/agents` | Replace with declarations in project.json that delegate to each harness (`enabledPlugins` for Claude, marketplace installs for Codex and Pi). Done for Claude: `claude_plugin` declarations, with an optional `marketplace`, are written into `.claude/settings.json` with per-entry ownership, and `plugins sync`, `list`, `add` and `remove` are removed with the registry. Codex is configured globally, so its project `.codex/config.toml` is not written; Pi and OpenCode packages are a follow-up. |
 
 ## 8. Dropped or deferred
 

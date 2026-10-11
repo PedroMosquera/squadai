@@ -1017,6 +1017,35 @@ func TestValidateProject_Plugin_UnknownInstallMethod(t *testing.T) {
 	assertContainsIssue(t, issues, `unknown install_method "magic"`)
 }
 
+func TestValidateProject_Plugin_Marketplace(t *testing.T) {
+	plugin := func(id string, m domain.PluginMarketplace) domain.PluginDef {
+		return domain.PluginDef{Enabled: true, InstallMethod: "claude_plugin", PluginID: id, Marketplace: &m}
+	}
+	cfg := &domain.ProjectConfig{
+		Version:    1,
+		Components: map[string]domain.ComponentConfig{"memory": {Enabled: true}},
+		Plugins: map[string]domain.PluginDef{
+			"good":     plugin("good@tools", domain.PluginMarketplace{Source: "github", Repo: "example-org/tools"}),
+			"no-repo":  plugin("no-repo@other", domain.PluginMarketplace{Source: "github"}),
+			"odd":      plugin("odd@odd", domain.PluginMarketplace{Source: "ftp", URL: "ftp://example.invalid"}),
+			"no-at":    plugin("no-at", domain.PluginMarketplace{Source: "directory", Path: "./plugins"}),
+			"rehomed":  plugin("rehomed@tools", domain.PluginMarketplace{Source: "github", Repo: "someone/tools"}),
+			"skillish": {Enabled: true, InstallMethod: "skill_files", PluginID: "s@x", Marketplace: &domain.PluginMarketplace{Source: "github", Repo: "a/b"}},
+		},
+	}
+	issues := ValidateProject(cfg)
+	assertContainsIssue(t, issues, `plugin "no-repo" marketplace source "github" needs repo`)
+	assertContainsIssue(t, issues, `plugin "odd" marketplace has unknown source "ftp"`)
+	assertContainsIssue(t, issues, `plugin "no-at" declares a marketplace, so plugin_id must be <plugin>@<marketplace>`)
+	assertContainsIssue(t, issues, `plugin "rehomed" declares marketplace "tools" with a different source`)
+	assertContainsIssue(t, issues, `plugin "skillish" declares a marketplace, which needs install_method claude_plugin`)
+	for _, issue := range issues {
+		if contains(issue, `"good"`) {
+			t.Errorf("a well-formed marketplace should pass, got %q", issue)
+		}
+	}
+}
+
 func TestValidateProject_Plugin_ExcludesMethodology(t *testing.T) {
 	cfg := &domain.ProjectConfig{
 		Version:     1,

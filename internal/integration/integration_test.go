@@ -1453,7 +1453,7 @@ func TestMCPInstallation_Windsurf_MCPConfigFile(t *testing.T) {
 
 // ─── Group C: Plugin & Workflow Tests ─────────────────────────────────────────
 
-// TestPluginInstallation_ClaudeCode_EnabledPlugins verifies claude_plugin writes to enabledPlugins.
+// TestPluginInstallation_ClaudeCode_EnabledPlugins verifies claude_plugin writes to the project enabledPlugins.
 func TestPluginInstallation_ClaudeCode_EnabledPlugins(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
@@ -1505,8 +1505,7 @@ func TestPluginInstallation_ClaudeCode_EnabledPlugins(t *testing.T) {
 		t.Fatal("apply should succeed")
 	}
 
-	// ~/.claude/settings.json must have enabledPlugins key.
-	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	settingsPath := filepath.Join(project, ".claude", "settings.json")
 	assertFileExists(t, settingsPath, "Plugin/Claude: settings.json")
 	assertJSONKey(t, settingsPath, "enabledPlugins", "Plugin/Claude: enabledPlugins key present")
 }

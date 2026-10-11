@@ -119,11 +119,6 @@ func Merge(user *domain.UserConfig, project *domain.ProjectConfig, policy *domai
 
 		// Hooks are additive: project hooks seed the merged config.
 		merged.Hooks = mergeHooksConfig(merged.Hooks, project.Hooks)
-
-		// Marketplace config passes through from project layer.
-		if project.Marketplace.Source != "" || len(project.Marketplace.Plugins) > 0 {
-			merged.Marketplace = project.Marketplace
-		}
 	}
 
 	// Layer 3: policy locked fields override everything.
@@ -477,6 +472,10 @@ func clonePluginDefs(defs map[string]domain.PluginDef) map[string]domain.PluginD
 			InstallMethod:       v.InstallMethod,
 			PluginID:            v.PluginID,
 			ExcludesMethodology: v.ExcludesMethodology,
+		}
+		if v.Marketplace != nil {
+			m := *v.Marketplace
+			plugin.Marketplace = &m
 		}
 		if v.SupportedAgents != nil {
 			plugin.SupportedAgents = make([]string, len(v.SupportedAgents))

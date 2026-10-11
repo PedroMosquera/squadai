@@ -47,7 +47,7 @@ func TestPreview_ClaudePlugin_AlreadyEnabled_SkipWithEmptyDiff(t *testing.T) {
 	adapter := claude.New()
 	inst := newTestPluginInstaller("claude_plugin")
 
-	target := adapter.SettingsPath(home)
+	target := adapter.ProjectConfigFile(project)
 	writeTestJSON(t, target, map[string]interface{}{
 		"enabledPlugins": map[string]interface{}{
 			"test@official": true,
@@ -75,7 +75,7 @@ func TestPreview_ClaudePlugin_PreservesUserEnabledPlugins_NoConflict(t *testing.
 	adapter := claude.New()
 	inst := newTestPluginInstaller("claude_plugin")
 
-	target := adapter.SettingsPath(home)
+	target := adapter.ProjectConfigFile(project)
 	// User has other plugins enabled — the diff should ADD our plugin without
 	// removing theirs; no conflict is surfaced because Apply only mutates
 	// nested booleans under enabledPlugins.

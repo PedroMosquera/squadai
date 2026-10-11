@@ -22,6 +22,13 @@ import (
 // a PATH with no agent binaries, and the project as working directory.
 func setupCIProject(t *testing.T) string {
 	t.Helper()
+	return setupCIProjectWith(t, nil)
+}
+
+// setupCIProjectWith is setupCIProject with edit applied to the project
+// config before it is written and applied.
+func setupCIProjectWith(t *testing.T, edit func(*domain.ProjectConfig)) string {
+	t.Helper()
 	root := t.TempDir()
 	project := filepath.Join(root, "project")
 	applyHome := filepath.Join(root, "apply-home")
@@ -38,6 +45,9 @@ func setupCIProject(t *testing.T) string {
 		MCP: map[string]domain.MCPServerDef{
 			"docs": {Type: "remote", URL: "https://example.invalid/mcp", Enabled: true},
 		},
+	}
+	if edit != nil {
+		edit(proj)
 	}
 	if err := os.MkdirAll(filepath.Join(project, config.ProjectConfigDir), 0o755); err != nil {
 		t.Fatal(err)

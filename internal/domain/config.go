@@ -32,7 +32,6 @@ type ProjectConfig struct {
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
 	Hooks       HooksConfig                `json:"hooks,omitempty"`
-	Marketplace MarketplaceConfig          `json:"marketplace,omitempty"`
 }
 
 // MemoryConfig controls SquadAI's local-first project memory backend.
@@ -92,15 +91,6 @@ type ModelProfile struct {
 	Tier        string            `json:"tier,omitempty"`
 	Description string            `json:"description,omitempty"`
 	Adapters    map[string]string `json:"adapters,omitempty"`
-}
-
-// MarketplaceConfig tracks which plugin marketplace plugins are installed in
-// this project. Recorded here so it is version-controlled and policy-lockable.
-type MarketplaceConfig struct {
-	// Source is the upstream registry (default: "github.com/wshobson/agents").
-	Source string `json:"source,omitempty"`
-	// Plugins maps plugin name to its installed version string.
-	Plugins map[string]string `json:"plugins,omitempty"`
 }
 
 // ClaudeConfig holds Claude Code-specific feature toggles. Generic adapter
@@ -196,6 +186,36 @@ type PluginDef struct {
 	InstallMethod       string   `json:"install_method"`                 // "claude_plugin" or "skill_files"
 	PluginID            string   `json:"plugin_id,omitempty"`            // e.g., "superpowers@claude-plugins-official"
 	ExcludesMethodology string   `json:"excludes_methodology,omitempty"` // blocked when this methodology is active
+	// Marketplace is where the harness fetches the marketplace named after
+	// the "@" in PluginID. Omit it for marketplaces the harness already knows.
+	Marketplace *PluginMarketplace `json:"marketplace,omitempty"`
+}
+
+// PluginMarketplace is a Claude Code marketplace source, written verbatim as
+// the "source" of an extraKnownMarketplaces entry. Source is one of github
+// (Repo), git or url (URL), file or directory (Path).
+type PluginMarketplace struct {
+	Source string `json:"source"`
+	Repo   string `json:"repo,omitempty"`
+	URL    string `json:"url,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+}
+
+// Location is the place the marketplace is fetched from, in the form
+// allowed.plugin_sources matches: "github.com/<repo>" for github, otherwise
+// the URL or path. It is empty for a nil marketplace.
+func (m *PluginMarketplace) Location() string {
+	switch {
+	case m == nil:
+		return ""
+	case m.Repo != "":
+		return "github.com/" + m.Repo
+	case m.URL != "":
+		return m.URL
+	default:
+		return m.Path
+	}
 }
 
 // TeamRole defines a role within a methodology team.
@@ -311,7 +331,6 @@ type MergedConfig struct {
 	Plugins     map[string]PluginDef       `json:"plugins,omitempty"`
 	Claude      ClaudeConfig               `json:"claude,omitempty"`
 	Hooks       HooksConfig                `json:"hooks,omitempty"`
-	Marketplace MarketplaceConfig          `json:"marketplace,omitempty"`
 
 	// Allowed is copied from the policy so verify and scan can check config
 	// against it without reloading policy.json.

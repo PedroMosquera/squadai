@@ -292,19 +292,17 @@ If `doctor --fix` cannot resolve an issue, it prints the manual steps needed.
 
 **A plugin is not being installed**
 
-Plugins are filtered during apply based on:
+SquadAI declares Claude Code plugins in the project's `.claude/settings.json` (`enabledPlugins`, plus `extraKnownMarketplaces` for a declared `marketplace`). Claude Code installs them. A declaration is skipped when:
 
-1. **Supported agents** — the plugin is skipped if none of its `supported_agents` are detected on your system.
-2. **Methodology exclusion** — the `superpowers` plugin is excluded when methodology is `tdd`.
-3. **Component disabled** — ensure `"components": { "plugins": { "enabled": true } }` is set.
+1. **Supported agents:** `claude-code` is not in its `supported_agents`.
+2. **Methodology exclusion:** the `superpowers` plugin is excluded when methodology is `tdd`.
+3. **Component disabled:** `"components": { "plugins": { "enabled": true } }` is not set.
 
-Run `squadai plugins list` to see all available plugins and their current state.
+Run `squadai plan` to see the settings change apply would make. If the entry is in `.claude/settings.json` but Claude Code does not load the plugin, accept the folder trust prompt (Claude Code ignores project marketplaces in untrusted folders) and run `claude plugin install <plugin>@<marketplace> --scope project`. See [How apply writes plugins](v2-guide.md#how-apply-writes-plugins).
 
-**Syncing plugins after catalog changes**
+**apply reports a conflict on `enabledPlugins.<id>`**
 
-```sh
-squadai plugins sync
-```
+You already set that plugin to a different value (usually `false`) by hand. SquadAI does not overwrite entries it did not write. Remove your entry, or drop the declaration from `project.json`.
 
 ---
 

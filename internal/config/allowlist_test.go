@@ -56,19 +56,22 @@ func TestCheckAllowLists_MCPHooksAndPlugins(t *testing.T) {
 			"vetted":  {Enabled: true, PluginID: "vetted@official-market"},
 			"stray":   {Enabled: true, PluginID: "stray@someone-else"},
 			"bundled": {Enabled: true, InstallMethod: "skill_files"},
+			"rehomed": {Enabled: true, PluginID: "rehomed@official-market",
+				Marketplace: &domain.PluginMarketplace{Source: "github", Repo: "someone/official-market"}},
+			"pinned": {Enabled: true, PluginID: "pinned@official-market",
+				Marketplace: &domain.PluginMarketplace{Source: "github", Repo: "vetted-org/official-market"}},
 		},
-		Marketplace: domain.MarketplaceConfig{Plugins: map[string]string{"x": "1.0.0"}},
 		Allowed: domain.AllowLists{
 			MCPServers:    &domain.MCPServerAllowList{Commands: []string{"npx -y vetted-mcp@*"}, URLs: []string{"https://internal.invalid/*"}},
 			HookCommands:  []string{"squadai *"},
-			PluginSources: []string{"official-market"},
+			PluginSources: []string{"official-market", "github.com/vetted-org/*"},
 		},
 	}
 	want := []string{
 		`MCP server "remote" URL "https://mcp.example.invalid/sse" is not in allowed.mcp_servers.urls`,
 		`Stop hook command "bash run.sh" is not in allowed.hook_commands`,
+		`plugin "rehomed" marketplace "official-market" is fetched from "github.com/someone/official-market", which is not in allowed.plugin_sources`,
 		`plugin "stray" comes from "someone-else", which is not in allowed.plugin_sources`,
-		`marketplace source "github.com/wshobson/agents" is not in allowed.plugin_sources`,
 	}
 	if got := CheckAllowLists(cfg, nil, nil); !reflect.DeepEqual(got, want) {
 		t.Errorf("violations:\n got %q\nwant %q", got, want)
