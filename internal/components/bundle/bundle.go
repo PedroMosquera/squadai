@@ -73,6 +73,17 @@ func EfficiencyEnabled(cfg *domain.MergedConfig) bool {
 	return true
 }
 
+// enabledAgents returns the adapters cfg enables, in no particular order.
+func enabledAgents(cfg *domain.MergedConfig) []domain.AgentID {
+	var ids []domain.AgentID
+	for id, a := range cfg.Adapters {
+		if a.Enabled {
+			ids = append(ids, domain.AgentID(id))
+		}
+	}
+	return ids
+}
+
 // Build returns a Set with installers for every enabled component plus the
 // always-present memory installer and copilot manager.
 func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, error) {
@@ -88,7 +99,7 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 		Copilot:            copilot.New(),
 		Permissions:        permissions.New(),
 		Brand:              brand.New(),
-		Efficiency:         efficiency.New(efficiency.Options{MemoryEnabled: MemoryEnabled(cfg)}),
+		Efficiency:         efficiency.New(efficiency.Options{MemoryEnabled: MemoryEnabled(cfg), Agents: enabledAgents(cfg)}),
 		LegacyInstructions: legacyinstructions.New(projectDir),
 	}
 
@@ -98,6 +109,7 @@ func Build(cfg *domain.MergedConfig, projectDir string, opts Options) (*Set, err
 			return nil, fmt.Errorf("create rules installer: %w", err)
 		}
 		s.Rules = ri
+		s.LegacyInstructions = legacyinstructions.New(projectDir, legacyinstructions.Options{TeamStandards: ri.Content()})
 	}
 
 	if settingsCfg, ok := cfg.Components[string(domain.ComponentSettings)]; ok && settingsCfg.Enabled {

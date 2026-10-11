@@ -100,7 +100,7 @@ func TestApply_SummaryMode_WritesStub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	got := marker.ExtractSection(string(data), SectionIDForAgentID(domain.AgentOpenCode))
+	got := marker.ExtractSection(string(data), SectionID)
 	if got != ProtocolStub {
 		t.Errorf("summary mode should write the stub, got:\n%s", got)
 	}

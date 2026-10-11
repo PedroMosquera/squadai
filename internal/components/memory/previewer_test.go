@@ -47,7 +47,7 @@ func TestPreview_OpenCode_UpToDate_SkipWithEmptyDiff(t *testing.T) {
 	inst := New()
 
 	target := filepath.Join(project, "AGENTS.md")
-	content := marker.InjectSection("", SectionID, templateForAgentID(domain.AgentOpenCode))
+	content := marker.InjectSection("", SectionID, templateForAgentID(""))
 	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
 		t.Fatalf("seed file: %v", err)
 	}

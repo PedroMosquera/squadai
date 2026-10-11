@@ -9,7 +9,6 @@ import (
 	"github.com/PedroMosquera/squadai/internal/backup"
 	"github.com/PedroMosquera/squadai/internal/components/copilot"
 	"github.com/PedroMosquera/squadai/internal/domain"
-	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
@@ -273,29 +272,10 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 // downgraded to a strip, or to a no-op, when user content has appeared.
 func (e *Executor) applyCleanup(path string) error {
 	stale, exists, err := managed.InspectStale(e.projectDir, path)
-	if err != nil {
+	if err != nil || !exists {
 		return err
 	}
-	if !exists || !stale.Found {
-		return nil
-	}
-	if stale.Deletable() {
-		if err := deleteFile(path); err != nil {
-			return err
-		}
-	} else {
-		info, err := os.Stat(path)
-		if err != nil {
-			return fmt.Errorf("stat %s: %w", path, err)
-		}
-		if _, err := fileutil.WriteAtomic(path, stale.Stripped, info.Mode().Perm()); err != nil {
-			return fmt.Errorf("strip %s: %w", path, err)
-		}
-	}
-	if e.projectDir == "" {
-		return nil
-	}
-	return managed.ForgetFile(e.projectDir, path)
+	return managed.ApplyStale(e.projectDir, path, stale)
 }
 
 // deleteFile removes path from disk. It is idempotent: if the file does not

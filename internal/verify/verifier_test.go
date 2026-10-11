@@ -25,7 +25,7 @@ func TestVerify_AllPass_AfterFullApply(t *testing.T) {
 
 	// Create memory content at project-level AGENTS.md with OpenCode template.
 	memoryPath := filepath.Join(project, "AGENTS.md")
-	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
 	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestVerify_AllPass_MemoryAndRules(t *testing.T) {
 
 	// Write AGENTS.md with both memory and rules sections.
 	targetPath := filepath.Join(project, "AGENTS.md")
-	doc := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	doc := marker.InjectSection("", "memory", memory.ProtocolTemplate())
 	doc = marker.InjectSection(doc, rules.SectionID, standards)
 	if err := os.WriteFile(targetPath, []byte(doc), 0644); err != nil {
 		t.Fatal(err)
@@ -587,7 +587,7 @@ func TestVerify_ResultsHaveComponent(t *testing.T) {
 
 	// Create memory content so we get passing results.
 	memoryPath := filepath.Join(project, "AGENTS.md")
-	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
 	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -632,7 +632,7 @@ func TestVerify_PassedResultsHaveInfoSeverity(t *testing.T) {
 
 	// Create memory content.
 	memoryPath := filepath.Join(project, "AGENTS.md")
-	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
 	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}

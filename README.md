@@ -75,7 +75,7 @@ squadai diff
 
 When you run `squadai init`, it detects which AI agents are installed on the current machine and writes `.squadai/project.json` — a config that says which methodology to use, which roles exist, which context profile is active, how memory works, and which components each agent should get.
 
-`squadai apply` reads that config, figures out which files each agent needs in its native format, and writes them. For Claude Code it updates `CLAUDE.md`. For OpenCode it writes `AGENTS.md` and individual agent files under `.opencode/agents/`. For Cursor it writes `.cursor/rules/` and `.cursor/agents/`. It never touches content outside its own marker blocks, so any customizations you've made in those files stay put.
+`squadai apply` reads that config, figures out which files each agent needs in its native format, and writes them. Shared instructions (memory protocol, team standards, session efficiency, the solo orchestrator, the banner) go once into `AGENTS.md`, which every supported agent reads. `CLAUDE.md` gets a small block that imports it. Agent-specific files go where each agent expects them, such as `.opencode/agents/` or `.cursor/agents/`. It never touches content outside its own marker blocks, so any customizations you've made in those files stay put.
 
 The result is a team where everyone's agents have:
 
@@ -92,15 +92,29 @@ The result is a team where everyone's agents have:
 
 Different agents handle sub-agents differently. squadai adapts:
 
-| Agent | Config file | Sub-agent strategy |
+| Agent | Instructions file | Sub-agent strategy |
 |-------|-------------|-------------------|
 | OpenCode | `AGENTS.md` | Native agent files in `.opencode/agents/` |
-| Claude Code | `CLAUDE.md` | Native agent files in `.claude/agents/` |
-| Cursor | `.cursor/rules/squadai.mdc` | Native agent files in `.cursor/agents/` |
-| Windsurf | `.windsurf/rules/squadai.md` | Solo all-in-one prompt + workflow files |
-| VS Code Copilot | `.github/copilot-instructions.md` | Solo all-in-one prompt |
-| Pi | `~/.pi/agent/AGENTS.md` | Native agent files in `~/.pi/agent/agents/` + prompts in `~/.pi/agent/prompts/` |
+| Claude Code | `AGENTS.md`, imported from `CLAUDE.md` | Native agent files in `.claude/agents/` |
+| Cursor | `AGENTS.md` | Native agent files in `.cursor/agents/` |
+| Windsurf | `AGENTS.md` | Solo all-in-one prompt + workflow files |
+| VS Code Copilot | `AGENTS.md` | Solo all-in-one prompt |
+| Pi | `AGENTS.md` + `~/.pi/agent/AGENTS.md` | Native agent files in `~/.pi/agent/agents/` + prompts in `~/.pi/agent/prompts/` |
 | Codex | `AGENTS.md` + `~/.codex/config.toml` | Solo all-in-one prompt; MCP servers as TOML tables |
+
+The solo orchestrator block is written once, rendered for the first enabled solo agent (VS Code Copilot, then Windsurf, then Codex). Codex reads only the first 32 KiB of project instructions by default (`project_doc_max_bytes`), and `squadai verify` warns when `AGENTS.md` is larger.
+
+### Migrating to AGENTS.md
+
+Earlier versions wrote a full copy of every shared block into each agent's own file: `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/squadai.mdc` and `.windsurf/rules/squadai.md`. The next `squadai apply` after upgrading moves to a single copy in `AGENTS.md` and prints a one-time note when it does:
+
+- `AGENTS.md` keeps one copy of each block. The per-agent copies (`memory:opencode`, `memory:pi`, and so on) are merged away.
+- `CLAUDE.md` loses squadai's old blocks and gains `<!-- squadai:agents-md -->` with `@AGENTS.md`. Claude Code reads `AGENTS.md` on its own only when no `CLAUDE.md` exists, so the import keeps it loaded either way.
+- `.github/copilot-instructions.md` loses squadai's old blocks. The copilot instructions template block stays if you use one.
+- `.cursor/rules/squadai.mdc` and `.windsurf/rules/squadai.md` are deleted when they hold nothing but squadai's frontmatter, team standards and blocks.
+- Your own text in any of these files is never touched. A file squadai created that ends up empty is deleted. A populated `/squadai-init` refinement block is kept where it was.
+
+Commit the result. `squadai verify --ci` passes once the migrated files are committed. To undo, `squadai restore <backup-id>` with the backup ID that apply printed.
 
 ---
 

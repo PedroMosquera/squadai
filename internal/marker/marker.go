@@ -133,58 +133,80 @@ func HasHashSection(document, sectionID string) bool {
 		strings.Contains(document, HashCloseTag(sectionID))
 }
 
-// StripAll removes all squadai marker blocks from document.
-// Returns the stripped content and true if any blocks were found.
-// Returns the original content and false if no blocks were found.
-func StripAll(document string) (string, bool) {
+// SectionIDs returns the IDs of the HTML-comment sections in document, each
+// once, in order of first appearance.
+func SectionIDs(document string) []string {
 	openPrefix := fmt.Sprintf("<!-- %s:", prefix)
-
-	// Discover all section IDs by scanning for open tags.
-	// We collect unique IDs so we don't double-strip.
 	seen := make(map[string]struct{})
-	var sectionIDs []string
-
+	var ids []string
 	search := document
 	for {
 		idx := strings.Index(search, openPrefix)
 		if idx < 0 {
 			break
 		}
-		// Advance past the prefix to find the end of the tag: " -->"
 		rest := search[idx+len(openPrefix):]
 		end := strings.Index(rest, " -->")
 		if end < 0 {
 			break
 		}
 		id := rest[:end]
-		// Skip close tags (they start with "/").
 		if !strings.HasPrefix(id, "/") {
 			if _, exists := seen[id]; !exists {
 				seen[id] = struct{}{}
-				sectionIDs = append(sectionIDs, id)
+				ids = append(ids, id)
 			}
 		}
-		// Advance search past this tag.
 		search = rest[end+len(" -->"):]
 	}
+	return ids
+}
 
-	// Discover hash-comment sections (used in TOML/shell-style files).
-	hashIDs := discoverHashSectionIDs(document)
+// StripAll removes all squadai marker blocks from document.
+// Returns the stripped content and true if any blocks were found.
+// Returns the original content and false if no blocks were found.
+func StripAll(document string) (string, bool) {
+	return StripAllExcept(document)
+}
 
-	if len(sectionIDs) == 0 && len(hashIDs) == 0 {
+// StripAllExcept is StripAll leaving the keep sections in place. The bool
+// reports whether anything was removed.
+func StripAllExcept(document string, keep ...string) (string, bool) {
+	kept := make(map[string]bool, len(keep))
+	for _, id := range keep {
+		kept[id] = true
+	}
+	result := document
+	found := false
+	for _, id := range SectionIDs(document) {
+		if kept[id] {
+			continue
+		}
+		result = InjectSection(result, id, "")
+		found = true
+	}
+	for _, id := range discoverHashSectionIDs(document) {
+		if kept[id] {
+			continue
+		}
+		result = InjectHashSection(result, id, "")
+		found = true
+	}
+	if !found {
 		return document, false
 	}
-
-	// Strip each discovered section by injecting empty content.
-	result := document
-	for _, id := range sectionIDs {
-		result = InjectSection(result, id, "")
-	}
-	for _, id := range hashIDs {
-		result = InjectHashSection(result, id, "")
-	}
-
 	return result, true
+}
+
+// StripScoped removes every adapter-scoped variant of base ("base:<agent>"),
+// left behind when each adapter wrote its own copy of a shared block.
+func StripScoped(document, base string) string {
+	for _, id := range SectionIDs(document) {
+		if strings.HasPrefix(id, base+":") {
+			document = InjectSection(document, id, "")
+		}
+	}
+	return document
 }
 
 // discoverHashSectionIDs scans a document for hash-comment open tags

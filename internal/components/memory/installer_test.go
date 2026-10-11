@@ -78,13 +78,13 @@ func TestMemoryTargetPath_OpenCode_UsesProjectLevel(t *testing.T) {
 	}
 }
 
-func TestMemoryTargetPath_Claude_UsesProjectLevel(t *testing.T) {
+func TestMemoryTargetPath_Claude_UsesSharedAgentsMD(t *testing.T) {
 	adapter := claude.New()
 	home := "/Users/test"
 	project := "/Users/test/myproject"
 
 	target := memoryTargetPath(adapter, home, project)
-	expected := filepath.Join(project, "CLAUDE.md")
+	expected := filepath.Join(project, "AGENTS.md")
 	if target != expected {
 		t.Errorf("target = %q, want %q", target, expected)
 	}
@@ -156,9 +156,9 @@ func TestPlan_OpenCode_UpToDate_ReturnsSkip(t *testing.T) {
 	adapter := opencode.New()
 	inst := New()
 
-	// Create file with correct OpenCode memory section.
+	// The shared AGENTS.md carries the generic template.
 	targetPath := filepath.Join(project, "AGENTS.md")
-	content := marker.InjectSection("", SectionID, templateForAgentID(domain.AgentOpenCode))
+	content := marker.InjectSection("", SectionID, templateForAgentID(""))
 	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestApply_OpenCode_CreatesFileWithMemorySection(t *testing.T) {
 	}
 
 	content, _ := os.ReadFile(actions[0].TargetPath)
-	if !marker.HasSection(string(content), SectionIDForAgentID(adapter.ID())) {
+	if !marker.HasSection(string(content), SectionID) {
 		t.Error("expected memory marker section in file after apply")
 	}
 	if !strings.Contains(string(content), "docs/memory/") {
@@ -243,7 +243,7 @@ func TestApply_Claude_CreatesProjectLevelFile(t *testing.T) {
 	}
 
 	content, _ := os.ReadFile(actions[0].TargetPath)
-	if !marker.HasSection(string(content), SectionIDForAgentID(adapter.ID())) {
+	if !marker.HasSection(string(content), SectionID) {
 		t.Error("expected memory marker section in file after apply")
 	}
 	if !strings.Contains(string(content), "docs/memory/") {
@@ -275,57 +275,50 @@ func TestApply_PreservesExistingContent(t *testing.T) {
 	if !strings.Contains(s, "Do not delete this.") {
 		t.Error("existing content should be preserved")
 	}
-	if !marker.HasSection(s, SectionIDForAgentID(adapter.ID())) {
+	if !marker.HasSection(s, SectionID) {
 		t.Error("memory section should be injected")
 	}
 }
 
-func TestApply_SharedAgentsFile_KeepsAdapterSectionsSeparate(t *testing.T) {
+func TestApply_SharedAgentsFile_OneSectionReplacesAdapterCopies(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	openCode := opencode.New()
 	piAdapter := pi.New()
 	inst := New()
 
-	openActions, err := inst.Plan(openCode, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := inst.Apply(openActions[0]); err != nil {
-		t.Fatal(err)
-	}
-
-	piActions, err := inst.Plan(piAdapter, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := inst.Apply(piActions[0]); err != nil {
-		t.Fatal(err)
-	}
-
 	targetPath := filepath.Join(project, "AGENTS.md")
+	old := marker.InjectSection("", SectionIDForAgentID(openCode.ID()), "old opencode copy")
+	old = marker.InjectSection(old, SectionIDForAgentID(piAdapter.ID()), "old pi copy")
+	if err := os.WriteFile(targetPath, []byte(old), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, a := range []domain.Adapter{openCode, piAdapter} {
+		actions, err := inst.Plan(a, home, project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := inst.Apply(actions[0]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	content, err := os.ReadFile(targetPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(content)
-	if !marker.HasSection(s, SectionIDForAgentID(openCode.ID())) {
-		t.Fatal("OpenCode memory section missing")
+	if ids := marker.SectionIDs(string(content)); len(ids) != 1 || ids[0] != SectionID {
+		t.Fatalf("AGENTS.md sections = %v, want one shared %q section", ids, SectionID)
 	}
-	if !marker.HasSection(s, SectionIDForAgentID(piAdapter.ID())) {
-		t.Fatal("Pi memory section missing")
-	}
-
-	openActions, err = inst.Plan(openCode, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	piActions, err = inst.Plan(piAdapter, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if openActions[0].Action != domain.ActionSkip || piActions[0].Action != domain.ActionSkip {
-		t.Fatalf("both adapters should be current, got OpenCode=%s Pi=%s", openActions[0].Action, piActions[0].Action)
+	for _, a := range []domain.Adapter{openCode, piAdapter} {
+		actions, err := inst.Plan(a, home, project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actions[0].Action != domain.ActionSkip {
+			t.Errorf("%s should be current, got %s", a.ID(), actions[0].Action)
+		}
 	}
 }
 

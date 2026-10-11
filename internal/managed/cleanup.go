@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/PedroMosquera/squadai/internal/fileutil"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
@@ -22,6 +23,8 @@ type StaleContent struct {
 	OnlySquadAI bool
 	// Created reports whether the sidecar records SquadAI creating the file.
 	Created bool
+	// Kept reports whether a section the caller asked to keep is still there.
+	Kept bool
 }
 
 // Deletable reports whether the whole file may be removed. Creation alone is
@@ -38,6 +41,13 @@ func (s StaleContent) Deletable() bool {
 // removed instead. A JSON file that does not parse as an object reports
 // Found=false, so callers keep it. exists is false when path is absent.
 func InspectStale(projectRoot, path string) (stale StaleContent, exists bool, err error) {
+	return InspectStaleKeeping(projectRoot, path)
+}
+
+// InspectStaleKeeping is InspectStale leaving the keep marker sections in
+// place. A file that still holds a kept section is never OnlySquadAI, so it
+// is stripped in place rather than deleted.
+func InspectStaleKeeping(projectRoot, path string, keep ...string) (stale StaleContent, exists bool, err error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -65,11 +75,42 @@ func InspectStale(projectRoot, path string) (stale StaleContent, exists bool, er
 		return stale, true, nil
 	}
 
-	stripped, _ := marker.StripAll(string(data))
+	stripped, _ := marker.StripAllExcept(string(data), keep...)
 	stale.Stripped = []byte(stripped)
 	stale.Found = stripped != string(data)
 	stale.OnlySquadAI = strings.TrimSpace(stripped) == ""
+	for _, id := range keep {
+		if marker.HasSection(stripped, id) {
+			stale.Kept = true
+		}
+	}
 	return stale, true, nil
+}
+
+// ApplyStale writes the result of InspectStale for path: it deletes the file
+// when Deletable, otherwise writes Stripped in place. The sidecar forgets the
+// file unless a kept squadai section is still in it.
+func ApplyStale(projectRoot, path string, stale StaleContent) error {
+	if !stale.Found {
+		return nil
+	}
+	if stale.Deletable() {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove %s: %w", path, err)
+		}
+	} else {
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("stat %s: %w", path, err)
+		}
+		if _, err := fileutil.WriteAtomic(path, stale.Stripped, info.Mode().Perm()); err != nil {
+			return fmt.Errorf("strip %s: %w", path, err)
+		}
+	}
+	if projectRoot == "" || stale.Kept {
+		return nil
+	}
+	return ForgetFile(projectRoot, path)
 }
 
 // stripOwnedJSON removes SquadAI's content from a JSON object: the named

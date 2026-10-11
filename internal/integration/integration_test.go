@@ -308,7 +308,7 @@ func TestUserContent_Preserved(t *testing.T) {
 	if !strings.Contains(promptStr, "Do not touch this.") {
 		t.Error("user content in AGENTS.md was clobbered")
 	}
-	if !marker.HasSection(promptStr, memory.SectionIDForAgentID(domain.AgentOpenCode)) {
+	if !marker.HasSection(promptStr, memory.SectionID) {
 		t.Error("memory section should be injected into AGENTS.md")
 	}
 
@@ -407,9 +407,9 @@ func TestApplyThenVerify_UpdatedContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read prompt: %v", err)
 	}
-	extracted := marker.ExtractSection(string(data), memory.SectionIDForAgentID(domain.AgentOpenCode))
-	if extracted != memory.TemplateForAgentID(domain.AgentOpenCode) {
-		t.Error("memory content should match current OpenCode protocol template")
+	extracted := marker.ExtractSection(string(data), memory.SectionID)
+	if extracted != memory.ProtocolTemplate() {
+		t.Error("memory content should match the shared AGENTS.md protocol template")
 	}
 }
 
@@ -877,6 +877,13 @@ func assertFileExists(t *testing.T, path, label string) {
 	t.Helper()
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Errorf("%s: expected file to exist at %s", label, path)
+	}
+}
+
+func assertFileNotExists(t *testing.T, path, label string) {
+	t.Helper()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("%s: expected no file at %s, stat err = %v", label, path, err)
 	}
 }
 
@@ -2119,16 +2126,16 @@ func TestFullPipeline_SDD_Pi(t *testing.T) {
 
 	// ── Pi-specific file assertions ───────────────────────────────────────────
 
-	// AGENTS.md must exist with the Pi-scoped memory marker.
+	// AGENTS.md must exist with the shared memory marker.
 	agentsMD := filepath.Join(project, "AGENTS.md")
 	assertFileExists(t, agentsMD, "Pi/SDD: AGENTS.md")
 	agentsMDData, err := os.ReadFile(agentsMD)
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	piSectionID := memory.SectionIDForAgentID(domain.AgentPi)
+	piSectionID := memory.SectionID
 	if !marker.HasSection(string(agentsMDData), piSectionID) {
-		t.Errorf("Pi/SDD: AGENTS.md missing Pi-scoped memory section %q", piSectionID)
+		t.Errorf("Pi/SDD: AGENTS.md missing the shared memory section %q", piSectionID)
 	}
 
 	// .pi/mcp.json is the project file Pi's built-in MCP reads.

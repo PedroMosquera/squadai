@@ -107,10 +107,22 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "mcp.json")
 }
 
-// ProjectRulesFile returns <projectDir>/.cursor/rules/squadai.mdc.
-// Uses the structured MDC format with YAML frontmatter (alwaysApply: true).
+// ProjectRulesFile returns the shared <projectDir>/AGENTS.md
+// (https://cursor.com/docs/context/rules).
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, ".cursor", "rules", "squadai.mdc")
+	return domain.SharedInstructionsFile(projectDir)
+}
+
+// LegacyInstructionsFiles returns the structured rule file squadai wrote
+// before AGENTS.md became canonical.
+func (a *Adapter) LegacyInstructionsFiles(_, projectDir string) []string {
+	return []string{filepath.Join(projectDir, ".cursor", "rules", "squadai.mdc")}
+}
+
+// LegacyRulesFrontmatter is the frontmatter squadai's rules installer put at
+// the top of the legacy rule file, so the migration can recognize it.
+func (a *Adapter) LegacyRulesFrontmatter() string {
+	return "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n\n"
 }
 
 // ProjectAgentsDir returns <projectDir>/.cursor/agents.
@@ -175,10 +187,8 @@ func (a *Adapter) MCPEnvKey() string { return "env" }
 // MCPTypeField always returns empty string — Cursor infers stdio vs remote from URL presence.
 func (a *Adapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
 
-// RulesFrontmatter returns YAML frontmatter for Cursor's structured MDC rules.
-func (a *Adapter) RulesFrontmatter() string {
-	return "---\ndescription: Project coding standards and architecture\nalwaysApply: true\n---\n\n"
-}
+// RulesFrontmatter returns "": team standards are a marker block in AGENTS.md.
+func (a *Adapter) RulesFrontmatter() string { return "" }
 
 // RulesFileSizeCap returns 0 — Cursor has no known rules file size limit.
 func (a *Adapter) RulesFileSizeCap() int { return 0 }

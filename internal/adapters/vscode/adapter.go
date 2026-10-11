@@ -115,11 +115,12 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, ".vscode", "settings.json")
 }
 
-// ProjectRulesFile returns <projectDir>/.github/copilot-instructions.md. The
-// copilot instructions template writes its own marker section into the same
-// file; the two coexist because their section IDs differ.
+// ProjectRulesFile returns the shared <projectDir>/AGENTS.md, which VS Code
+// reads by default (chat.useAgentsMdFile,
+// https://code.visualstudio.com/docs/copilot/customization/custom-instructions).
+// .github/copilot-instructions.md is left to the copilot instructions template.
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, ".github", "copilot-instructions.md")
+	return domain.SharedInstructionsFile(projectDir)
 }
 
 // ProjectAgentsDir returns empty string — VS Code Copilot does not support project agents.
@@ -185,13 +186,14 @@ func (a *Adapter) LegacyMCPConfig(projectDir string) (path, rootKey string) {
 	return filepath.Join(projectDir, ".vscode", "mcp.json"), "servers"
 }
 
-// LegacyInstructionsFiles returns where squadai wrote instructions before it
-// targeted files VS Code reads. Neither is a documented instructions location,
-// so squadai's marker blocks there are dead weight.
+// LegacyInstructionsFiles returns where squadai wrote instructions before
+// AGENTS.md: two .instructions.md files VS Code never read, and
+// .github/copilot-instructions.md, which duplicated every shared block.
 func (a *Adapter) LegacyInstructionsFiles(homeDir, projectDir string) []string {
 	return []string{
 		filepath.Join(projectDir, ".instructions.md"),
 		filepath.Join(ConfigDir(homeDir), ".instructions.md"),
+		filepath.Join(projectDir, ".github", "copilot-instructions.md"),
 	}
 }
 

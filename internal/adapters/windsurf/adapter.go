@@ -113,10 +113,22 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, ".windsurf", "mcp_config.json")
 }
 
-// ProjectRulesFile returns <projectDir>/.windsurf/rules/squadai.md.
-// Uses the structured rules format with YAML frontmatter (trigger: always_on).
+// ProjectRulesFile returns the shared <projectDir>/AGENTS.md, which Windsurf
+// treats as an always-on rule (https://docs.devin.ai/desktop/cascade/agents-md).
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, ".windsurf", "rules", "squadai.md")
+	return domain.SharedInstructionsFile(projectDir)
+}
+
+// LegacyInstructionsFiles returns the structured rule file squadai wrote
+// before AGENTS.md became canonical.
+func (a *Adapter) LegacyInstructionsFiles(_, projectDir string) []string {
+	return []string{filepath.Join(projectDir, ".windsurf", "rules", "squadai.md")}
+}
+
+// LegacyRulesFrontmatter is the frontmatter squadai's rules installer put at
+// the top of the legacy rule file, so the migration can recognize it.
+func (a *Adapter) LegacyRulesFrontmatter() string {
+	return "---\ntrigger: always_on\n---\n\n"
 }
 
 // ProjectAgentsDir returns empty string — Windsurf is a solo agent with no sub-agents.
@@ -181,10 +193,8 @@ func (a *Adapter) MCPEnvKey() string { return "env" }
 // MCPTypeField always returns empty string — Windsurf infers stdio vs remote from URL presence.
 func (a *Adapter) MCPTypeField(_ domain.MCPServerDef) string { return "" }
 
-// RulesFrontmatter returns YAML frontmatter for Windsurf's structured rules.
-func (a *Adapter) RulesFrontmatter() string {
-	return "---\ntrigger: always_on\n---\n\n"
-}
+// RulesFrontmatter returns "": team standards are a marker block in AGENTS.md.
+func (a *Adapter) RulesFrontmatter() string { return "" }
 
 // RulesFileSizeCap returns 6000 — Windsurf's global_rules.md has a hard 6,000-character cap.
 func (a *Adapter) RulesFileSizeCap() int { return 6000 }

@@ -224,8 +224,8 @@ func TestMultiAdapter_ClaudeCode_NodeReact_RulesFormat(t *testing.T) {
 	assertFileContains(t, claudeMD, "squadai", "ClaudeCode/NodeReact: CLAUDE.md has squadai marker")
 }
 
-// TestMultiAdapter_ClaudeCode_NodeReact_TemplateRendering verifies CLAUDE.md is
-// written with the expected squadai memory section (no stack rendering for Claude Code).
+// TestMultiAdapter_ClaudeCode_NodeReact_TemplateRendering verifies the memory
+// section lands in the shared AGENTS.md and CLAUDE.md imports it.
 func TestMultiAdapter_ClaudeCode_NodeReact_TemplateRendering(t *testing.T) {
 	t.Parallel()
 
@@ -249,14 +249,14 @@ func TestMultiAdapter_ClaudeCode_NodeReact_TemplateRendering(t *testing.T) {
 	}
 	content := string(data)
 
-	// Must have the agent-manager marker section injected.
-	if !strings.Contains(content, "<!-- squadai:memory") {
-		t.Error("ClaudeCode/NodeReact: CLAUDE.md missing squadai:memory marker")
+	if marker.ExtractSection(content, "agents-md") != "@AGENTS.md" {
+		t.Errorf("ClaudeCode/NodeReact: CLAUDE.md should import AGENTS.md, got:\n%s", content)
 	}
-	// Must not be empty or have a plaintext-only stub.
-	if len(strings.TrimSpace(content)) == 0 {
-		t.Error("ClaudeCode/NodeReact: CLAUDE.md must not be empty")
+	if strings.Contains(content, "<!-- squadai:memory") {
+		t.Error("ClaudeCode/NodeReact: CLAUDE.md must not carry its own memory block")
 	}
+	assertFileContains(t, filepath.Join(dir, "AGENTS.md"), "<!-- squadai:memory -->",
+		"ClaudeCode/NodeReact: memory block in the shared AGENTS.md")
 }
 
 // TestMultiAdapter_ClaudeCode_NodeReact_Reversibility validates that Remove cleans up
@@ -369,8 +369,9 @@ func TestMultiAdapter_VSCode_NodeReact_RulesFormat(t *testing.T) {
 	}
 }
 
-// TestMultiAdapter_VSCode_NodeReact_TemplateRendering verifies the memory marker section
-// is present and the file is non-trivially populated for a Node/React project.
+// TestMultiAdapter_VSCode_NodeReact_TemplateRendering verifies the memory marker
+// section lands in the shared AGENTS.md and copilot-instructions.md holds only
+// the copilot template.
 func TestMultiAdapter_VSCode_NodeReact_TemplateRendering(t *testing.T) {
 	t.Parallel()
 
@@ -394,20 +395,20 @@ func TestMultiAdapter_VSCode_NodeReact_TemplateRendering(t *testing.T) {
 	}
 	content := string(data)
 
-	// Must have the agent-manager marker section injected.
-	if !strings.Contains(content, "<!-- squadai:memory") {
-		t.Error("VSCode/NodeReact: copilot-instructions.md missing squadai:memory marker")
+	if strings.Contains(content, "<!-- squadai:memory") {
+		t.Error("VSCode/NodeReact: copilot-instructions.md must not carry its own memory block")
 	}
-	// Must not be empty.
-	if len(strings.TrimSpace(content)) == 0 {
-		t.Error("VSCode/NodeReact: copilot-instructions.md must not be empty")
+	if !strings.Contains(content, "<!-- squadai:copilot-instructions -->") {
+		t.Error("VSCode/NodeReact: copilot-instructions.md missing the copilot template section")
 	}
+	assertFileContains(t, filepath.Join(dir, "AGENTS.md"), "<!-- squadai:memory -->",
+		"VSCode/NodeReact: memory block in the shared AGENTS.md")
 }
 
 // TestMultiAdapter_VSCode_LegacyInstructionsMigrated covers an install made
-// before squadai targeted .github/copilot-instructions.md: apply must move the
-// instructions, strip squadai's blocks from the old root .instructions.md, and
-// keep what the user wrote there.
+// before squadai targeted AGENTS.md: apply must move the instructions, strip
+// squadai's blocks from the old root .instructions.md, and keep what the user
+// wrote there.
 func TestMultiAdapter_VSCode_LegacyInstructionsMigrated(t *testing.T) {
 	t.Parallel()
 
@@ -459,8 +460,8 @@ func TestMultiAdapter_VSCode_LegacyInstructionsMigrated(t *testing.T) {
 	if string(data) != userNote {
 		t.Errorf("legacy .instructions.md = %q, want only the user note %q", data, userNote)
 	}
-	assertFileContains(t, filepath.Join(dir, ".github", "copilot-instructions.md"), "<!-- squadai:memory",
-		"VSCode/LegacyInstructions: memory block moved to copilot-instructions.md")
+	assertFileContains(t, filepath.Join(dir, "AGENTS.md"), "<!-- squadai:memory",
+		"VSCode/LegacyInstructions: memory block moved to AGENTS.md")
 
 	if n := legacyFailures(); n != 0 {
 		t.Errorf("verify after apply: %d failing instructions-legacy-migrated checks, want 0", n)
@@ -593,25 +594,10 @@ func TestMultiAdapter_Cursor_NodeReact_RulesFormat(t *testing.T) {
 		t.Fatal("Cursor/NodeReact/RulesFormat: apply should succeed")
 	}
 
-	// .cursor/rules/squadai.mdc must exist with alwaysApply: true frontmatter.
-	rulesFile := filepath.Join(dir, ".cursor", "rules", "squadai.mdc")
-	assertFileExists(t, rulesFile, "Cursor/NodeReact: .cursor/rules/squadai.mdc")
-
-	data, err := os.ReadFile(rulesFile)
-	if err != nil {
-		t.Fatalf("read squadai.mdc: %v", err)
-	}
-	content := string(data)
-
-	if !strings.HasPrefix(content, "---\n") {
-		t.Error("Cursor/NodeReact: squadai.mdc must start with YAML frontmatter (---)")
-	}
-	if !strings.Contains(content, "alwaysApply: true") {
-		t.Error("Cursor/NodeReact: squadai.mdc must contain 'alwaysApply: true'")
-	}
-	if !strings.Contains(content, "Node/React Team Standards") {
-		t.Error("Cursor/NodeReact: squadai.mdc must contain the injected team standards content")
-	}
+	// Cursor reads the shared AGENTS.md; no structured rule file is written.
+	assertFileNotExists(t, filepath.Join(dir, ".cursor", "rules", "squadai.mdc"), "Cursor/NodeReact: .cursor/rules/squadai.mdc")
+	assertFileContains(t, filepath.Join(dir, "AGENTS.md"), "Node/React Team Standards",
+		"Cursor/NodeReact: team standards in the shared AGENTS.md")
 }
 
 // TestMultiAdapter_Cursor_NodeReact_TemplateRendering verifies Cursor writes an
@@ -779,25 +765,10 @@ func TestMultiAdapter_Windsurf_NodeReact_RulesFormat(t *testing.T) {
 		t.Fatal("Windsurf/NodeReact/RulesFormat: apply should succeed")
 	}
 
-	// .windsurf/rules/squadai.md must exist with trigger: always_on frontmatter.
-	rulesFile := filepath.Join(dir, ".windsurf", "rules", "squadai.md")
-	assertFileExists(t, rulesFile, "Windsurf/NodeReact: .windsurf/rules/squadai.md")
-
-	data, err := os.ReadFile(rulesFile)
-	if err != nil {
-		t.Fatalf("read squadai.md: %v", err)
-	}
-	content := string(data)
-
-	if !strings.HasPrefix(content, "---\n") {
-		t.Error("Windsurf/NodeReact: squadai.md must start with YAML frontmatter (---)")
-	}
-	if !strings.Contains(content, "trigger: always_on") {
-		t.Error("Windsurf/NodeReact: squadai.md must contain 'trigger: always_on'")
-	}
-	if !strings.Contains(content, "Node/React Team Standards") {
-		t.Error("Windsurf/NodeReact: squadai.md must contain the injected team standards content")
-	}
+	// Windsurf reads the shared AGENTS.md; no structured rule file is written.
+	assertFileNotExists(t, filepath.Join(dir, ".windsurf", "rules", "squadai.md"), "Windsurf/NodeReact: .windsurf/rules/squadai.md")
+	assertFileContains(t, filepath.Join(dir, "AGENTS.md"), "Node/React Team Standards",
+		"Windsurf/NodeReact: team standards in the shared AGENTS.md")
 }
 
 // TestMultiAdapter_Windsurf_NodeReact_TemplateRendering verifies memory marker section
@@ -816,23 +787,9 @@ func TestMultiAdapter_Windsurf_NodeReact_TemplateRendering(t *testing.T) {
 		t.Fatal("Windsurf/NodeReact/TemplateRendering: apply should succeed")
 	}
 
-	// Windsurf memory targets .windsurf/rules/squadai.md (ProjectRulesFile).
-	rulesFile := filepath.Join(dir, ".windsurf", "rules", "squadai.md")
-	assertFileExists(t, rulesFile, "Windsurf/NodeReact: .windsurf/rules/squadai.md")
-
-	data, err := os.ReadFile(rulesFile)
-	if err != nil {
-		t.Fatalf("read squadai.md: %v", err)
-	}
-	content := string(data)
-
-	// Must have the agent-manager memory marker injected.
-	if !strings.Contains(content, "<!-- squadai:memory") {
-		t.Error("Windsurf/NodeReact: squadai.md missing squadai:memory marker")
-	}
-	if len(strings.TrimSpace(content)) == 0 {
-		t.Error("Windsurf/NodeReact: squadai.md must not be empty")
-	}
+	// Windsurf memory targets the shared AGENTS.md (ProjectRulesFile).
+	assertFileContains(t, filepath.Join(dir, "AGENTS.md"), "<!-- squadai:memory -->",
+		"Windsurf/NodeReact: memory block in the shared AGENTS.md")
 }
 
 // TestMultiAdapter_Windsurf_NodeReact_Reversibility validates that Remove cleans up
@@ -1127,8 +1084,8 @@ func TestMultiAdapter_Codex_NodeReact_RulesAndMemory(t *testing.T) {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "<!-- squadai:memory:codex -->") {
-		t.Errorf("Codex/NodeReact: AGENTS.md missing codex-scoped memory marker:\n%s", content)
+	if !strings.Contains(content, "<!-- squadai:memory -->") {
+		t.Errorf("Codex/NodeReact: AGENTS.md missing the shared memory marker:\n%s", content)
 	}
 	// Codex has no slash commands: the generic memory protocol leads with the
 	// squadai CLI wording so instructions remain actionable.

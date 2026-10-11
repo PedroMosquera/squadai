@@ -208,6 +208,7 @@ func TestApplySkills_OrchestratorPointsAtADirTheHarnessReads(t *testing.T) {
 	}
 
 	checked := map[domain.AgentID]bool{}
+	refDirs := map[domain.AgentID][]string{}
 	for _, a := range actions {
 		if a.Component != domain.ComponentAgents || !strings.Contains(a.Description, "orchestrator") {
 			continue
@@ -222,6 +223,7 @@ func TestApplySkills_OrchestratorPointsAtADirTheHarnessReads(t *testing.T) {
 		}
 		checked[a.Agent] = true
 		for _, ref := range refs {
+			refDirs[a.Agent] = append(refDirs[a.Agent], ref[1])
 			if !slices.Contains(skillReadDirs[a.Agent], ref[1]) {
 				t.Errorf("%s orchestrator points at %q, which %s does not read (reads %v)", a.Agent, ref[1], a.Agent, skillReadDirs[a.Agent])
 				continue
@@ -232,11 +234,34 @@ func TestApplySkills_OrchestratorPointsAtADirTheHarnessReads(t *testing.T) {
 			}
 		}
 	}
-	for id := range skillReadDirs {
-		if !checked[id] {
-			t.Errorf("no rendered orchestrator with skill references for %s", id)
+	// Solo harnesses share one orchestrator block in AGENTS.md, rendered for
+	// the first enabled solo adapter, so one checked solo adapter covers the
+	// others as long as each of them reads every dir the block cites.
+	solo := []domain.AgentID{domain.AgentVSCodeCopilot, domain.AgentWindsurf, domain.AgentCodex}
+	var soloChecked domain.AgentID
+	for _, id := range solo {
+		if checked[id] {
+			soloChecked = id
 		}
 	}
+	for id := range skillReadDirs {
+		if checked[id] {
+			continue
+		}
+		if slices.Contains(solo, id) && soloChecked != "" && readsAll(skillReadDirs[id], refDirs[soloChecked]) {
+			continue
+		}
+		t.Errorf("no rendered orchestrator with skill references for %s", id)
+	}
+}
+
+func readsAll(reads, cited []string) bool {
+	for _, dir := range cited {
+		if !slices.Contains(reads, dir) {
+			return false
+		}
+	}
+	return true
 }
 
 var frontmatterName = regexp.MustCompile(`(?m)^name:\s*(\S+)\s*$`)

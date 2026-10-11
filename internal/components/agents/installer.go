@@ -30,6 +30,13 @@ const managerAgentName = "squadai-manager"
 const memorySectionID = "memory-protocol"
 const refinementPlaceholder = "<!-- empty until /squadai-init populates -->"
 
+// RefinementSectionID and RefinementPlaceholder let a migration tell a
+// populated /squadai-init block, which must not be thrown away, from an empty one.
+const (
+	RefinementSectionID   = refinementSectionID
+	RefinementPlaceholder = refinementPlaceholder
+)
+
 // memoryProtocolSubagentStub is the short memory-protocol block injected into
 // subagent files. Subagents only need the two daily-use commands; the full
 // protocol (librarian, promote, etc.) lives in the orchestrator.

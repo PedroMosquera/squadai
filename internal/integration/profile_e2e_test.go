@@ -90,7 +90,7 @@ func TestApplyProfileCheap_E2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	memSection := marker.ExtractSection(string(agentsMD), memory.SectionIDForAgentID(domain.AgentOpenCode))
+	memSection := marker.ExtractSection(string(agentsMD), memory.SectionID)
 	if memSection != memory.ProtocolStub {
 		t.Errorf("memory section should be the summary stub, got:\n%s", memSection)
 	}
@@ -113,7 +113,7 @@ func TestApplyProfileCheap_E2E(t *testing.T) {
 	}
 
 	// 5. The always-on efficiency protocol is present.
-	if !marker.HasSection(string(agentsMD), "efficiency:opencode") {
+	if !marker.HasSection(string(agentsMD), "efficiency") {
 		t.Error("efficiency section missing from AGENTS.md")
 	}
 

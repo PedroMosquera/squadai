@@ -249,6 +249,26 @@ func (o *OverrideAdapter) LegacyInstructionsFiles(homeDir, projectDir string) []
 	return l.LegacyInstructionsFiles(homeDir, projectDir)
 }
 
+// LegacyRulesFrontmatter delegates to the base adapter when its legacy rule
+// file carried squadai frontmatter (Cursor, Windsurf).
+func (o *OverrideAdapter) LegacyRulesFrontmatter() string {
+	l, ok := o.base.(interface{ LegacyRulesFrontmatter() string })
+	if !ok {
+		return ""
+	}
+	return l.LegacyRulesFrontmatter()
+}
+
+// ProjectImportFile delegates to the base adapter when it needs a file that
+// imports the shared AGENTS.md (Claude Code).
+func (o *OverrideAdapter) ProjectImportFile(projectDir string) string {
+	l, ok := o.base.(interface{ ProjectImportFile(string) string })
+	if !ok {
+		return ""
+	}
+	return l.ProjectImportFile(projectDir)
+}
+
 // MCPCommandStyle delegates to the base adapter.
 func (o *OverrideAdapter) MCPCommandStyle() string { return o.base.MCPCommandStyle() }
 

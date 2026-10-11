@@ -192,7 +192,7 @@ func TestProjectPaths(t *testing.T) {
 		// VS Code reads .github/copilot-instructions.md for project-wide guidance and
 		// documents no root .instructions.md:
 		// https://code.visualstudio.com/docs/copilot/customization/custom-instructions
-		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".github", "copilot-instructions.md")},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, "AGENTS.md")},
 		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".agents", "skills")},
 	}
 
@@ -340,6 +340,7 @@ func TestAdapter_LegacyInstructionsFiles(t *testing.T) {
 	want := []string{
 		filepath.Join(project, ".instructions.md"),
 		filepath.Join(ConfigDir(home), ".instructions.md"),
+		filepath.Join(project, ".github", "copilot-instructions.md"),
 	}
 	if len(got) != len(want) {
 		t.Fatalf("LegacyInstructionsFiles = %q, want %q", got, want)

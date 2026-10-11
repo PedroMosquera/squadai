@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/paths"
@@ -190,7 +189,7 @@ func TestProjectPaths(t *testing.T) {
 		want string
 	}{
 		{"ProjectConfigFile", a.ProjectConfigFile(project), filepath.Join(project, ".windsurf", "mcp_config.json")},
-		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, ".windsurf", "rules", "squadai.md")},
+		{"ProjectRulesFile", a.ProjectRulesFile(project), filepath.Join(project, "AGENTS.md")},
 		{"ProjectSkillsDir", a.ProjectSkillsDir(project), filepath.Join(project, ".agents", "skills")},
 	}
 
@@ -333,18 +332,15 @@ func TestAdapter_MCPConfigPath(t *testing.T) {
 }
 
 func TestAdapter_RulesFrontmatter(t *testing.T) {
-	a := New()
+	if got := New().RulesFrontmatter(); got != "" {
+		t.Errorf("RulesFrontmatter() = %q, want empty: team standards go to AGENTS.md as a marker block", got)
+	}
+}
+
+func TestAdapter_LegacyRulesFrontmatter(t *testing.T) {
 	want := "---\ntrigger: always_on\n---\n\n"
-	got := a.RulesFrontmatter()
-	if got != want {
-		t.Errorf("RulesFrontmatter() = %q, want %q", got, want)
-	}
-	// Sanity-check expected key markers.
-	if !strings.Contains(got, "---") {
-		t.Error("RulesFrontmatter() should contain YAML delimiters '---'")
-	}
-	if !strings.Contains(got, "trigger:") {
-		t.Error("RulesFrontmatter() should contain 'trigger:' key")
+	if got := New().LegacyRulesFrontmatter(); got != want {
+		t.Errorf("LegacyRulesFrontmatter() = %q, want %q", got, want)
 	}
 }
 

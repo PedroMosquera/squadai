@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/PedroMosquera/squadai/internal/backup"
+	"github.com/PedroMosquera/squadai/internal/components/legacyinstructions"
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/exitcode"
@@ -490,6 +491,9 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	}
 
 	fmt.Fprintln(stdout, "\nApply complete. Use 'squadai verify' to check.")
+	if note := agentsMDMigrationNote(report); note != "" {
+		fmt.Fprintln(stdout, note)
+	}
 
 	// Repeats on every apply until hooks are installed. Detection errors are
 	// swallowed so the nudge never fails apply or shows outside a git repo.
@@ -503,4 +507,17 @@ func runApplyImpl(args []string, stdout io.Writer, externalSink pipeline.EventSi
 	}
 
 	return nil
+}
+
+// agentsMDMigrationNote returns the one-time notice for an apply that moved
+// squadai blocks out of per-harness instruction files, or "". It repeats only
+// if old blocks reappear, because a migrated file plans no further action.
+func agentsMDMigrationNote(report *domain.ApplyReport) string {
+	for _, s := range report.Steps {
+		if s.Status == domain.StepSuccess && s.Action.Action != domain.ActionSkip && legacyinstructions.IsMigration(s.Action) {
+			return "Note: squadai now writes shared instructions to AGENTS.md; CLAUDE.md imports it. " +
+				"Old squadai blocks were removed from per-harness instruction files; your own content was kept."
+		}
+	}
+	return ""
 }

@@ -68,7 +68,7 @@ func TestExecute_SkipActionsSucceed(t *testing.T) {
 
 	// Pre-create everything so plan returns all skips.
 	memoryPath := filepath.Join(project, "AGENTS.md") // OpenCode memory targets project-level
-	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
 	if err := os.WriteFile(memoryPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}

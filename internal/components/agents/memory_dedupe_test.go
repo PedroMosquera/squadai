@@ -75,8 +75,8 @@ func TestTeamMode_MemoryEnabled_ExactlyOneMemoryProtocolInRulesFile(t *testing.T
 	if content := marker.ExtractSection(doc, memorySectionID); content != "" {
 		t.Errorf("agents memory-protocol section should be cleared when memory component owns the protocol, got:\n%s", content)
 	}
-	// The memory component's section is the surviving one.
-	if !marker.HasSection(doc, memory.SectionIDForAgentID(adapter.ID())) {
+	// The memory component's shared AGENTS.md section is the surviving one.
+	if !marker.HasSection(doc, memory.SectionID) {
 		t.Error("memory component section missing from rules file")
 	}
 }

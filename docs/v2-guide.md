@@ -131,7 +131,7 @@ Each file contains YAML frontmatter (description, mode) and the rendered templat
 
 ### Solo (VS Code Copilot, Windsurf, Codex)
 
-Solo agents cannot delegate to sub-agents at all. The orchestrator template is injected into the project rules file (`.github/copilot-instructions.md` for VS Code, `.windsurfrules` for Windsurf, `AGENTS.md` for Codex) using marker blocks:
+Solo agents cannot delegate to sub-agents at all. The orchestrator template is injected once into the shared `AGENTS.md`, which VS Code, Windsurf and Codex all read, using a marker block rendered for the first enabled solo agent:
 
 ```markdown
 <!-- squadai:team -->
@@ -148,9 +148,9 @@ The solo template instructs the agent to execute all methodology phases sequenti
 |-------|----------|----------------------|-----------------|
 | OpenCode | native | `.opencode/agents/orchestrator.md` | `.opencode/agents/<role>.md` |
 | Cursor | native | `.cursor/agents/orchestrator.md` | `.cursor/agents/<role>.md` |
-| Claude Code | prompt | `CLAUDE.md` (marker block) | None |
-| VS Code Copilot | solo | `.github/copilot-instructions.md` (marker block) | None |
-| Windsurf | solo | `.windsurfrules` (marker block) | None |
+| Claude Code | native | `.claude/agents/orchestrator.md` | `.claude/agents/<role>.md` |
+| VS Code Copilot | solo | `AGENTS.md` (marker block) | None |
+| Windsurf | solo | `AGENTS.md` (marker block) | None |
 
 ---
 
@@ -314,7 +314,7 @@ Supported components: memory, rules, settings, mcp, agents, skills, commands, pl
 
 | Component | File Path |
 |-----------|-----------|
-| System prompt | `CLAUDE.md` (project root) |
+| System prompt | `AGENTS.md` (project root), imported by a marker block in `CLAUDE.md` |
 | Agents (native) | `.claude/agents/<name>.md` (team roles, your `agents`, plus SquadAI's `squadai-manager`) |
 | Settings | `.claude/settings.json` |
 | MCP | `.mcp.json` `"mcpServers"` key (shared with VS Code) |
@@ -331,7 +331,7 @@ Disabling the commands component (`"commands": {"enabled": false}`) makes the ne
 
 | Component | File Path |
 |-----------|-----------|
-| System prompt | `.cursorrules` (project root) |
+| System prompt | `AGENTS.md` (project root) |
 | Settings | `.cursor/mcp.json` |
 | MCP | `.cursor/mcp.json` `"mcpServers"` key |
 | Agents (native) | `.cursor/agents/<role>.md` |
@@ -343,8 +343,8 @@ Supported components: memory, rules, settings, mcp, agents, skills, plugins.
 
 | Component | File Path |
 |-----------|-----------|
-| System prompt | `.github/copilot-instructions.md` |
-| Team (solo) | `.github/copilot-instructions.md` (marker block) |
+| System prompt | `AGENTS.md` (project root); `.github/copilot-instructions.md` only for the copilot instructions template |
+| Team (solo) | `AGENTS.md` (marker block) |
 | Settings | `.vscode/settings.json` |
 | MCP | `.mcp.json` `"mcpServers"` key (shared with Claude Code) |
 | Skills | `.agents/skills/<name>/SKILL.md` (shared, see [Installation Layout](#installation-layout)) |
@@ -355,8 +355,8 @@ Supported components: memory, rules, settings, mcp, skills.
 
 | Component | File Path |
 |-----------|-----------|
-| System prompt | `.windsurfrules` (project root) |
-| Team (solo) | `.windsurfrules` (marker block) |
+| System prompt | `AGENTS.md` (project root) |
+| Team (solo) | `AGENTS.md` (marker block) |
 | Settings | `.windsurf/mcp_config.json` |
 | MCP | `.windsurf/mcp_config.json` `"mcpServers"` key |
 | Skills | `.agents/skills/<name>/SKILL.md` (shared, see [Installation Layout](#installation-layout)) |

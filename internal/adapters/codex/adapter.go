@@ -113,7 +113,7 @@ func (a *Adapter) ProjectConfigFile(_ string) string {
 // ProjectRulesFile returns <projectDir>/AGENTS.md — Codex reads project
 // instructions from AGENTS.md at the repo root.
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, "AGENTS.md")
+	return domain.SharedInstructionsFile(projectDir)
 }
 
 // ProjectAgentsDir returns empty string — Codex is a solo agent with no sub-agents.

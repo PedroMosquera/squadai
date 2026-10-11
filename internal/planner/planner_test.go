@@ -3,6 +3,7 @@ package planner
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/codex"
@@ -189,9 +190,9 @@ func TestPlan_UpToDate_AllSkip(t *testing.T) {
 	project := t.TempDir()
 	adapter := opencode.New()
 
-	// Pre-create memory content at project-level AGENTS.md with OpenCode template.
+	// Pre-create the shared AGENTS.md memory section, which uses the generic template.
 	promptPath := filepath.Join(project, "AGENTS.md")
-	memContent := marker.InjectSection("", "memory", memory.TemplateForAgentID(domain.AgentOpenCode))
+	memContent := marker.InjectSection("", "memory", memory.ProtocolTemplate())
 	if err := os.WriteFile(promptPath, []byte(memContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -738,17 +739,17 @@ func TestPlan_DisabledAdapter_KeepsFilesSharedWithEnabledAdapter(t *testing.T) {
 	}
 }
 
-// The copilot instructions template writes the same file VS Code reads its
-// project rules from, so disabling VS Code must not delete it while the
-// template is configured.
+// The copilot instructions template writes the file VS Code used to get its
+// own copy of every shared block in, so disabling VS Code must not delete it
+// while the template is configured.
 func TestPlan_DisabledVSCode_KeepsCopilotInstructionsWhenTemplateConfigured(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	vs := vscode.New()
 
 	target := filepath.Join(project, copilot.CopilotInstructionsPath)
-	if vs.ProjectRulesFile(project) != target {
-		t.Fatalf("test premise broken: VS Code rules file should be %s", target)
+	if !slices.Contains(managedFilePaths(vs, home, project), target) {
+		t.Fatalf("test premise broken: VS Code cleanup should cover %s", target)
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		t.Fatal(err)

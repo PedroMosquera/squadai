@@ -141,14 +141,17 @@ func TestPlan_OptionChange_TriggersUpdate(t *testing.T) {
 	}
 }
 
-// ─── Adapter-scoped sections in a shared rules file ─────────────────────────
+// ─── One shared section in AGENTS.md ─────────────────────────────────────────
 
-func TestApply_SharedRulesFile_AdapterScopedSections(t *testing.T) {
+func TestApply_SharedAgentsMD_OneSection(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	inst := New(Options{MemoryEnabled: false})
+	path := filepath.Join(project, "AGENTS.md")
+	if err := os.WriteFile(path, []byte(marker.InjectSection("", "efficiency:opencode", "old copy")), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	// OpenCode and Pi both target the project AGENTS.md.
 	for _, adapter := range []domain.Adapter{opencode.New(), pi.New()} {
 		actions, err := inst.Plan(adapter, home, project)
 		if err != nil {
@@ -162,18 +165,35 @@ func TestApply_SharedRulesFile_AdapterScopedSections(t *testing.T) {
 		}
 	}
 
-	data, err := os.ReadFile(filepath.Join(project, "AGENTS.md"))
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
 	doc := string(data)
-	for _, sid := range []string{"efficiency:opencode", "efficiency:pi"} {
-		if !marker.HasSection(doc, sid) {
-			t.Errorf("shared AGENTS.md missing adapter-scoped section %q", sid)
-		}
+	if ids := marker.SectionIDs(doc); len(ids) != 1 || ids[0] != SectionID {
+		t.Errorf("AGENTS.md sections = %v, want one shared %q section", ids, SectionID)
 	}
-	if strings.Count(doc, "## Session Efficiency Protocol") != 2 {
-		t.Errorf("expected one protocol per adapter, got %d", strings.Count(doc, "## Session Efficiency Protocol"))
+	if n := strings.Count(doc, "## Session Efficiency Protocol"); n != 1 {
+		t.Errorf("expected one protocol in AGENTS.md, got %d", n)
+	}
+}
+
+func TestContentForAgentID_SharedCopyDelegatesWhenAnyAgentCan(t *testing.T) {
+	solo := New(Options{Agents: []domain.AgentID{domain.AgentVSCodeCopilot, domain.AgentWindsurf}})
+	got, err := solo.ContentForAgentID("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "**Timebox exploration.**") {
+		t.Errorf("solo-only project should get the timebox variant:\n%s", got)
+	}
+	mixed := New(Options{Agents: []domain.AgentID{domain.AgentVSCodeCopilot, domain.AgentOpenCode}})
+	got, err = mixed.ContentForAgentID("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "**Delegate exploration.**") {
+		t.Errorf("a project with a delegating adapter should get the delegation variant:\n%s", got)
 	}
 }
 

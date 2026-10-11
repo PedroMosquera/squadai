@@ -72,7 +72,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	var actions []domain.PlannedAction
 	for _, tgt := range brandTargets(adapter, homeDir, projectDir) {
-		action, err := planTarget(adapter, tgt)
+		action, err := planTarget(domain.BlockOwner(adapter.ID(), projectDir, tgt.path), tgt)
 		if err != nil {
 			return nil, err
 		}
@@ -82,21 +82,23 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 }
 
 // planTarget computes the planned action for a single banner target file.
-func planTarget(adapter domain.Adapter, tgt brandTarget) (domain.PlannedAction, error) {
+// owner is "" for the shared AGENTS.md, which gets the generic banner.
+func planTarget(owner domain.AgentID, tgt brandTarget) (domain.PlannedAction, error) {
 	existing, err := fileutil.ReadFileOrEmpty(tgt.path)
 	if err != nil {
 		return domain.PlannedAction{}, fmt.Errorf("read target file: %w", err)
 	}
 
 	base := domain.PlannedAction{
-		ID:         fmt.Sprintf("%s-%s-brand", adapter.ID(), tgt.idSuffix),
-		Agent:      adapter.ID(),
+		ID:         fmt.Sprintf("%s-%s-brand", domain.BlockActionPrefix(owner), tgt.idSuffix),
+		Agent:      owner,
 		Component:  domain.ComponentBrand,
 		TargetPath: tgt.path,
 	}
 
-	desiredContent := fence(templateForAdapter(adapter))
-	sectionID := SectionIDForAgentID(adapter.ID())
+	desiredContent := fence(templateForAgentID(owner))
+	sectionID := SectionIDForAgentID(owner)
+	scopedLeft := owner == "" && marker.StripScoped(string(existing), SectionID) != string(existing)
 
 	// Check the adapter-scoped section first; fall back to a legacy unscoped
 	// section for single-adapter installs (new writes migrate to scoped markers).
@@ -104,7 +106,7 @@ func planTarget(adapter domain.Adapter, tgt brandTarget) (domain.PlannedAction, 
 		if !marker.HasSection(string(existing), sid) {
 			continue
 		}
-		if marker.ExtractSection(string(existing), sid) == desiredContent {
+		if marker.ExtractSection(string(existing), sid) == desiredContent && !scopedLeft {
 			base.Action = domain.ActionSkip
 			base.Description = "brand banner already up to date"
 		} else {
@@ -159,7 +161,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		if tgt.global {
 			checkPrefix = "brand-global"
 		}
-		targetResults, err := verifyTarget(adapter, tgt.path, checkPrefix)
+		targetResults, err := verifyTarget(domain.BlockOwner(adapter.ID(), projectDir, tgt.path), tgt.path, checkPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +171,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 }
 
 // verifyTarget checks a single banner target file.
-func verifyTarget(adapter domain.Adapter, promptPath, checkPrefix string) ([]domain.VerifyResult, error) {
+func verifyTarget(owner domain.AgentID, promptPath, checkPrefix string) ([]domain.VerifyResult, error) {
 	var results []domain.VerifyResult
 
 	// Check file exists.
@@ -193,7 +195,7 @@ func verifyTarget(adapter domain.Adapter, promptPath, checkPrefix string) ([]dom
 		return nil, fmt.Errorf("read target: %w", err)
 	}
 
-	sectionID := SectionIDForAgentID(adapter.ID())
+	sectionID := SectionIDForAgentID(owner)
 	if !marker.HasSection(string(content), sectionID) && !marker.HasSection(string(content), SectionID) {
 		results = append(results, domain.VerifyResult{
 			Check:   checkPrefix + "-markers-present",
@@ -212,7 +214,7 @@ func verifyTarget(adapter domain.Adapter, promptPath, checkPrefix string) ([]dom
 	if current == "" {
 		current = marker.ExtractSection(string(content), SectionID)
 	}
-	expected := fence(templateForAdapter(adapter))
+	expected := fence(templateForAgentID(owner))
 	if current != expected {
 		results = append(results, domain.VerifyResult{
 			Check:   checkPrefix + "-content-current",
@@ -234,11 +236,6 @@ func verifyTarget(adapter domain.Adapter, promptPath, checkPrefix string) ([]dom
 // output (which strips the surrounding newlines added during injection).
 func fence(banner string) string {
 	return "```text\n" + banner + "\n```"
-}
-
-// templateForAdapter returns the agent-specific brand banner for the given adapter.
-func templateForAdapter(adapter domain.Adapter) string {
-	return templateForAgentID(adapter.ID())
 }
 
 // templateForAgentID returns the brand banner for a given agent ID.
@@ -271,8 +268,8 @@ func TemplateForAgentID(agentID domain.AgentID) string {
 	return templateForAgentID(agentID)
 }
 
-// SectionIDForAgentID returns the adapter-scoped brand marker section. OpenCode
-// and Pi both target AGENTS.md, so brand sections must not share one marker.
+// SectionIDForAgentID returns the adapter-scoped brand marker section for an
+// adapter's own file, or the unscoped one for "" (the shared AGENTS.md).
 func SectionIDForAgentID(agentID domain.AgentID) string {
 	if agentID == "" {
 		return SectionID
@@ -281,8 +278,12 @@ func SectionIDForAgentID(agentID domain.AgentID) string {
 }
 
 // InjectContent writes the canonical adapter-scoped brand section and removes
-// any legacy unscoped section during migration.
+// any legacy unscoped section during migration. An empty agentID writes the
+// shared AGENTS.md section and removes the scoped copies.
 func InjectContent(document string, agentID domain.AgentID, content string) string {
+	if agentID == "" {
+		return marker.InjectSection(marker.StripScoped(document, SectionID), SectionID, content)
+	}
 	if marker.HasSection(document, SectionID) {
 		document = marker.InjectSection(document, SectionID, "")
 	}

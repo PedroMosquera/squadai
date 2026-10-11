@@ -209,9 +209,10 @@ func TestPlan_SkipWhenCurrent(t *testing.T) {
 	adapter := pi.New()
 	inst := New()
 
-	// Write file with the exact brand section Apply would produce.
+	// Write file with the exact brand section Apply would produce: the
+	// shared AGENTS.md carries the generic banner.
 	targetPath := filepath.Join(project, "AGENTS.md")
-	banner := templateForAgentID(adapter.ID())
+	banner := templateForAgentID("")
 	content := marker.InjectSection("", SectionID, "```text\n"+banner+"\n```\n")
 	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -271,13 +272,13 @@ func TestApply_Create(t *testing.T) {
 	}
 
 	content, _ := os.ReadFile(actions[0].TargetPath)
-	if !marker.HasSection(string(content), SectionIDForAgentID(adapter.ID())) {
+	if !marker.HasSection(string(content), SectionID) {
 		t.Error("expected brand marker section in file after apply")
 	}
 	if !strings.Contains(string(content), "SquadAI") && !strings.Contains(string(content), "squadai") {
 		// ASCII art may not contain literal text; fall back to checking the
 		// banner bytes are present.
-		if !strings.Contains(string(content), templateForAgentID(adapter.ID())) {
+		if !strings.Contains(string(content), templateForAgentID("")) {
 			t.Error("expected banner content to be present after apply")
 		}
 	}
@@ -312,7 +313,7 @@ func TestApply_FencedBlock(t *testing.T) {
 
 	content, _ := os.ReadFile(actions[0].TargetPath)
 	s := string(content)
-	banner := templateForAgentID(adapter.ID())
+	banner := templateForAgentID("")
 
 	if !strings.Contains(s, "```text") {
 		t.Error("written content should include a ```text opening fence")
@@ -349,57 +350,51 @@ func TestApply_PreservesExistingContent(t *testing.T) {
 	if !strings.Contains(s, "Do not delete this.") {
 		t.Error("existing content should be preserved")
 	}
-	if !marker.HasSection(s, SectionIDForAgentID(adapter.ID())) {
+	if !marker.HasSection(s, SectionID) {
 		t.Error("brand section should be injected")
 	}
 }
 
-func TestApply_SharedAgentsFile_KeepsAdapterSectionsSeparate(t *testing.T) {
+func TestApply_SharedAgentsFile_OneGenericBanner(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
 	openCode := opencode.New()
 	piAdapter := pi.New()
 	inst := New()
 
-	openActions, err := inst.Plan(openCode, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := inst.Apply(openActions[0]); err != nil {
-		t.Fatal(err)
-	}
-
-	piActions, err := inst.Plan(piAdapter, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := inst.Apply(piActions[0]); err != nil {
-		t.Fatal(err)
-	}
-
 	targetPath := filepath.Join(project, "AGENTS.md")
+	old := marker.InjectSection("", SectionIDForAgentID(openCode.ID()), "old opencode banner")
+	if err := os.WriteFile(targetPath, []byte(old), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []domain.Adapter{openCode, piAdapter} {
+		actions, err := inst.Plan(a, home, project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := inst.Apply(actions[0]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	content, err := os.ReadFile(targetPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(content)
-	if !marker.HasSection(s, SectionIDForAgentID(openCode.ID())) {
-		t.Fatal("OpenCode brand section missing")
+	if ids := marker.SectionIDs(string(content)); len(ids) != 1 || ids[0] != SectionID {
+		t.Fatalf("AGENTS.md sections = %v, want one shared %q section", ids, SectionID)
 	}
-	if !marker.HasSection(s, SectionIDForAgentID(piAdapter.ID())) {
-		t.Fatal("Pi brand section missing")
+	if got := marker.ExtractSection(string(content), SectionID); got != fence(ProtocolTemplate()) {
+		t.Errorf("shared banner = %q, want the generic squadai banner", got)
 	}
-
-	openActions, err = inst.Plan(openCode, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	piActions, err = inst.Plan(piAdapter, home, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if openActions[0].Action != domain.ActionSkip || piActions[0].Action != domain.ActionSkip {
-		t.Fatalf("both adapters should be current, got OpenCode=%s Pi=%s", openActions[0].Action, piActions[0].Action)
+	for _, a := range []domain.Adapter{openCode, piAdapter} {
+		actions, err := inst.Plan(a, home, project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actions[0].Action != domain.ActionSkip {
+			t.Errorf("%s should be current, got %s", a.ID(), actions[0].Action)
+		}
 	}
 }
 
@@ -586,8 +581,9 @@ var _ domain.Adapter = (*unsupportedAdapter)(nil)
 // ─── Co-brand round trips ─────────────────────────────────────────────────────
 
 // TestPlanApplyVerify_CoBrandedAgents runs the full plan→apply→verify round
-// trip for every co-branded adapter and asserts the co-brand tag lands in the
-// target file.
+// trip for every co-branded adapter without a project, and asserts the
+// co-brand tag lands in the adapter's own global file. A project's shared
+// AGENTS.md gets the generic banner instead.
 func TestPlanApplyVerify_CoBrandedAgents(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -602,7 +598,7 @@ func TestPlanApplyVerify_CoBrandedAgents(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			home := t.TempDir()
-			project := t.TempDir()
+			project := ""
 			inst := New()
 
 			actions, err := inst.Plan(tc.adapter, home, project)
@@ -642,8 +638,8 @@ func TestPlanApplyVerify_CoBrandedAgents(t *testing.T) {
 }
 
 // TestPiBrand_LandsInProjectAndGlobalAgentsFiles is the explicit Pi extra
-// presence check: the banner must land in the project AGENTS.md AND the
-// global ~/.pi/agent/AGENTS.md.
+// presence check: the shared project AGENTS.md gets the generic banner and
+// the global ~/.pi/agent/AGENTS.md gets the Pi co-brand.
 func TestPiBrand_LandsInProjectAndGlobalAgentsFiles(t *testing.T) {
 	home := t.TempDir()
 	project := t.TempDir()
@@ -660,20 +656,21 @@ func TestPiBrand_LandsInProjectAndGlobalAgentsFiles(t *testing.T) {
 		}
 	}
 
-	banner := assets.MustRead("brand/banner-pi.txt")
-	for _, path := range []string{
-		filepath.Join(project, "AGENTS.md"),
-		filepath.Join(home, ".pi", "agent", "AGENTS.md"),
+	for _, tc := range []struct {
+		path, banner, section string
+	}{
+		{filepath.Join(project, "AGENTS.md"), assets.MustRead("brand/banner-squadai.txt"), SectionID},
+		{filepath.Join(home, ".pi", "agent", "AGENTS.md"), assets.MustRead("brand/banner-pi.txt"), SectionIDForAgentID(domain.AgentPi)},
 	} {
-		content, readErr := os.ReadFile(path)
+		content, readErr := os.ReadFile(tc.path)
 		if readErr != nil {
 			t.Fatalf("banner target missing: %v", readErr)
 		}
-		if !strings.Contains(string(content), banner) {
-			t.Errorf("%s missing the Pi co-brand banner", path)
+		if !strings.Contains(string(content), tc.banner) {
+			t.Errorf("%s missing its banner", tc.path)
 		}
-		if !marker.HasSection(string(content), SectionIDForAgentID(domain.AgentPi)) {
-			t.Errorf("%s missing the scoped brand marker section", path)
+		if !marker.HasSection(string(content), tc.section) {
+			t.Errorf("%s missing the %s marker section", tc.path, tc.section)
 		}
 	}
 }

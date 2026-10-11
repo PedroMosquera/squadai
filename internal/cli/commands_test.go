@@ -124,15 +124,19 @@ func TestRunInitApplyVerifyDiff_OpenCodePiSharedAgentsFileClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	body := string(content)
-	for _, section := range []string{
-		"squadai:memory:opencode",
-		"squadai:memory:pi",
-		"squadai:efficiency:opencode",
-		"squadai:efficiency:pi",
-	} {
-		if !strings.Contains(body, section) {
-			t.Fatalf("AGENTS.md missing scoped section %q:\n%s", section, body)
+	requireOneSharedCopy(t, string(content), "memory", "efficiency")
+}
+
+// requireOneSharedCopy asserts the shared AGENTS.md carries each block once,
+// unscoped, with no per-adapter copies left.
+func requireOneSharedCopy(t *testing.T, body string, sections ...string) {
+	t.Helper()
+	for _, section := range sections {
+		if n := strings.Count(body, marker.OpenTag(section)); n != 1 {
+			t.Errorf("AGENTS.md has %d %q sections, want 1:\n%s", n, section, body)
+		}
+		if strings.Contains(body, "<!-- squadai:"+section+":") {
+			t.Errorf("AGENTS.md still has an adapter-scoped %q copy:\n%s", section, body)
 		}
 	}
 }
@@ -172,23 +176,13 @@ func TestRunInitApplyVerifyRemove_OpenCodeCodexSharedAgentsFile(t *testing.T) {
 		t.Fatalf("verify should not have failures after apply:\n%s", verifyOut.String())
 	}
 
-	// AGENTS.md is shared: both adapters' scoped sections must coexist.
+	// AGENTS.md is shared: both adapters read one copy of each block.
 	agentsPath := filepath.Join(project, "AGENTS.md")
 	content, err := os.ReadFile(agentsPath)
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	body := string(content)
-	for _, section := range []string{
-		"squadai:memory:opencode",
-		"squadai:memory:codex",
-		"squadai:efficiency:opencode",
-		"squadai:efficiency:codex",
-	} {
-		if !strings.Contains(body, section) {
-			t.Fatalf("AGENTS.md missing scoped section %q:\n%s", section, body)
-		}
-	}
+	requireOneSharedCopy(t, string(content), "memory", "efficiency")
 
 	// ~/.codex/config.toml must carry the managed MCP block as TOML tables.
 	configPath := filepath.Join(home, ".codex", "config.toml")
@@ -222,8 +216,8 @@ func TestRunInitApplyVerifyRemove_OpenCodeCodexSharedAgentsFile(t *testing.T) {
 		t.Fatalf("stat config.toml after remove: %v", err)
 	}
 	if data, err := os.ReadFile(agentsPath); err == nil {
-		if strings.Contains(string(data), "squadai:memory:codex") {
-			t.Fatalf("AGENTS.md still contains codex sections after remove:\n%s", data)
+		if strings.Contains(string(data), "squadai:memory") {
+			t.Fatalf("AGENTS.md still contains squadai sections after remove:\n%s", data)
 		}
 	} else if !os.IsNotExist(err) {
 		t.Fatalf("stat AGENTS.md after remove: %v", err)

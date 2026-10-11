@@ -202,7 +202,7 @@ func TestPlan_OpenCode_OutdatedSection_ReturnsUpdate(t *testing.T) {
 
 // ─── Plan (Claude) ──────────────────────────────────────────────────────────
 
-func TestPlan_Claude_TargetsProjectLevel(t *testing.T) {
+func TestPlan_Claude_TargetsSharedAgentsMD(t *testing.T) {
 	project := t.TempDir()
 	adapter := claude.New()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
@@ -214,7 +214,7 @@ func TestPlan_Claude_TargetsProjectLevel(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
-	expected := filepath.Join(project, "CLAUDE.md")
+	expected := filepath.Join(project, "AGENTS.md")
 	if actions[0].TargetPath != expected {
 		t.Errorf("TargetPath = %q, want %q", actions[0].TargetPath, expected)
 	}
@@ -512,7 +512,7 @@ func TestVerify_EmptyContent_ReturnsNil(t *testing.T) {
 
 func TestPlan_Windsurf_NewFile_ReturnsCreate(t *testing.T) {
 	project := t.TempDir()
-	adapter := windsurf.New()
+	adapter := structuredWindsurf()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
@@ -533,7 +533,7 @@ func TestPlan_Windsurf_NewFile_ReturnsCreate(t *testing.T) {
 
 func TestApply_Windsurf_WritesFrontmatter(t *testing.T) {
 	project := t.TempDir()
-	adapter := windsurf.New()
+	adapter := structuredWindsurf()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
@@ -560,7 +560,7 @@ func TestApply_Windsurf_WritesFrontmatter(t *testing.T) {
 
 func TestApply_Windsurf_Idempotent(t *testing.T) {
 	project := t.TempDir()
-	adapter := windsurf.New()
+	adapter := structuredWindsurf()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
@@ -576,7 +576,7 @@ func TestApply_Windsurf_Idempotent(t *testing.T) {
 
 func TestVerify_Windsurf_PassesAfterApply(t *testing.T) {
 	project := t.TempDir()
-	adapter := windsurf.New()
+	adapter := structuredWindsurf()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
@@ -599,7 +599,7 @@ func TestVerify_Windsurf_PassesAfterApply(t *testing.T) {
 
 func TestPlan_Cursor_NewFile_ReturnsCreate(t *testing.T) {
 	project := t.TempDir()
-	adapter := cursor.New()
+	adapter := structuredCursor()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Use gofmt."}, project)
 
 	actions, err := inst.Plan(adapter, t.TempDir(), project)
@@ -617,7 +617,7 @@ func TestPlan_Cursor_NewFile_ReturnsCreate(t *testing.T) {
 
 func TestApply_Cursor_WritesMDCFrontmatter(t *testing.T) {
 	project := t.TempDir()
-	adapter := cursor.New()
+	adapter := structuredCursor()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Always use gofmt."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
@@ -641,7 +641,7 @@ func TestApply_Cursor_WritesMDCFrontmatter(t *testing.T) {
 
 func TestApply_Cursor_Idempotent(t *testing.T) {
 	project := t.TempDir()
-	adapter := cursor.New()
+	adapter := structuredCursor()
 	inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
 
 	actions, _ := inst.Plan(adapter, t.TempDir(), project)
@@ -686,5 +686,48 @@ func TestApply_Claude_StillUsesMarkers(t *testing.T) {
 	data, _ := os.ReadFile(actions[0].TargetPath)
 	if !marker.HasSection(string(data), SectionID) {
 		t.Error("Claude should still use marker blocks")
+	}
+}
+
+// structuredAdapter keeps the frontmatter path covered now that no built-in
+// adapter declares RulesFrontmatter: it restores Windsurf's and Cursor's
+// pre-AGENTS.md rule files.
+type structuredAdapter struct {
+	domain.Adapter
+	fm, file string
+}
+
+func (a structuredAdapter) RulesFrontmatter() string { return a.fm }
+
+func (a structuredAdapter) ProjectRulesFile(projectDir string) string {
+	return filepath.Join(projectDir, a.file)
+}
+
+func structuredWindsurf() domain.Adapter {
+	return structuredAdapter{windsurf.New(), windsurf.New().LegacyRulesFrontmatter(), filepath.Join(".windsurf", "rules", "squadai.md")}
+}
+
+func structuredCursor() domain.Adapter {
+	return structuredAdapter{cursor.New(), cursor.New().LegacyRulesFrontmatter(), filepath.Join(".cursor", "rules", "squadai.mdc")}
+}
+
+func TestPlan_WindsurfAndCursor_TargetSharedAgentsMDWithMarkers(t *testing.T) {
+	for _, adapter := range []domain.Adapter{windsurf.New(), cursor.New()} {
+		project := t.TempDir()
+		inst, _ := New(domain.RulesConfig{TeamStandards: "Standards."}, project)
+		actions, err := inst.Plan(adapter, t.TempDir(), project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := inst.Apply(actions[0]); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(project, "AGENTS.md"))
+		if err != nil {
+			t.Fatalf("%s: %v", adapter.ID(), err)
+		}
+		if marker.ExtractSection(string(data), SectionID) != "Standards." {
+			t.Errorf("%s: AGENTS.md should carry the team-standards block, got %q", adapter.ID(), data)
+		}
 	}
 }

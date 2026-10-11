@@ -106,9 +106,23 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, ".claude", "settings.json")
 }
 
-// ProjectRulesFile returns <projectDir>/CLAUDE.md.
+// ProjectRulesFile returns the shared <projectDir>/AGENTS.md. Claude Code
+// skips AGENTS.md whenever a CLAUDE.md exists, so ProjectImportFile carries
+// an @AGENTS.md import (https://code.claude.com/docs/en/memory).
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
+	return domain.SharedInstructionsFile(projectDir)
+}
+
+// ProjectImportFile returns <projectDir>/CLAUDE.md, which gets a squadai block
+// importing the shared AGENTS.md.
+func (a *Adapter) ProjectImportFile(projectDir string) string {
 	return filepath.Join(projectDir, "CLAUDE.md")
+}
+
+// LegacyInstructionsFiles returns CLAUDE.md: squadai wrote its own copy of
+// every shared block there before AGENTS.md became canonical.
+func (a *Adapter) LegacyInstructionsFiles(_, projectDir string) []string {
+	return []string{filepath.Join(projectDir, "CLAUDE.md")}
 }
 
 // ProjectAgentsDir returns <projectDir>/.claude/agents — Claude Code native sub-agent directory.

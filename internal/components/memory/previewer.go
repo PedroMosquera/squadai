@@ -5,7 +5,6 @@ import (
 
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
-	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
 // Preview implements domain.Previewer for the memory installer. Each entry
@@ -36,8 +35,7 @@ func (i *Installer) Preview(adapter domain.Adapter, homeDir, projectDir string) 
 			return nil, fmt.Errorf("read existing %s: %w", action.TargetPath, err)
 		}
 
-		content := templateForAgentID(action.Agent)
-		proposed := marker.InjectSection(string(existing), SectionID, content)
+		proposed := InjectContent(string(existing), action.Agent, i.ContentForAgentID(action.Agent, action.Mode))
 
 		entry.Diff = fileutil.UnifiedDiff(action.TargetPath, string(existing), proposed)
 		entries = append(entries, entry)

@@ -18,9 +18,9 @@ const (
 )
 
 // Installer implements domain.ComponentInstaller for the rules component.
-// It manages team standards sections in project-level instruction files
-// (AGENTS.md for OpenCode, CLAUDE.md for Claude Code).
-// For Windsurf and Cursor, it writes structured rules files with YAML frontmatter.
+// It manages the team standards section in the project instructions file
+// (the shared AGENTS.md for every built-in adapter). An adapter that declares
+// RulesFrontmatter gets a structured rules file written whole instead.
 type Installer struct {
 	// content is the resolved team standards content to inject.
 	content string
@@ -87,11 +87,12 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, fmt.Errorf("read rules file: %w", err)
 	}
 
-	actionID := fmt.Sprintf("%s-rules", adapter.ID())
+	owner := domain.BlockOwner(adapter.ID(), projectDir, targetPath)
+	actionID := domain.BlockActionPrefix(owner) + "-rules"
 
 	// Cache adapter-declared frontmatter for use during Apply.
 	fm := adapter.RulesFrontmatter()
-	i.agentFrontmatter[adapter.ID()] = fm
+	i.agentFrontmatter[owner] = fm
 
 	// Structured rules (Windsurf/Cursor) use frontmatter comparison, not markers.
 	if fm != "" {
@@ -109,7 +110,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 			return []domain.PlannedAction{
 				{
 					ID:          actionID,
-					Agent:       adapter.ID(),
+					Agent:       owner,
 					Component:   domain.ComponentRules,
 					Action:      domain.ActionSkip,
 					TargetPath:  targetPath,
@@ -124,7 +125,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
-				Agent:       adapter.ID(),
+				Agent:       owner,
 				Component:   domain.ComponentRules,
 				Action:      action,
 				TargetPath:  targetPath,
@@ -139,7 +140,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 			return []domain.PlannedAction{
 				{
 					ID:          actionID,
-					Agent:       adapter.ID(),
+					Agent:       owner,
 					Component:   domain.ComponentRules,
 					Action:      domain.ActionSkip,
 					TargetPath:  targetPath,
@@ -150,7 +151,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return []domain.PlannedAction{
 			{
 				ID:          actionID,
-				Agent:       adapter.ID(),
+				Agent:       owner,
 				Component:   domain.ComponentRules,
 				Action:      domain.ActionUpdate,
 				TargetPath:  targetPath,
@@ -167,7 +168,7 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 	return []domain.PlannedAction{
 		{
 			ID:          actionID,
-			Agent:       adapter.ID(),
+			Agent:       owner,
 			Component:   domain.ComponentRules,
 			Action:      action,
 			TargetPath:  targetPath,

@@ -86,9 +86,12 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, fmt.Errorf("read system prompt: %w", err)
 	}
 
-	desiredContent := i.ContentForAgentID(adapter.ID(), "")
-
-	sectionID := SectionIDForAgentID(adapter.ID())
+	owner := domain.BlockOwner(adapter.ID(), projectDir, promptPath)
+	desiredContent := i.ContentForAgentID(owner, "")
+	sectionID := SectionIDForAgentID(owner)
+	actionID := domain.BlockActionPrefix(owner) + "-prompt-memory"
+	// The shared file must lose the per-adapter copies older versions wrote.
+	scopedLeft := owner == "" && marker.StripScoped(string(existing), SectionID) != string(existing)
 
 	// Check if the adapter-scoped section already matches. Single-adapter
 	// installs may still carry the legacy unscoped marker; a matching legacy
@@ -98,11 +101,11 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 			continue
 		}
 		current := marker.ExtractSection(string(existing), sid)
-		if current == desiredContent {
+		if current == desiredContent && !scopedLeft {
 			return []domain.PlannedAction{
 				{
-					ID:          fmt.Sprintf("%s-%s-memory", adapter.ID(), "prompt"),
-					Agent:       adapter.ID(),
+					ID:          actionID,
+					Agent:       owner,
 					Component:   domain.ComponentMemory,
 					Action:      domain.ActionSkip,
 					TargetPath:  promptPath,
@@ -112,8 +115,8 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		}
 		return []domain.PlannedAction{
 			{
-				ID:          fmt.Sprintf("%s-%s-memory", adapter.ID(), "prompt"),
-				Agent:       adapter.ID(),
+				ID:          actionID,
+				Agent:       owner,
 				Component:   domain.ComponentMemory,
 				Action:      domain.ActionUpdate,
 				TargetPath:  promptPath,
@@ -129,8 +132,8 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 
 	return []domain.PlannedAction{
 		{
-			ID:          fmt.Sprintf("%s-%s-memory", adapter.ID(), "prompt"),
-			Agent:       adapter.ID(),
+			ID:          actionID,
+			Agent:       owner,
 			Component:   domain.ComponentMemory,
 			Action:      action,
 			TargetPath:  promptPath,
@@ -191,7 +194,8 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		return nil, fmt.Errorf("read prompt: %w", err)
 	}
 
-	sectionID := SectionIDForAgentID(adapter.ID())
+	owner := domain.BlockOwner(adapter.ID(), projectDir, promptPath)
+	sectionID := SectionIDForAgentID(owner)
 	if !marker.HasSection(string(content), sectionID) && !marker.HasSection(string(content), SectionID) {
 		results = append(results, domain.VerifyResult{
 			Check:   "memory-markers-present",
@@ -210,7 +214,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	if current == "" {
 		current = marker.ExtractSection(string(content), SectionID)
 	}
-	expected := i.ContentForAgentID(adapter.ID(), "")
+	expected := i.ContentForAgentID(owner, "")
 	switch current {
 	case expected:
 		results = append(results, domain.VerifyResult{
@@ -279,9 +283,8 @@ func TemplateForAgentID(agentID domain.AgentID) string {
 	return templateForAgentID(agentID)
 }
 
-// SectionIDForAgentID returns the adapter-scoped marker section used in shared
-// files such as AGENTS.md. Scoped markers prevent different adapters from
-// overwriting each other's memory content when they target the same file.
+// SectionIDForAgentID returns the adapter-scoped marker section for an
+// adapter's own file, or the unscoped one for "" (the shared AGENTS.md).
 func SectionIDForAgentID(agentID domain.AgentID) string {
 	if agentID == "" {
 		return SectionID
@@ -291,8 +294,12 @@ func SectionIDForAgentID(agentID domain.AgentID) string {
 
 // InjectContent writes the canonical adapter-scoped memory section and removes
 // the legacy unscoped section when present so migrated files do not keep stale
-// duplicate memory blocks.
+// duplicate memory blocks. An empty agentID writes the shared AGENTS.md
+// section and removes every adapter-scoped copy instead.
 func InjectContent(document string, agentID domain.AgentID, content string) string {
+	if agentID == "" {
+		return marker.InjectSection(marker.StripScoped(document, SectionID), SectionID, content)
+	}
 	if marker.HasSection(document, SectionID) {
 		document = marker.InjectSection(document, SectionID, "")
 	}

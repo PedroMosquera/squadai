@@ -268,9 +268,29 @@ func (p *Planner) Plan(cfg *domain.MergedConfig, adapters []domain.Adapter, home
 		actions = append(actions, copilotAction)
 	}
 
+	actions = dedupeSharedInstructions(actions, projectDir)
 	actions = append(actions, p.planStaleCleanup(cfg, adapters, homeDir, projectDir)...)
 
 	return actions, nil
+}
+
+// dedupeSharedInstructions keeps the first action per component on the shared
+// AGENTS.md. Every adapter plans the same block there; the first enabled one in
+// adapter order wins, so the team orchestrator for solo adapters is rendered
+// once rather than rewritten by each.
+func dedupeSharedInstructions(actions []domain.PlannedAction, projectDir string) []domain.PlannedAction {
+	seen := make(map[domain.ComponentID]bool)
+	out := actions[:0]
+	for _, a := range actions {
+		if domain.IsSharedInstructionsFile(projectDir, a.TargetPath) {
+			if seen[a.Component] {
+				continue
+			}
+			seen[a.Component] = true
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // planStaleCleanup removes SquadAI's content from files of disabled adapters.
@@ -283,8 +303,8 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 		adapterByID[adapter.ID()] = adapter
 	}
 
-	// Adapters share files (OpenCode, Pi and Codex all write AGENTS.md), so a
-	// path an enabled adapter still owns must survive cleanup.
+	// Adapters share files (every adapter writes AGENTS.md), so a path an
+	// enabled adapter still owns must survive cleanup.
 	keep := make(map[string]bool)
 	for adapterKey, adapterCfg := range cfg.Adapters {
 		if !adapterCfg.Enabled {
@@ -297,7 +317,7 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 		}
 	}
 
-	// VS Code's rules file is also the copilot template's target.
+	// VS Code's legacy instructions file is also the copilot template's target.
 	if cfg.Copilot.InstructionsTemplate != "" {
 		keep[filepath.Join(projectDir, copilot.CopilotInstructionsPath)] = true
 	}
@@ -345,16 +365,20 @@ func (p *Planner) planStaleCleanup(cfg *domain.MergedConfig, adapters []domain.A
 }
 
 // managedFilePaths returns the set of individual file paths that an adapter's
-// components may write to. Directory paths (agents dir, skills dir, etc.) are
-// excluded because their contents are not directly managed as single files.
+// components may write to, plus its AGENTS.md import file and the legacy
+// instruction files it wrote before. Directory paths (agents dir, skills dir,
+// etc.) are excluded because their contents are not directly managed as
+// single files.
 func managedFilePaths(adapter domain.Adapter, homeDir, projectDir string) []string {
-	return []string{
+	paths := []string{
 		adapter.SystemPromptFile(homeDir),
 		adapter.SettingsPath(homeDir),
 		adapter.ProjectRulesFile(projectDir),
 		adapter.ProjectConfigFile(projectDir),
 		adapter.MCPConfigPath(projectDir),
+		legacyinstructions.ImportFile(adapter, projectDir),
 	}
+	return append(paths, legacyinstructions.LegacyFiles(adapter, homeDir, projectDir)...)
 }
 
 // sanitizePath converts a file path to a string safe for use in an action ID
@@ -417,7 +441,7 @@ func (p *Planner) ComponentInstallers() map[domain.ComponentID]domain.ComponentI
 		installers[domain.ComponentEfficiency] = p.efficiencyInstaller
 	}
 	if p.legacyInstructions != nil {
-		installers[domain.ComponentCleanup] = p.legacyInstructions
+		installers[domain.ComponentInstructions] = p.legacyInstructions
 	}
 	return installers
 }
@@ -494,6 +518,13 @@ func (p *Planner) RenderAction(action domain.PlannedAction, homeDir, projectDir 
 
 	case domain.ComponentEfficiency:
 		return p.renderEfficiency(action, oldContent)
+
+	case domain.ComponentInstructions:
+		if p.legacyInstructions == nil {
+			return oldContent, oldContent, nil
+		}
+		rendered, err := p.legacyInstructions.RenderContent(action)
+		return oldContent, rendered, err
 
 	case domain.ComponentCleanup:
 		stale, _, err := managed.InspectStale(projectDir, action.TargetPath)

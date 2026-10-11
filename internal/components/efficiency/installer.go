@@ -17,15 +17,18 @@ import (
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
 
-// SectionID is the marker section identifier for efficiency content. Sections
-// in shared files (e.g. AGENTS.md used by both OpenCode and Pi) are adapter-
-// scoped via SectionIDForAgentID so adapters do not overwrite each other.
+// SectionID is the marker section identifier for efficiency content. The
+// shared AGENTS.md uses it unscoped; an adapter's own file uses the scoped ID
+// from SectionIDForAgentID.
 const SectionID = "efficiency"
 
 // Options controls efficiency template rendering.
 type Options struct {
 	// MemoryEnabled renders the memory-search-first rule when true.
 	MemoryEnabled bool
+	// Agents are the enabled adapters. The shared AGENTS.md copy gets the
+	// delegation variant when any of them can delegate; empty means it does.
+	Agents []domain.AgentID
 }
 
 // templateData is the data passed to the session.md text/template.
@@ -87,15 +90,34 @@ func SectionIDForAgentID(agentID domain.AgentID) string {
 	return SectionID + ":" + string(agentID)
 }
 
-// ContentForAgentID renders the session-efficiency protocol for an agent.
+// sharedDelegation reports whether the shared AGENTS.md copy, read by every
+// enabled adapter, gets the delegation variant.
+func (i *Installer) sharedDelegation() bool {
+	if len(i.opts.Agents) == 0 {
+		return true
+	}
+	for _, a := range i.opts.Agents {
+		if delegationForAgentID(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// ContentForAgentID renders the session-efficiency protocol for an agent. An
+// empty agentID renders the shared AGENTS.md copy.
 func (i *Installer) ContentForAgentID(agentID domain.AgentID) (string, error) {
 	tmpl, err := template.New("session").Parse(assets.MustRead("efficiency/session.md"))
 	if err != nil {
 		return "", fmt.Errorf("parse efficiency template: %w", err)
 	}
 	var b strings.Builder
+	delegation := delegationForAgentID(agentID)
+	if agentID == "" {
+		delegation = i.sharedDelegation()
+	}
 	err = tmpl.Execute(&b, templateData{
-		Delegation:    delegationForAgentID(agentID),
+		Delegation:    delegation,
 		MemoryEnabled: i.opts.MemoryEnabled,
 	})
 	if err != nil {
@@ -105,8 +127,12 @@ func (i *Installer) ContentForAgentID(agentID domain.AgentID) (string, error) {
 }
 
 // InjectContent writes the adapter-scoped efficiency section, clearing any
-// legacy unscoped section so migrated files never carry duplicates.
+// legacy unscoped section so migrated files never carry duplicates. An empty
+// agentID writes the shared AGENTS.md section and clears the scoped copies.
 func InjectContent(document string, agentID domain.AgentID, content string) string {
+	if agentID == "" {
+		return marker.InjectSection(marker.StripScoped(document, SectionID), SectionID, content)
+	}
 	if marker.HasSection(document, SectionID) {
 		document = marker.InjectSection(document, SectionID, "")
 	}
@@ -126,24 +152,25 @@ func (i *Installer) Plan(adapter domain.Adapter, homeDir, projectDir string) ([]
 		return nil, fmt.Errorf("read rules file: %w", err)
 	}
 
-	desired, err := i.ContentForAgentID(adapter.ID())
+	owner := domain.BlockOwner(adapter.ID(), projectDir, promptPath)
+	desired, err := i.ContentForAgentID(owner)
 	if err != nil {
 		return nil, err
 	}
+	scopedLeft := owner == "" && marker.StripScoped(string(existing), SectionID) != string(existing)
 
-	actionID := fmt.Sprintf("%s-prompt-efficiency", adapter.ID())
 	base := domain.PlannedAction{
-		ID:         actionID,
-		Agent:      adapter.ID(),
+		ID:         domain.BlockActionPrefix(owner) + "-prompt-efficiency",
+		Agent:      owner,
 		Component:  domain.ComponentEfficiency,
 		TargetPath: promptPath,
 	}
 
-	for _, sid := range []string{SectionIDForAgentID(adapter.ID()), SectionID} {
+	for _, sid := range []string{SectionIDForAgentID(owner), SectionID} {
 		if !marker.HasSection(string(existing), sid) {
 			continue
 		}
-		if marker.ExtractSection(string(existing), sid) == desired {
+		if marker.ExtractSection(string(existing), sid) == desired && !scopedLeft {
 			base.Action = domain.ActionSkip
 			base.Description = "efficiency section already up to date"
 			return []domain.PlannedAction{base}, nil
@@ -208,7 +235,8 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 		Passed: true,
 	})
 
-	sectionID := SectionIDForAgentID(adapter.ID())
+	owner := domain.BlockOwner(adapter.ID(), projectDir, promptPath)
+	sectionID := SectionIDForAgentID(owner)
 	if !marker.HasSection(string(content), sectionID) && !marker.HasSection(string(content), SectionID) {
 		results = append(results, domain.VerifyResult{
 			Check:   "efficiency-markers-present",
@@ -226,7 +254,7 @@ func (i *Installer) Verify(adapter domain.Adapter, homeDir, projectDir string) (
 	if current == "" {
 		current = marker.ExtractSection(string(content), SectionID)
 	}
-	expected, err := i.ContentForAgentID(adapter.ID())
+	expected, err := i.ContentForAgentID(owner)
 	if err != nil {
 		return nil, err
 	}

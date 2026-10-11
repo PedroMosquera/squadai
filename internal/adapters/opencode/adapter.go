@@ -106,9 +106,9 @@ func (a *Adapter) ProjectConfigFile(projectDir string) string {
 	return filepath.Join(projectDir, "opencode.json")
 }
 
-// ProjectRulesFile returns <projectDir>/AGENTS.md.
+// ProjectRulesFile returns the shared <projectDir>/AGENTS.md.
 func (a *Adapter) ProjectRulesFile(projectDir string) string {
-	return filepath.Join(projectDir, "AGENTS.md")
+	return domain.SharedInstructionsFile(projectDir)
 }
 
 // ProjectAgentsDir returns <projectDir>/.opencode/agents.

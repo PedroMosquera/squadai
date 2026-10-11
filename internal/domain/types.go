@@ -86,6 +86,10 @@ const (
 	// ComponentCleanup is used for stale-file deletion actions that are not
 	// associated with a specific installable component.
 	ComponentCleanup ComponentID = "cleanup"
+	// ComponentInstructions is housekeeping for the shared AGENTS.md: the
+	// CLAUDE.md import block, and moving squadai blocks out of the instruction
+	// files each harness used to get its own copy in. Not configurable.
+	ComponentInstructions ComponentID = "instructions"
 	// ComponentBrand installs ASCII-art banner blocks into agent files so
 	// developers see a visual indicator that SquadAI is active at session start.
 	// Toggled via ProjectConfig.Brand.Enabled (default: true).

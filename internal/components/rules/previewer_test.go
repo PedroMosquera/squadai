@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/PedroMosquera/squadai/internal/adapters/opencode"
-	"github.com/PedroMosquera/squadai/internal/adapters/windsurf"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/marker"
 )
@@ -116,7 +115,7 @@ func TestPreview_Windsurf_Frontmatter_FreshInstall_CreateEntryWithDiff(t *testin
 	home := t.TempDir()
 	inst := newTestInstaller(t)
 
-	entries, err := inst.Preview(windsurf.New(), home, project)
+	entries, err := inst.Preview(structuredWindsurf(), home, project)
 	if err != nil {
 		t.Fatalf("Preview() error: %v", err)
 	}
@@ -138,7 +137,7 @@ func TestPreview_Windsurf_Frontmatter_FreshInstall_CreateEntryWithDiff(t *testin
 func TestPreview_Windsurf_Frontmatter_UpToDate_SkipWithEmptyDiff(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()
-	adapter := windsurf.New()
+	adapter := structuredWindsurf()
 	inst := newTestInstaller(t)
 
 	target := adapter.ProjectRulesFile(project)
