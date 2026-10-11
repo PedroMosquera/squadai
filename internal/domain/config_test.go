@@ -308,6 +308,24 @@ func TestDefaultMCPCatalog_GithubRequiresAuth(t *testing.T) {
 	t.Fatal("github server not found in catalog")
 }
 
+func TestDefaultMCPCatalog_GithubUsesOfficialServerImage(t *testing.T) {
+	for _, s := range DefaultMCPCatalog() {
+		for _, a := range s.Args {
+			if strings.Contains(a, "@modelcontextprotocol/server-github") {
+				t.Errorf("catalog %s still launches the deprecated npm package: %v", s.Name, s.Args)
+			}
+		}
+		if s.Name != "github" {
+			continue
+		}
+		got := strings.Join(append([]string{s.Command}, s.Args...), " ")
+		want := "docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server:v2.0.2"
+		if got != want || s.Type != "local" || s.URL != "" {
+			t.Errorf("github entry = %q (type %q, url %q), want %q (type local, no url)", got, s.Type, s.URL, want)
+		}
+	}
+}
+
 func TestDefaultMCPCatalog_SentryRequiresAuth(t *testing.T) {
 	catalog := DefaultMCPCatalog()
 	for _, s := range catalog {

@@ -222,6 +222,17 @@ npx --version
 
 If Node.js is missing, install it and re-run `squadai apply`.
 
+**GitHub MCP server is not working**
+
+The `github` server is GitHub's official server, run as the pinned Docker image `ghcr.io/github/github-mcp-server`. It needs Docker running and `GITHUB_PERSONAL_ACCESS_TOKEN` set in the environment your agent starts from. The config passes the variable by name (`-e GITHUB_PERSONAL_ACCESS_TOKEN`), so the token is never written to a config file.
+
+```sh
+docker version
+echo "${GITHUB_PERSONAL_ACCESS_TOKEN:+set}"
+```
+
+Older versions of squadai wrote `npx -y @modelcontextprotocol/server-github`, which npm no longer supports. Re-run `squadai apply` and the `github` entry squadai manages is replaced; servers you added yourself are left alone.
+
 **Adding a custom MCP server**
 
 Add the server to `.squadai/project.json`:

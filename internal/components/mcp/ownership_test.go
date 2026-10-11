@@ -433,18 +433,28 @@ func TestOwnership_ClaudeAndVSCodeShareOwnershipOfRootMCPFile(t *testing.T) {
 }
 
 func TestOwnership_ReapplyUpdatesOwnedServerToPinnedCommand(t *testing.T) {
-	servers := func(spec string) map[string]domain.MCPServerDef {
-		return map[string]domain.MCPServerDef{
-			"context7": {Type: "local", Command: []string{"npx", "-y", spec}, Enabled: true},
-		}
+	def := func(spec string) domain.MCPServerDef {
+		return domain.MCPServerDef{Type: "local", Command: []string{"npx", "-y", spec}, Enabled: true}
 	}
 	const unpinned, pinned = "@upstash/context7-mcp@latest", "@upstash/context7-mcp@4.3.0"
+	assertReapplyReplacesOwnedServer(t, "context7", def(unpinned), def(pinned), unpinned, pinned)
+}
+
+// assertReapplyReplacesOwnedServer applies oldDef under name, adds a user
+// server, re-applies newDef, and checks for every adapter that the owned entry
+// now carries newMarker instead of oldMarker, the user server is byte-identical
+// and verify passes.
+func assertReapplyReplacesOwnedServer(t *testing.T, name string, oldDef, newDef domain.MCPServerDef, oldMarker, newMarker string) {
+	t.Helper()
+	servers := func(def domain.MCPServerDef) map[string]domain.MCPServerDef {
+		return map[string]domain.MCPServerDef{name: def}
+	}
 	for _, adapter := range append(ownershipAdapters(), codex.New()) {
 		t.Run(string(adapter.ID()), func(t *testing.T) {
 			home := t.TempDir()
 			project := t.TempDir()
-			apply := func(spec string) {
-				inst := New(servers(spec))
+			apply := func(def domain.MCPServerDef) {
+				inst := New(servers(def))
 				actions, err := inst.Plan(adapter, home, project)
 				if err != nil {
 					t.Fatal(err)
@@ -461,32 +471,45 @@ func TestOwnership_ReapplyUpdatesOwnedServerToPinnedCommand(t *testing.T) {
 				path = filepath.Join(home, ".codex", "config.toml")
 			}
 
-			apply(unpinned)
+			const codexUser = "[mcp_servers.mine]\ncommand = \"uvx\"\nargs = [\"my-private-mcp\"]\n"
+			if isCodex {
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(codexUser), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			apply(oldDef)
 			var mine []byte
 			if !isCodex {
 				mine = addUserServer(t, path, adapter.MCPRootKey(), "mine")
 			}
-			apply(pinned)
+			apply(newDef)
 
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(string(data), pinned) || strings.Contains(string(data), unpinned) {
-				t.Fatalf("owned server not updated to %s:\n%s", pinned, data)
+			if !strings.Contains(string(data), newMarker) || strings.Contains(string(data), oldMarker) {
+				t.Fatalf("owned server not updated from %s to %s:\n%s", oldMarker, newMarker, data)
 			}
 			if mine != nil {
 				if got := rawServer(t, path, adapter.MCPRootKey(), "mine"); string(got) != string(mine) {
 					t.Fatalf("user server changed:\nwant %s\ngot  %s", mine, got)
 				}
 			}
-			results, err := New(servers(pinned)).Verify(adapter, home, project)
+			if isCodex && !strings.HasPrefix(string(data), codexUser) {
+				t.Fatalf("codex user server table changed:\n%s", data)
+			}
+			results, err := New(servers(newDef)).Verify(adapter, home, project)
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, r := range results {
 				if !r.Passed {
-					t.Errorf("verify %s failed after the pinned re-apply: %s", r.Check, r.Message)
+					t.Errorf("verify %s failed after the re-apply: %s", r.Check, r.Message)
 				}
 			}
 		})

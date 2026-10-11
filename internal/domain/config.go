@@ -560,18 +560,20 @@ func DefaultMCPCatalog() []CuratedMCPServer {
 			Args:        []string{"-y", "@upstash/context7-mcp@4.3.0"},
 		},
 		{
-			// Deprecated on npm; 2025.4.8 is its final release.
+			// Docker rather than GitHub's hosted endpoint: `-e NAME` forwards
+			// the token from the agent's environment, but no header env syntax
+			// works in all seven harnesses (Codex http_headers are literal).
 			Name:            "github",
-			Description:     "Issues, PRs, code search",
+			Description:     "Issues, PRs, code search (runs in Docker)",
 			Type:            "local",
 			PreChecked:      false,
-			Command:         "npx",
-			Args:            []string{"-y", "@modelcontextprotocol/server-github@2025.4.8"},
+			Command:         "docker",
+			Args:            []string{"run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server:v2.0.2"},
 			RequiresAuth:    true,
 			AuthEnvVars:     []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
 			RequiredEnvVars: []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
 			SetupURL:        "https://github.com/settings/tokens",
-			SetupHint:       "Create a personal access token with repo scope",
+			SetupHint:       "Install Docker and create a personal access token with repo scope",
 		},
 		{
 			Name:            "sentry",
