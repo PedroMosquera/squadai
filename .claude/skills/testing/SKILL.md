@@ -1,8 +1,4 @@
 ---
-description: Test writing protocol
----
-
----
 name: testing
 description: Test writing protocol with structured coverage analysis
 ---
@@ -32,7 +28,7 @@ thorough, maintainable tests that cover the important behavior.
 
 4. **Set up test fixtures**: Prepare the test environment.
    - Use temp directories for filesystem tests.
-   - Create minimal fixtures — only what the test needs.
+   - Create minimal fixtures: only what the test needs.
    - Clean up after tests (use deferred cleanup or framework helpers).
 
 5. **Write assertions**: Verify behavior clearly.

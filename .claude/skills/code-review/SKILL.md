@@ -1,8 +1,4 @@
 ---
-description: Structured code review
----
-
----
 name: code-review
 description: Structured code review with severity-based findings
 ---

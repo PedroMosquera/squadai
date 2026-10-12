@@ -1,8 +1,4 @@
 ---
-description: PR description generation
----
-
----
 name: pr-description
 description: Generate pull request descriptions from diff analysis
 ---

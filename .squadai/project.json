@@ -51,24 +51,6 @@
     "instructions_template": "standard"
   },
   "rules": {},
-  "skills": {
-    "code-review": {
-      "description": "Structured code review",
-      "content_file": "skills/code-review.md"
-    },
-    "find-skills": {
-      "description": "Find and load available skills",
-      "content_file": "skills/find-skills.md"
-    },
-    "pr-description": {
-      "description": "PR description generation",
-      "content_file": "skills/pr-description.md"
-    },
-    "testing": {
-      "description": "Test writing protocol",
-      "content_file": "skills/testing.md"
-    }
-  },
   "commands": {
     "review": {
       "description": "Run structured code review on staged changes",
@@ -301,7 +283,7 @@
       "skill_ref": "sdd/sdd-apply"
     },
     "orchestrator": {
-      "description": "SDD orchestrator — manages spec-driven workflow",
+      "description": "SDD orchestrator \u2014 manages spec-driven workflow",
       "mode": "subagent"
     },
     "proposer": {
