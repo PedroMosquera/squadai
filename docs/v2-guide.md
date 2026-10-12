@@ -215,20 +215,20 @@ Edit `.squadai/project.json` to add servers:
   "mcp": {
     "context7": {
       "type": "local",
-      "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
+      "command": ["npx", "-y", "@upstash/context7-mcp@4.3.0"],
       "enabled": true
     },
     "my-server": {
       "type": "local",
       "command": ["node", "path/to/server.js"],
       "enabled": true,
-      "environment": {
-        "API_KEY": "your-key"
-      }
+      "forward_env": ["MY_SERVER_TOKEN"]
     }
   }
 }
 ```
+
+Pin package versions: `squadai scan` flags `@latest` and unversioned packages. Keep tokens out of committed config. `forward_env` names variables the server reads from the agent's environment; Codex passes only a fixed set of variables to MCP servers, so it needs this list (written as `env_vars`). Catalog servers that need a token already carry it. `environment` writes literal values and is for non-secret settings.
 
 Remote servers use `"url"` instead of `"command"`:
 

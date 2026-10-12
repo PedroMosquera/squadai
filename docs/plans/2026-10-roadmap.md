@@ -1,6 +1,6 @@
 # SquadAI roadmap (October 2026)
 
-Written 2026-10-09 at `03b720d`; status sections updated 2026-10-11. Supersedes the uncommitted September relevance draft.
+Written 2026-10-09 at `03b720d`; status sections updated 2026-10-12. Supersedes the uncommitted September relevance draft.
 
 ## 1. Thesis, revised
 
@@ -35,6 +35,11 @@ Everything below is ranked by how much it moves that sentence.
 | Opt-in memory capture at session end for Claude and Codex | `3599674`, `6ba08dc` |
 | Native Claude plugin declarations; pinned plugin registry removed | `1676c8f`, `61fd157` |
 | Home paths kept out of the project sidecar; MCP catalog pinned; assets without dashes | `738096e`, `49bbcf7`, `305bef0` |
+| v0.9.0 released; `go install` builds report their module version | `bb23b41` |
+| README leads with verifiable config and the action snippet | `f5d9b97` |
+| github catalog server moved to GitHub's official Docker image; Codex gets `env_vars` so MCP servers receive their tokens | `ce663e7`, `6aff07e` |
+| Pi and OpenCode plugin packages declared with pinning, allow-list and scan coverage | `cb30724` |
+| Permissions apply no longer wipes other components' ownership in shared files | `1d97d74` |
 
 ## 3. Status of the September items
 
@@ -95,7 +100,7 @@ Each removal is its own small change. Do them alongside Phase 0.
 | Banner and `brand` component | Default off in every preset. Keep the flag. |
 | `explain` | Remove. `--help` and docs cover it. |
 | `install-commands` | Fold into `apply` as the commands component for Claude (today Claude's `ProjectCommandsDir` is empty, which is why the separate command exists). Done: the commands component writes the slash commands, the agents component writes `squadai-manager`, and the command is removed. |
-| `plugins sync` from `wshobson/agents` | Replace with declarations in project.json that delegate to each harness (`enabledPlugins` for Claude, marketplace installs for Codex and Pi). Done for Claude: `claude_plugin` declarations, with an optional `marketplace`, are written into `.claude/settings.json` with per-entry ownership, and `plugins sync`, `list`, `add` and `remove` are removed with the registry. Codex is configured globally, so its project `.codex/config.toml` is not written; Pi and OpenCode packages are a follow-up. |
+| `plugins sync` from `wshobson/agents` | Replace with declarations in project.json that delegate to each harness (`enabledPlugins` for Claude, marketplace installs for Codex and Pi). Done for Claude: `claude_plugin` declarations, with an optional `marketplace`, are written into `.claude/settings.json` with per-entry ownership, and `plugins sync`, `list`, `add` and `remove` are removed with the registry. Codex is configured globally, so its project `.codex/config.toml` is not written. Done for Pi and OpenCode (cb30724): `install_method: "package"` declarations with an exact npm version or a git ref are written to `.pi/settings.json` `packages` and `opencode.json` `plugin` with per-entry ownership, and are covered by `allowed.plugin_sources`, SCAN-003 and SCAN-007. |
 
 ## 8. Dropped or deferred
 
@@ -115,9 +120,11 @@ Each removal is its own small change. Do them alongside Phase 0.
 
 ## 10. Decisions needed
 
-1. Phase 0 before anything else. Recommended: yes.
-2. AGENTS.md canonical (5.1) changes what lands in users' CLAUDE.md. It is a contract change for existing installs: ship it as a migration with a clear note, not silently.
-3. Whether the public positioning moves from "one control plane" to "agent config you can verify". This drives README and the action's marketing, not code.
+All three are resolved.
+
+1. Phase 0 before anything else. Resolved: yes, shipped first.
+2. AGENTS.md canonical (5.1) changes what lands in users' CLAUDE.md. Resolved: shipped in v0.9.0 as a migration with an apply note and an upgrade note in the release.
+3. Public positioning moves from "one control plane" to "agent config you can verify". Resolved 2026-10-12: README rewritten around it (f5d9b97).
 
 ## Sources
 
