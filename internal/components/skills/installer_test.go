@@ -43,6 +43,24 @@ func TestRenderSkill(t *testing.T) {
 	}
 }
 
+// VS Code and Cursor require name to match the directory, and Pi's strict
+// YAML parser rejects a plain description containing ": ".
+func TestRenderSkill_NameAndQuotedDescription(t *testing.T) {
+	content := renderSkill("deploy", domain.SkillDef{Description: "Deploy steps: build, push", Content: "Run it."})
+	want := "---\nname: deploy\ndescription: \"Deploy steps: build, push\"\n---\n\nRun it.\n"
+	if content != want {
+		t.Errorf("renderSkill =\n%q\nwant\n%q", content, want)
+	}
+}
+
+func TestRenderSkill_ContentWithFrontmatterIsNotWrappedAgain(t *testing.T) {
+	own := "---\nname: testing\ndescription: Test writing protocol\n---\n\n# Testing\n"
+	content := renderSkill("testing", domain.SkillDef{Description: "Ignored", Content: own})
+	if content != own {
+		t.Errorf("content that brings its own frontmatter must be written as is; got\n%s", content)
+	}
+}
+
 // ─── Plan (OpenCode) — V1 backward compat ──────────────────────────────────
 
 func TestPlan_OpenCode_NewSkills_ReturnsCreate(t *testing.T) {

@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/assets"
 	"github.com/PedroMosquera/squadai/internal/domain"
 	"github.com/PedroMosquera/squadai/internal/fileutil"
+	"github.com/PedroMosquera/squadai/internal/managed"
 )
 
 // Options controls optional skills installer behavior.
@@ -184,11 +186,12 @@ var legacyProjectSkillsDirs = map[domain.AgentID]string{
 	domain.AgentWindsurf:      ".windsurf/skills",
 }
 
-// planLegacyRemoval returns delete actions for old copies that are
-// byte-identical to what Plan now writes: the grouped layout
-// (<dir>/<group>/<name>/SKILL.md) in skillsDir, and any copy in the adapter's
-// legacy directory. A copy the user edited is not squadai's to remove and
-// stays.
+// planLegacyRemoval returns delete actions for old copies in the grouped
+// layout (<dir>/<group>/<name>/SKILL.md) in skillsDir and in the adapter's
+// legacy directory. A copy is removed when it is byte-identical to what Plan
+// now writes, or when the sidecar records that squadai created it: copies from
+// older releases differ from the current assets, and Pi and OpenCode load them
+// ahead of .agents/skills. A differing copy squadai has no record of stays.
 func (i *Installer) planLegacyRemoval(adapter domain.Adapter, projectDir, skillsDir string) ([]domain.PlannedAction, error) {
 	desired, err := i.desired()
 	if err != nil {
@@ -200,28 +203,50 @@ func (i *Installer) planLegacyRemoval(adapter domain.Adapter, projectDir, skills
 	}
 	sort.Strings(rels)
 
+	created := map[string]bool{}
+	if projectDir != "" {
+		files, err := managed.ListCreatedFiles(projectDir)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			created[filepath.Join(projectDir, filepath.FromSlash(f))] = true
+		}
+	}
+
 	legacy, hasLegacy := legacyProjectSkillsDirs[adapter.ID()]
 	legacyDir := filepath.Join(projectDir, filepath.FromSlash(legacy))
 	hasLegacy = hasLegacy && legacyDir != skillsDir
 
 	var actions []domain.PlannedAction
+	seen := map[string]bool{}
 	for _, rel := range rels {
 		var candidates []string
 		if strings.Contains(rel, "/") {
 			candidates = append(candidates, filepath.Join(skillsDir, filepath.FromSlash(rel), "SKILL.md"))
 		}
 		if hasLegacy {
-			candidates = append(candidates, filepath.Join(legacyDir, filepath.FromSlash(rel), "SKILL.md"))
-			if strings.Contains(rel, "/") {
-				candidates = append(candidates, filepath.Join(legacyDir, skillName(rel), "SKILL.md"))
+			candidates = append(candidates, filepath.Join(legacyDir, skillName(rel), "SKILL.md"))
+			// Any group: v0.8 wrote custom skills grouped too, under shared/.
+			grouped, err := filepath.Glob(filepath.Join(legacyDir, "*", skillName(rel), "SKILL.md"))
+			if err != nil {
+				return nil, err
 			}
+			candidates = append(candidates, grouped...)
 		}
 		for _, targetPath := range candidates {
-			existing, err := fileutil.ReadFileOrEmpty(targetPath)
+			if seen[targetPath] {
+				continue
+			}
+			seen[targetPath] = true
+			existing, err := os.ReadFile(targetPath)
+			if os.IsNotExist(err) {
+				continue
+			}
 			if err != nil {
 				return nil, fmt.Errorf("read legacy skill %s: %w", targetPath, err)
 			}
-			if string(existing) != desired[rel] {
+			if string(existing) != desired[rel] && !created[targetPath] {
 				continue
 			}
 			actions = append(actions, domain.PlannedAction{
@@ -586,11 +611,17 @@ func sharedSkillPaths() []string {
 	}
 }
 
-// renderSkill generates the markdown content for a skill definition with YAML frontmatter.
+// renderSkill generates the markdown content for a skill definition with YAML
+// frontmatter. Content that already starts with frontmatter is written as is,
+// so a full SKILL.md can be used as a content_file.
 func renderSkill(name string, def domain.SkillDef) string {
+	if strings.HasPrefix(def.Content, "---\n") {
+		return def.Content
+	}
 	var b strings.Builder
 	b.WriteString("---\n")
-	b.WriteString(fmt.Sprintf("description: %s\n", def.Description))
+	fmt.Fprintf(&b, "name: %s\n", name)
+	fmt.Fprintf(&b, "description: %s\n", yamlScalar(def.Description))
 	b.WriteString("---\n")
 	if def.Content != "" {
 		b.WriteString("\n")
@@ -600,6 +631,17 @@ func renderSkill(name string, def domain.SkillDef) string {
 		}
 	}
 	return b.String()
+}
+
+// yamlScalar quotes v when a strict YAML parser would misread it as a plain
+// scalar. A JSON string is a valid YAML double-quoted scalar.
+func yamlScalar(v string) string {
+	if v != "" && v == strings.TrimSpace(v) && !strings.Contains(v, ": ") && !strings.Contains(v, " #") &&
+		!strings.ContainsAny(v[:1], "[]{},&*!|>%@`'\"#?:-") && !strings.HasSuffix(v, ":") {
+		return v
+	}
+	q, _ := json.Marshal(v)
+	return string(q)
 }
 
 // RenderContent returns the content that Apply would write for the given action,

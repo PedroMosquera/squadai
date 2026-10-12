@@ -14,6 +14,7 @@ import (
 	"github.com/PedroMosquera/squadai/internal/components/agents"
 	"github.com/PedroMosquera/squadai/internal/config"
 	"github.com/PedroMosquera/squadai/internal/domain"
+	"github.com/PedroMosquera/squadai/internal/managed"
 	"github.com/PedroMosquera/squadai/internal/pipeline"
 	"github.com/PedroMosquera/squadai/internal/planner"
 )
@@ -38,7 +39,7 @@ var skillReadDirs = map[domain.AgentID][]string{
 	domain.AgentWindsurf:      {".agents/skills", ".devin/skills", ".windsurf/skills"},
 }
 
-const houseStyleSkill = "---\ndescription: House style\n---\n\nPrefer small functions.\n"
+const houseStyleSkill = "---\nname: house-style\ndescription: House style\n---\n\nPrefer small functions.\n"
 
 // applySkillsProject writes a tdd project with every adapter and the skills
 // and agents components enabled, lets seed place files first, applies it, and
@@ -195,6 +196,40 @@ func TestApplySkills_MigrationRemovesOnlyUnchangedRedundantCopies(t *testing.T) 
 
 	if out, err := runVerifyCIForTest(t); err != nil {
 		t.Fatalf("verify --ci after migration: %v\n%s", err, out)
+	}
+}
+
+// Upgrades from v0.8 leave copies written by an older squadai, whose text no
+// longer matches the current assets, so byte equality alone never removes
+// them. Pi and OpenCode load project copies ahead of .agents/skills, so a
+// stale copy shadows the current skill. The sidecar proves squadai wrote it.
+func TestApplySkills_MigrationRemovesStaleCopiesSquadaiCreated(t *testing.T) {
+	stale := strings.Replace(embeddedSkill(t, "shared/testing"), "Testing", "Testing (older wording)", 1)
+	project, _, _ := applySkillsProject(t, func(project string) {
+		for _, rel := range []string{".pi/skills/shared/testing/SKILL.md", ".opencode/skills/testing/SKILL.md", ".pi/skills/shared/house-style/SKILL.md"} {
+			writeSkillFile(t, filepath.Join(project, rel), stale)
+			if err := managed.TrackCreatedFile(project, rel); err != nil {
+				t.Fatal(err)
+			}
+		}
+		writeSkillFile(t, filepath.Join(project, ".cursor/skills/shared/testing/SKILL.md"), stale)
+	})
+
+	// v0.8 init declared built-in skills as custom skills and wrote them grouped.
+	for _, rel := range []string{".pi/skills/shared/testing/SKILL.md", ".opencode/skills/testing/SKILL.md", ".pi/skills/shared/house-style/SKILL.md"} {
+		if _, err := os.Stat(filepath.Join(project, rel)); !os.IsNotExist(err) {
+			t.Errorf("%s was created by squadai and shadows the copy in .agents/skills, so it should be removed (stat err %v)", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(project, ".cursor/skills/shared/testing/SKILL.md")); err != nil {
+		t.Errorf("a differing copy squadai has no record of creating must stay: %v", err)
+	}
+	created, err := managed.ListCreatedFiles(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(created, ".pi/skills/shared/testing/SKILL.md") {
+		t.Errorf("removed copy still recorded as created: %v", created)
 	}
 }
 

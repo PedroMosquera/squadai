@@ -216,6 +216,9 @@ func (e *Executor) executeOne(action domain.PlannedAction) domain.StepResult {
 		if action.Component == domain.ComponentSkills {
 			pruneEmptyParents(action.TargetPath, e.projectDir)
 		}
+		if relPath, relErr := filepath.Rel(e.projectDir, action.TargetPath); relErr == nil {
+			_ = managed.UntrackCreatedFile(e.projectDir, relPath)
+		}
 		return domain.StepResult{
 			Action: action,
 			Status: domain.StepSuccess,

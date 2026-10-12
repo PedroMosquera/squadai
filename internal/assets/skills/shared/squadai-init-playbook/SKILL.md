@@ -1,6 +1,6 @@
 ---
 name: squadai-init-playbook
-description: Detailed procedures for the /squadai-init refinement routine: signal collection, refinement templates, consistency checks, re-run handling, and write protocol. Loaded on demand by the /squadai-init driver command.
+description: Detailed procedures for the /squadai-init refinement routine (signal collection, refinement templates, consistency checks, re-run handling, and write protocol). Loaded on demand by the /squadai-init driver command.
 ---
 
 # /squadai-init Playbook
